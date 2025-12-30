@@ -192,8 +192,7 @@ def run_conversion(job_id: str, file_path: Path, output_format: str, use_llm: bo
                 content = embed_images_as_base64(content, result.images)
             content = enhance_html_for_reader(content)
         elif output_format == "json":
-            import json
-            content = json.dumps(result.model_dump() if hasattr(result, 'model_dump') else str(result))
+            content = result.model_dump_json()
         else:
             content = result.markdown
 
