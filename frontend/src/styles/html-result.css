@@ -13,14 +13,14 @@
   --reader-citation-text: #555;
 }
 
-.reader-output[data-theme="comfort"] {
+#theme-comfort:checked ~ .reader-output {
   --reader-text-heading: #2a2520;
   --reader-text-heading-h2: var(--reader-text-heading);
   --reader-citation-bg: #ebe6db;
   --reader-citation-text: #5a4f44;
 }
 
-.reader-output[data-theme="dark"] {
+#theme-dark:checked ~ .reader-output {
   --reader-text-heading: #e8e8e8;
   --reader-text-heading-h2: oklch(0.65 0.08 163);
   --reader-citation-bg: #2d2d2d;
@@ -149,6 +149,9 @@
   font-size: 0.85rem;
   color: var(--reader-citation-text);
   white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .reader-output .author-meta {
