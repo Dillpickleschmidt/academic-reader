@@ -2,8 +2,7 @@ import "./styles/results.css"
 import "./styles/reader.css"
 import { useConversion } from "./hooks/useConversion"
 import { UploadPage } from "./pages/UploadPage"
-import { ConfigurePage } from "./pages/ConfigurePage"
-import { ProcessingPage } from "./pages/ProcessingPage"
+import { ConfigureProcessingPage } from "./pages/ConfigureProcessingPage"
 import { ResultPage } from "./pages/ResultPage"
 
 function App() {
@@ -22,8 +21,9 @@ function App() {
       )
 
     case "configure":
+    case "processing":
       return (
-        <ConfigurePage
+        <ConfigureProcessingPage
           fileName={conversion.fileName}
           uploadProgress={conversion.uploadProgress}
           uploadComplete={conversion.uploadComplete}
@@ -32,25 +32,13 @@ function App() {
           forceOcr={conversion.forceOcr}
           pageRange={conversion.pageRange}
           error={conversion.error}
+          isProcessing={conversion.page === "processing"}
           onOutputFormatChange={conversion.setOutputFormat}
           onUseLlmChange={conversion.setUseLlm}
           onForceOcrChange={conversion.setForceOcr}
           onPageRangeChange={conversion.setPageRange}
           onStartConversion={conversion.startConversion}
           onBack={conversion.reset}
-        />
-      )
-
-    case "processing":
-      return (
-        <ProcessingPage
-          fileName={conversion.fileName}
-          outputFormat={conversion.outputFormat}
-          useLlm={conversion.useLlm}
-          forceOcr={conversion.forceOcr}
-          pageRange={conversion.pageRange}
-          processingStep={conversion.processingStep}
-          error={conversion.error}
         />
       )
 

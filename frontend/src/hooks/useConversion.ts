@@ -4,7 +4,6 @@ import readerCss from "../styles/reader.css?raw"
 
 export type Page = "upload" | "configure" | "processing" | "result"
 export type OutputFormat = "html" | "markdown" | "json"
-export type ProcessingStep = "uploading" | "parsing" | "complete"
 
 export function useConversion() {
   // Navigation
@@ -24,8 +23,6 @@ export function useConversion() {
   const [pageRange, setPageRange] = useState("")
 
   // Processing state
-  const [processingStep, setProcessingStep] =
-    useState<ProcessingStep>("uploading")
   const [content, setContent] = useState("")
   const [error, setError] = useState("")
 
@@ -40,7 +37,6 @@ export function useConversion() {
     setUseLlm(false)
     setForceOcr(false)
     setPageRange("")
-    setProcessingStep("uploading")
     setContent("")
     setError("")
   }
@@ -98,7 +94,6 @@ export function useConversion() {
 
   const startConversion = async () => {
     setPage("processing")
-    setProcessingStep("parsing")
     setError("")
 
     try {
@@ -114,7 +109,6 @@ export function useConversion() {
 
         if (job.status === "completed") {
           setContent(job.result?.content || "")
-          setProcessingStep("complete")
           setPage("result")
         } else if (job.status === "failed") {
           throw new Error(job.error || "Conversion failed")
@@ -127,7 +121,6 @@ export function useConversion() {
       await pollJob()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Conversion failed")
-      setProcessingStep("complete")
     }
   }
 
@@ -189,7 +182,6 @@ ${renderedContent}
     useLlm,
     forceOcr,
     pageRange,
-    processingStep,
     content,
     error,
 
