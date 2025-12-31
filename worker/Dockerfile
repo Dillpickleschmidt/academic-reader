@@ -1,22 +1,26 @@
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+# Runpod PyTorch base image - PyTorch 2.8 pre-installed
+# CUDA 12.8 requires driver 570+ (newer drivers)
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
 WORKDIR /app
 
-# Install Python and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
     build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -s /usr/bin/python3 /usr/bin/python
+    && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY requirements.lock .
 
-# Install dependencies (marker-pdf will pull compatible torch/torchvision)
-RUN pip install --no-cache-dir -r requirements.txt
+# Install pinned dependencies (PyTorch already in base image - pip will skip it)
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY app/ ./app/
 
+# Download and cache marker models during build
+RUN python -c "from marker.models import create_model_dict; create_model_dict()"
+
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# No CMD - specified at runtime:
+# Local: docker-compose sets "uvicorn app.main:app ..."
+# Runpod: "python -m app.handler"

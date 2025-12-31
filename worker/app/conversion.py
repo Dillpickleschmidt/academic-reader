@@ -6,6 +6,52 @@ from .models import get_or_create_models
 from .progress import clear_queue, set_active_job
 
 
+def run_conversion_sync(
+    file_path: Path,
+    output_format: str,
+    use_llm: bool,
+    force_ocr: bool,
+    page_range: str | None,
+) -> dict:
+    """Synchronous conversion without job tracking. Used by serverless handler."""
+    from marker.config.parser import ConfigParser
+    from marker.converters.pdf import PdfConverter
+
+    config_dict = {
+        "output_format": output_format,
+        "use_llm": use_llm,
+        "force_ocr": force_ocr,
+    }
+    if page_range:
+        config_dict["page_range"] = page_range
+
+    config_parser = ConfigParser(config_dict)
+    converter = PdfConverter(
+        config=config_parser.generate_config_dict(),
+        artifact_dict=get_or_create_models(),
+        processor_list=config_parser.get_processors(),
+        renderer=config_parser.get_renderer(),
+    )
+
+    result = converter(str(file_path))
+
+    if output_format == "html":
+        content = enhance_html_for_reader(result.html)
+        images = getattr(result, "images", None) or {}
+        if images:
+            content = inject_image_dimensions(content, images)
+            content = embed_images_as_base64(content, images)
+    elif output_format == "json":
+        content = result.model_dump_json()
+    else:
+        content = result.markdown
+
+    return {
+        "content": content,
+        "metadata": result.metadata,
+    }
+
+
 def run_conversion(
     job_id: str,
     file_path: Path,

@@ -39,7 +39,7 @@
 - **Auth**: Verify WorkOS JWT on every request
 
 ### Runpod Serverless (GPU Compute)
-- **Image**: `runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04`
+- **Image**: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
 - **Handler**: Downloads file from URL, runs conversion, returns result via webhook
 - **Scaling**: Zero when idle, spins up on demand (~1-2s cold start)
 - **Limits**: Page limit enforced to keep jobs under 100s timeout
@@ -80,7 +80,7 @@ services:
 | Page limit | Keep processing under 100s timeout |
 | Webhooks (not polling Runpod) | Cleaner with backend, needed for auth anyway |
 | Single Docker image | Same image works local + cloud, PyTorch pre-installed |
-| CUDA 11.8 | Compatible with drivers from 2020+, good for self-hosters |
+| CUDA 12.4 | Required by PyTorch 2.4+ (marker-pdf dependency), needs driver 550+ |
 
 ## Costs (Cloud)
 
