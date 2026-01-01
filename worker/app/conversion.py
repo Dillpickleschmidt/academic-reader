@@ -8,17 +8,16 @@ from .progress import clear_queue, set_active_job
 
 
 def _create_converter(
-    output_format: str,
     use_llm: bool,
     force_ocr: bool,
     page_range: str | None,
 ):
-    """Create a configured PDF converter."""
+    """Create a configured PDF converter (without renderer - we'll run all renderers manually)."""
     from marker.config.parser import ConfigParser
     from marker.converters.pdf import PdfConverter
 
     config_dict = {
-        "output_format": output_format,
+        "output_format": "html",  # Doesn't matter, we'll use all renderers
         "use_llm": use_llm,
         "force_ocr": force_ocr,
     }
@@ -34,29 +33,75 @@ def _create_converter(
     )
 
 
-def _process_result(result: Any, output_format: str, embed_images: bool = True) -> tuple[str, dict | None]:
-    """Process converter result into final content.
+def _render_all_formats(document: Any) -> dict:
+    """Run all renderers on the document and return all formats."""
+    from marker.renderers.html import HTMLRenderer
+    from marker.renderers.markdown import MarkdownRenderer
+    from marker.renderers.json import JSONRenderer
+
+    html_output = HTMLRenderer()(document)
+    markdown_output = MarkdownRenderer()(document)
+    json_output = JSONRenderer()(document)
+
+    # Try to import ChunkRenderer (may not exist in older versions)
+    try:
+        from marker.renderers.chunk import ChunkRenderer
+        chunk_output = ChunkRenderer()(document)
+        chunks = {
+            "blocks": chunk_output.blocks,
+            "page_info": chunk_output.page_info,
+            "metadata": chunk_output.metadata,
+        } if chunk_output else None
+    except ImportError:
+        chunks = None
+
+    return {
+        "html": html_output.html,
+        "markdown": markdown_output.markdown,
+        "json": json_output.children if hasattr(json_output, 'children') else None,
+        "chunks": chunks,
+        "images": html_output.images,
+        "metadata": html_output.metadata,
+    }
+
+
+def _process_html(html: str, images: dict, embed_images: bool = True) -> tuple[str, dict | None]:
+    """Process HTML content with image handling.
 
     Returns:
         Tuple of (content, images_dict or None)
-        images_dict is returned only for HTML when embed_images=False
+        images_dict is returned only when embed_images=False
     """
-    if output_format == "html":
-        content = result.html
-        images = getattr(result, "images", None) or {}
+    if images:
+        html = inject_image_dimensions(html, images)
+        if embed_images:
+            return embed_images_as_base64(html, images), None
+        return html, images
+    return html, None
 
-        if images:
-            content = inject_image_dimensions(content, images)
-            if embed_images:
-                content = embed_images_as_base64(content, images)
-                return content, None
-            return content, images
-        return content, None
 
-    if output_format == "json":
-        return result.model_dump_json(), None
+def _build_and_render_all(
+    file_path: Path,
+    use_llm: bool,
+    force_ocr: bool,
+    page_range: str | None,
+) -> dict:
+    """Build document once and render to all formats."""
+    converter = _create_converter(use_llm, force_ocr, page_range)
 
-    return result.markdown, None
+    # Build and process document (expensive part)
+    document = converter.build_document(str(file_path))
+
+    # Render to all formats (cheap part)
+    all_formats = _render_all_formats(document)
+
+    # Log non-HTML formats for future use
+    if all_formats["chunks"]:
+        print(f"[conversion] Got {len(all_formats['chunks'])} chunks")
+    if all_formats["json"]:
+        print(f"[conversion] Got JSON with {len(all_formats['json'])} pages")
+
+    return all_formats
 
 
 def run_conversion_sync(
@@ -67,13 +112,30 @@ def run_conversion_sync(
     page_range: str | None,
 ) -> dict:
     """Synchronous conversion without job tracking. Used by serverless handler."""
-    converter = _create_converter(output_format, use_llm, force_ocr, page_range)
-    result = converter(str(file_path))
-    content, _ = _process_result(result, output_format, embed_images=True)
+    all_formats = _build_and_render_all(file_path, use_llm, force_ocr, page_range)
+
+    # Process HTML with embedded images
+    html_content, _ = _process_html(all_formats["html"], all_formats["images"], embed_images=True)
+
+    # Return requested format as content, include all formats
+    if output_format == "html":
+        content = html_content
+    elif output_format == "json":
+        content = all_formats["json"]
+    elif output_format == "markdown":
+        content = all_formats["markdown"]
+    else:
+        content = html_content
 
     return {
         "content": content,
-        "metadata": result.metadata,
+        "metadata": all_formats["metadata"],
+        "formats": {
+            "html": html_content,
+            "markdown": all_formats["markdown"],
+            "json": all_formats["json"],
+            "chunks": all_formats["chunks"],
+        },
     }
 
 
@@ -96,28 +158,42 @@ def run_conversion(
     try:
         update_job(job_id, status="processing")
 
-        converter = _create_converter(output_format, use_llm, force_ocr, page_range)
-        result = converter(str(file_path))
+        all_formats = _build_and_render_all(file_path, use_llm, force_ocr, page_range)
 
-        if output_format == "html":
-            # Phase 1: HTML without embedded images
-            html_content, images = _process_result(result, output_format, embed_images=False)
-            update_job(job_id, status="html_ready", html_content=html_content)
+        # Phase 1: HTML without embedded images (for quick preview)
+        html_content, images = _process_html(
+            all_formats["html"], all_formats["images"], embed_images=False
+        )
+        update_job(job_id, status="html_ready", html_content=html_content)
 
-            # Phase 2: Embed images (if any)
-            if images:
-                content = embed_images_as_base64(html_content, images)
-            else:
-                content = html_content
+        # Phase 2: Embed images
+        if images:
+            html_with_images = embed_images_as_base64(html_content, images)
         else:
-            content, _ = _process_result(result, output_format)
+            html_with_images = html_content
+
+        # Return requested format as content
+        if output_format == "html":
+            content = html_with_images
+        elif output_format == "json":
+            content = all_formats["json"]
+        elif output_format == "markdown":
+            content = all_formats["markdown"]
+        else:
+            content = html_with_images
 
         update_job(
             job_id,
             status="completed",
             result={
                 "content": content,
-                "metadata": result.metadata,
+                "metadata": all_formats["metadata"],
+                "formats": {
+                    "html": html_with_images,
+                    "markdown": all_formats["markdown"],
+                    "json": all_formats["json"],
+                    "chunks": all_formats["chunks"],
+                },
             },
         )
     except FileNotFoundError:

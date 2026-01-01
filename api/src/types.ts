@@ -22,9 +22,35 @@ export interface ConversionProgress {
   elapsed?: number;
 }
 
+// Chunk output from Marker's ChunkRenderer
+export interface ChunkBlock {
+  id: string;
+  block_type: string;
+  html: string;
+  page: number;
+  polygon: number[][];
+  bbox: number[];
+  section_hierarchy?: Record<string, string>;
+  images?: Record<string, string>;
+}
+
+export interface ChunkOutput {
+  blocks: ChunkBlock[];
+  page_info: Record<string, { bbox: number[]; polygon: number[][] }>;
+  metadata: Record<string, unknown>;
+}
+
+export interface AllFormats {
+  html: string;
+  markdown: string;
+  json: unknown;
+  chunks: ChunkOutput | null;
+}
+
 export interface ConversionResult {
   content: string;
   metadata: Record<string, unknown>;
+  formats?: AllFormats;
 }
 
 export interface ConversionJob {

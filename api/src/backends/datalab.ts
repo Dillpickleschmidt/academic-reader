@@ -1,5 +1,5 @@
 import type { ConversionBackend } from './interface';
-import type { ConversionInput, ConversionJob, JobStatus } from '../types';
+import type { ChunkOutput, ConversionInput, ConversionJob, JobStatus } from '../types';
 
 interface DatalabConfig {
   apiKey: string;
@@ -12,7 +12,8 @@ interface DatalabResponse {
   success?: boolean;
   markdown?: string;
   html?: string;
-  json?: string;
+  json?: unknown;
+  chunks?: ChunkOutput;
   error?: string;
   images?: Record<string, string>;
 }
@@ -41,8 +42,8 @@ export class DatalabBackend implements ConversionBackend {
     const blob = new Blob([input.fileData], { type: 'application/pdf' });
     formData.append('file', blob, input.filename || 'document.pdf');
 
-    // Output format
-    formData.append('output_format', input.outputFormat);
+    // Request all output formats
+    formData.append('output_format', 'html,markdown,json,chunks');
 
     // Mode: balanced (default) or accurate (with LLM/Gemini 2.0 Flash)
     formData.append('mode', input.useLlm ? 'accurate' : 'balanced');
@@ -107,7 +108,7 @@ export class DatalabBackend implements ConversionBackend {
   }
 
   private parseResponse(data: DatalabResponse): ConversionJob {
-    let content = data.html || data.markdown || data.json || '';
+    let htmlContent = data.html || '';
 
     // Embed base64 images into HTML as data URIs
     if (data.html && data.images) {
@@ -118,8 +119,19 @@ export class DatalabBackend implements ConversionBackend {
         // Escape regex special chars in filename
         const escapedFilename = filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`src=["']${escapedFilename}["']`, 'g');
-        content = content.replace(regex, `src="${dataUri}"`);
+        htmlContent = htmlContent.replace(regex, `src="${dataUri}"`);
       }
+    }
+
+    // Log all formats for future use
+    if (data.chunks) {
+      console.log(`[Datalab] Got ${data.chunks.blocks?.length ?? 0} chunk blocks`);
+    }
+    if (data.json) {
+      console.log(`[Datalab] Got JSON output`);
+    }
+    if (data.markdown) {
+      console.log(`[Datalab] Got markdown (${data.markdown.length} chars)`);
     }
 
     return {
@@ -127,7 +139,16 @@ export class DatalabBackend implements ConversionBackend {
       status: this.mapStatus(data.status, data.success),
       result:
         data.status === 'complete' && data.success
-          ? { content, metadata: {} }
+          ? {
+              content: htmlContent,
+              metadata: {},
+              formats: {
+                html: htmlContent,
+                markdown: data.markdown || '',
+                json: data.json,
+                chunks: data.chunks ?? null,
+              },
+            }
           : undefined,
       error: data.error,
     };
