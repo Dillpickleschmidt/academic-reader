@@ -7,7 +7,7 @@ import { cors } from 'hono/cors';
 import { upload } from './routes/upload';
 import { convert } from './routes/convert';
 import { jobs } from './routes/jobs';
-import { createStorage, MemoryTempStorage, type StorageAdapter, type TempStorage } from './storage';
+import { createStorage, MemoryTempStorage, type S3Storage, type TempStorage } from './storage';
 import type { Env } from './types';
 
 // Access environment variables via Bun's API
@@ -15,7 +15,7 @@ const env = Bun.env;
 
 // Extended context with storage adapters
 type Variables = {
-  storage: StorageAdapter | null;
+  storage: S3Storage | null;
   tempStorage: TempStorage | null;
 };
 

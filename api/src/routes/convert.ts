@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import type { Env, OutputFormat, ConversionInput } from '../types';
-import type { StorageAdapter, TempStorage } from '../storage';
+import type { S3Storage, TempStorage } from '../storage';
 import { createBackend } from '../backends/factory';
 import { KV_KEYS, TTL } from '../constants';
 
 // Extended context with storage adapters
 type Variables = {
-  storage: StorageAdapter | null;
+  storage: S3Storage | null;
   tempStorage: TempStorage | null;
 };
 

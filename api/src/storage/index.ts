@@ -1,9 +1,8 @@
-export type { StorageAdapter, UploadResult, PresignedUrlResult } from './interface';
+export type { UploadResult, PresignedUrlResult } from '../types';
 export { S3Storage, type S3Config } from './s3';
 export { MemoryTempStorage, KVTempStorage, type TempStorage, type TempFile } from './temp';
 
 import { S3Storage } from './s3';
-import type { StorageAdapter } from './interface';
 
 interface StorageEnv {
   CONVERSION_BACKEND?: string;
@@ -18,7 +17,7 @@ interface StorageEnv {
  * Create storage adapter based on environment.
  * Returns null for backends that don't need storage (local, datalab).
  */
-export function createStorage(env: StorageEnv): StorageAdapter | null {
+export function createStorage(env: StorageEnv): S3Storage | null {
   // Only Runpod needs file storage
   if (env.CONVERSION_BACKEND !== 'runpod') {
     return null;

@@ -1,6 +1,6 @@
 import { AwsClient } from 'aws4fetch';
 import { readFileSync, existsSync } from 'fs';
-import type { StorageAdapter, UploadResult, PresignedUrlResult } from './interface';
+import type { UploadResult, PresignedUrlResult } from '../types';
 
 const TUNNEL_URL_FILE = '/tunnel/url';
 
@@ -13,10 +13,10 @@ export interface S3Config {
 }
 
 /**
- * S3-compatible storage adapter.
+ * S3-compatible storage.
  * Works with Cloudflare R2, MinIO, AWS S3, and other S3-compatible services.
  */
-export class S3Storage implements StorageAdapter {
+export class S3Storage {
   readonly name = 's3';
   private config: S3Config;
   private client: AwsClient;

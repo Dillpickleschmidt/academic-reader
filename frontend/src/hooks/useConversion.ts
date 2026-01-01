@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import * as api from "../api"
 import type { ConversionProgress } from "../api"
 import { downloadResult, type OutputFormat } from "../utils/download"
@@ -42,12 +42,36 @@ export function useConversion() {
   // SSE cleanup ref
   const sseCleanupRef = useRef<(() => void) | null>(null)
 
+  // Connection state for SSE fallback logic
+  const connectionState = useRef<"connecting" | "connected" | "failed">(
+    "connecting",
+  )
+
+  // Shared stage update logic for SSE and polling
+  const updateStages = useCallback((progress: ConversionProgress) => {
+    setStages((prev) => {
+      const stageInfo: StageInfo = {
+        ...progress,
+        completed: progress.current >= progress.total,
+      }
+      const existing = prev.find((s) => s.stage === progress.stage)
+      if (existing) {
+        return prev.map((s) => (s.stage === progress.stage ? stageInfo : s))
+      }
+      return [
+        ...prev.map((s) => ({ ...s, completed: true, current: s.total })),
+        { ...stageInfo, completed: false },
+      ]
+    })
+  }, [])
+
   const reset = () => {
     // Clean up any active SSE connection
     if (sseCleanupRef.current) {
       sseCleanupRef.current()
       sseCleanupRef.current = null
     }
+    connectionState.current = "connecting"
 
     setPage("upload")
     setFileId("")
@@ -127,6 +151,7 @@ export function useConversion() {
     setError("")
     setImagesReady(false)
     setStages([])
+    connectionState.current = "connecting"
 
     try {
       const { job_id } = await api.startConversion(fileId, {
@@ -136,44 +161,22 @@ export function useConversion() {
         pageRange,
       })
 
-      // Try SSE first, fall back to polling if it fails
-      let sseConnected = false
-      let sseFailed = false
-
       const cleanup = api.subscribeToJob(
         job_id,
-        // onProgress - update stages
+        // onProgress
         (progress: ConversionProgress) => {
-          sseConnected = true
-          setStages((prev) => {
-            const existing = prev.find((s) => s.stage === progress.stage)
-            if (existing) {
-              // Update existing stage
-              return prev.map((s) =>
-                s.stage === progress.stage
-                  ? { ...progress, completed: progress.current >= progress.total }
-                  : s
-              )
-            }
-            // New stage - mark all previous as completed with current=total
-            const updated = prev.map((s) => ({
-              ...s,
-              completed: true,
-              current: s.total,
-            }))
-            return [...updated, { ...progress, completed: false }]
-          })
+          connectionState.current = "connected"
+          updateStages(progress)
         },
-        // onHtmlReady - show content immediately (images still loading)
+        // onHtmlReady
         (htmlContent) => {
-          sseConnected = true
+          connectionState.current = "connected"
           setContent(htmlContent)
           setPage("result")
-          // imagesReady stays false - shimmer will show for unloaded images
         },
-        // onComplete - final content with images embedded
+        // onComplete
         (result) => {
-          sseConnected = true
+          connectionState.current = "connected"
           setContent(result.content)
           setImagesReady(true)
           setPage("result")
@@ -181,12 +184,10 @@ export function useConversion() {
         },
         // onError
         (errorMsg) => {
-          if (sseConnected) {
-            // Error after connection - show error
+          if (connectionState.current === "connected") {
             setError(errorMsg)
           } else {
-            // Connection failed - will fall back to polling
-            sseFailed = true
+            connectionState.current = "failed"
           }
           sseCleanupRef.current = null
         },
@@ -196,11 +197,7 @@ export function useConversion() {
 
       // Give SSE a moment to connect, then start polling as fallback
       setTimeout(() => {
-        if (!sseConnected && !sseFailed) {
-          // SSE hasn't connected yet - start polling fallback
-          pollJobFallback(job_id)
-        } else if (sseFailed) {
-          // SSE failed - use polling
+        if (connectionState.current !== "connected") {
           pollJobFallback(job_id)
         }
       }, 2000)
@@ -213,29 +210,8 @@ export function useConversion() {
     try {
       const job = await api.getJobStatus(jobId)
 
-      // Update progress if available
       if (job.progress) {
-        setStages((prev) => {
-          const existing = prev.find((s) => s.stage === job.progress!.stage)
-          if (existing) {
-            return prev.map((s) =>
-              s.stage === job.progress!.stage
-                ? {
-                    ...job.progress!,
-                    elapsed: 0,
-                    completed: job.progress!.current >= job.progress!.total,
-                  }
-                : s
-            )
-          }
-          // New stage - mark all previous as completed
-          const updated = prev.map((s) => ({
-            ...s,
-            completed: true,
-            current: s.total,
-          }))
-          return [...updated, { ...job.progress!, elapsed: 0, completed: false }]
-        })
+        updateStages({ ...job.progress, elapsed: 0 })
       }
 
       if (job.status === "completed") {
@@ -245,7 +221,6 @@ export function useConversion() {
       } else if (job.status === "failed") {
         setError(job.error || "Conversion failed")
       } else {
-        // Still processing - poll again
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL))
         return pollJobFallback(jobId)
       }

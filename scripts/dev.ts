@@ -221,13 +221,7 @@ async function startDev(config: Config): Promise<void> {
 
     // Stop docker containers
     const dockerDown = spawn({
-      cmd: [
-        "docker",
-        "compose",
-        "--profile",
-        config.BACKEND_MODE,
-        "down",
-      ],
+      cmd: ["docker", "compose", "--profile", config.BACKEND_MODE, "down"],
       cwd: ROOT_DIR,
       stdout: "inherit",
       stderr: "inherit",
@@ -302,14 +296,7 @@ async function startDev(config: Config): Promise<void> {
     // Show docker logs in background
     processes.push(
       await runProcess(
-        [
-          "docker",
-          "compose",
-          "--profile",
-          config.BACKEND_MODE,
-          "logs",
-          "-f",
-        ],
+        ["docker", "compose", "--profile", config.BACKEND_MODE, "logs", "-f"],
         { cwd: ROOT_DIR },
       ),
     );

@@ -10,52 +10,35 @@ export function transformSSEStream(
   input: ReadableStream<Uint8Array>,
   transform: (event: string, data: string) => string
 ): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
   let buffer = '';
 
-  return new ReadableStream({
-    async start(controller) {
-      const reader = input.getReader();
+  return input.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buffer += new TextDecoder().decode(chunk, { stream: true });
+        buffer = buffer.replace(/\r\n/g, '\n');
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
 
-          if (done) {
-            // Process any remaining buffer
-            if (buffer.trim()) {
-              const transformed = processSSEBlock(buffer, transform);
-              if (transformed) {
-                controller.enqueue(encoder.encode(transformed));
-              }
-            }
-            controller.close();
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Normalize CRLF to LF (Python SSE uses CRLF line endings)
-          buffer = buffer.replace(/\r\n/g, '\n');
-
-          // Process complete SSE blocks (ending with \n\n)
-          const blocks = buffer.split('\n\n');
-          buffer = blocks.pop() || ''; // Keep incomplete block in buffer
-
-          for (const block of blocks) {
-            if (!block.trim()) continue;
-            const transformed = processSSEBlock(block, transform);
-            if (transformed) {
-              controller.enqueue(encoder.encode(transformed + '\n\n'));
-            }
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+          const transformed = processSSEBlock(block, transform);
+          if (transformed) {
+            controller.enqueue(new TextEncoder().encode(transformed + '\n\n'));
           }
         }
-      } catch (error) {
-        controller.error(error);
-      }
-    },
-  });
+      },
+      flush(controller) {
+        if (buffer.trim()) {
+          const transformed = processSSEBlock(buffer, transform);
+          if (transformed) {
+            controller.enqueue(new TextEncoder().encode(transformed));
+          }
+        }
+      },
+    })
+  );
 }
 
 /**

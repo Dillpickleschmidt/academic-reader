@@ -51,7 +51,7 @@ export class LocalBackend implements ConversionBackend {
       result?: { content: string; metadata: Record<string, unknown> };
       html_content?: string;
       error?: string;
-      progress?: { stage: string; current: number; total: number };
+      progress?: { stage: string; current: number; total: number; elapsed?: number };
     };
 
     return {
@@ -60,7 +60,7 @@ export class LocalBackend implements ConversionBackend {
       result: data.result,
       htmlContent: data.html_content,
       error: data.error,
-      progress: data.progress,
+      progress: data.progress ? { ...data.progress, elapsed: data.progress.elapsed ?? 0 } : undefined,
     };
   }
 

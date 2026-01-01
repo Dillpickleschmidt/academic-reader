@@ -13,23 +13,21 @@ export function enhanceHtmlForReader(html: string): string {
   // 1. Citation detection & wrapping
   wrapCitations($);
 
-  // 2. Mark author metadata paragraphs
-  markAuthorMeta($);
+  // 2. Single-pass paragraph processing (author meta, figures, continuations)
+  processParagraphs($);
 
-  // 3. Mark figure captions and continuations
-  markFiguresAndContinuations($);
-
-  // 4. Convert <math> LaTeX to MathML with data-latex fallback
+  // 3. Convert <math> LaTeX to MathML with data-latex fallback
   convertMathToMathML($);
 
   return $('body').html() || '';
 }
 
 /**
- * Citation pattern: [Author et al. Year], [Author Year], [Author and Author Year]
+ * Citation patterns:
+ * - Author-year: [Smith 2020], [Smith et al. 2020], [Smith and Jones 2020; Brown 2021]
+ * - Numeric: [1], [1, 2], [1-5], [1, 3-5, 8]
  */
-const CITATION_PATTERN =
-  /\[([A-Z][a-zA-Zà-ÿ]+(?:\s+(?:et\s+al\.|and\s+[A-Z][a-zA-Zà-ÿ]+))?(?:\s+\d{4})?(?:;\s*[A-Z][a-zA-Zà-ÿ]+(?:\s+(?:et\s+al\.|and\s+[A-Z][a-zA-Zà-ÿ]+))?(?:\s+\d{4})?)*)\]/g;
+const CITATION_PATTERN = /\[(?:[A-Z][^\]]*\d{4}|[\d,;\s\-–]+)\]/g;
 
 /**
  * Wrap academic citations in spans for styling.
@@ -76,38 +74,32 @@ function wrapCitations($: cheerio.CheerioAPI): void {
 
 
 /**
- * Mark author/metadata paragraphs (short paragraphs between h1 and first h2).
+ * Single-pass paragraph processing: author meta, figure captions, continuations.
  */
-function markAuthorMeta($: cheerio.CheerioAPI): void {
+function processParagraphs($: cheerio.CheerioAPI): void {
   const h1 = $('h1').first();
-  if (h1.length === 0) return;
+  const authorSectionEnd = h1.length > 0 ? h1.nextAll('h1, h2').first() : null;
 
-  let el = h1.next();
-  while (el.length > 0 && !el.is('h1, h2')) {
-    if (el.is('p')) {
-      const text = el.text().trim();
-      if (text.length < 200) {
-        el.addClass('author-meta');
+  $('p').each(function () {
+    const $p = $(this);
+    const text = $p.text().replace(/\s+/g, ' ').trim();
+
+    // Author meta: short paragraphs between h1 and first h2
+    if (h1.length > 0 && text.length < 200) {
+      const isAfterH1 = $p.prevAll().filter('h1').first().is(h1);
+      const isBeforeH2 = !authorSectionEnd?.length || $p.nextAll().filter('h1, h2').first().is(authorSectionEnd);
+      if (isAfterH1 && isBeforeH2) {
+        $p.addClass('author-meta');
       }
     }
-    el = el.next();
-  }
-}
-
-/**
- * Mark figure captions and continuation paragraphs.
- */
-function markFiguresAndContinuations($: cheerio.CheerioAPI): void {
-  $('p').each(function () {
-    const text = $(this).text().replace(/\s+/g, ' ').trim();
 
     // Figure caption: starts with "Fig. #"
     if (/^Fig\.\s*\d/.test(text)) {
-      $(this).addClass('figure-caption');
+      $p.addClass('figure-caption');
     }
-    // Continuation: starts with lowercase (likely continuation of previous paragraph)
-    else if (text.length > 0 && text[0] === text[0].toLowerCase() && /^[a-z]/.test(text)) {
-      $(this).addClass('continuation');
+    // Continuation: starts with lowercase
+    else if (text.length > 0 && /^[a-z]/.test(text)) {
+      $p.addClass('continuation');
     }
   });
 }

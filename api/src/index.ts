@@ -6,11 +6,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from './types';
 import { upload, convert, jobs, webhooks } from './routes';
-import { createStorage, KVTempStorage, type StorageAdapter, type TempStorage } from './storage';
+import { createStorage, KVTempStorage, type S3Storage, type TempStorage } from './storage';
 
 // Extended context with storage adapters
 type Variables = {
-  storage: StorageAdapter | null;
+  storage: S3Storage | null;
   tempStorage: TempStorage | null;
 };
 

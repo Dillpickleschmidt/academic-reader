@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env } from '../types';
-import type { StorageAdapter, TempStorage } from '../storage';
+import type { S3Storage, TempStorage } from '../storage';
 
 // Extended context with storage adapters
 type Variables = {
-  storage: StorageAdapter | null;
+  storage: S3Storage | null;
   tempStorage: TempStorage | null;
 };
 

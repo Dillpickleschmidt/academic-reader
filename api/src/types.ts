@@ -1,5 +1,10 @@
 // Shared type definitions
 
+// Stub for Cloudflare KVNamespace when used outside Workers context
+declare global {
+  interface KVNamespace {}
+}
+
 export type BackendType = 'local' | 'runpod' | 'datalab';
 export type OutputFormat = 'html' | 'markdown' | 'json';
 export type JobStatus = 'pending' | 'processing' | 'html_ready' | 'completed' | 'failed';
@@ -12,14 +17,14 @@ export interface ConversionInput {
   outputFormat: OutputFormat;
   useLlm: boolean;
   forceOcr: boolean;
-  pageRange?: string;
+  pageRange: string;         // Empty string = all pages
 }
 
 export interface ConversionProgress {
   stage: string;
   current: number;
   total: number;
-  elapsed?: number;
+  elapsed: number;
 }
 
 // Chunk output from Marker's ChunkRenderer
@@ -44,7 +49,7 @@ export interface AllFormats {
   html: string;
   markdown: string;
   json: unknown;
-  chunks: ChunkOutput | null;
+  chunks?: ChunkOutput;
 }
 
 export interface ConversionResult {

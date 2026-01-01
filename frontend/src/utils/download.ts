@@ -14,7 +14,11 @@ export const getDownloadMimeType = (format: OutputFormat): string =>
       ? "application/json"
       : "text/markdown"
 
-export const downloadBlob = (content: string, filename: string, mimeType: string) => {
+export const downloadBlob = (
+  content: string,
+  filename: string,
+  mimeType: string,
+) => {
   const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")

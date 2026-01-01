@@ -323,7 +323,6 @@ export function ConfigureProcessingPage({
                 isProcessing={isProcessing}
               />
             </div>
-
           </div>
 
           {/* Right Panel - Config or Processing */}
@@ -337,147 +336,150 @@ export function ConfigureProcessingPage({
               <ProcessingView stages={stages} />
             ) : (
               <>
-            {/* Output Format */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Output Format
-              </label>
-              <Select
-                value={outputFormat}
-                onValueChange={(value) =>
-                  onOutputFormatChange(value as OutputFormat)
-                }
-              >
-                <SelectTrigger className="w-full h-10">
-                  <SelectValue>
-                    {(() => {
-                      const opt = FORMAT_OPTIONS.find(
-                        (o) => o.value === outputFormat,
-                      )
-                      if (!opt) return null
-                      const Icon = opt.icon
-                      return (
-                        <span className="flex items-center gap-2">
-                          <Icon className="w-4 h-4" strokeWidth={1.5} />
-                          <span>{opt.label}</span>
-                          {opt.recommended && (
-                            <span className="text-muted-foreground text-xs">
-                              (Recommended)
+                {/* Output Format */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Output Format
+                  </label>
+                  <Select
+                    value={outputFormat}
+                    onValueChange={(value) =>
+                      onOutputFormatChange(value as OutputFormat)
+                    }
+                  >
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue>
+                        {(() => {
+                          const opt = FORMAT_OPTIONS.find(
+                            (o) => o.value === outputFormat,
+                          )
+                          if (!opt) return null
+                          const Icon = opt.icon
+                          return (
+                            <span className="flex items-center gap-2">
+                              <Icon className="w-4 h-4" strokeWidth={1.5} />
+                              <span>{opt.label}</span>
+                              {opt.recommended && (
+                                <span className="text-muted-foreground text-xs">
+                                  (Recommended)
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
-                      )
-                    })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {FORMAT_OPTIONS.map((opt) => {
-                    const Icon = opt.icon
-                    return (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        <Icon className="w-4 h-4" strokeWidth={1.5} />
-                        {opt.label}
-                        {opt.recommended && (
-                          <span className="text-muted-foreground text-xs ml-1">
-                            (Recommended)
+                          )
+                        })()}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORMAT_OPTIONS.map((opt) => {
+                        const Icon = opt.icon
+                        return (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            <Icon className="w-4 h-4" strokeWidth={1.5} />
+                            {opt.label}
+                            {opt.recommended && (
+                              <span className="text-muted-foreground text-xs ml-1">
+                                (Recommended)
+                              </span>
+                            )}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Page Range */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Page Range{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (optional)
+                    </span>
+                  </label>
+                  <Input
+                    type="text"
+                    className="h-10"
+                    placeholder="All pages — or specify: 1-5, 10, 15-20"
+                    value={pageRange}
+                    onChange={(e) => onPageRangeChange(e.target.value)}
+                  />
+                </div>
+
+                {/* Options */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-md flex items-center justify-center bg-muted text-muted-foreground">
+                        <Sparkles className="w-4 h-4" strokeWidth={1.5} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-foreground">
+                          Enhanced Detection
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <span>
+                            Use Gemini Flash 2 for better tables & equations
                           </span>
-                        )}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Page Range */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                Page Range{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </label>
-              <Input
-                type="text"
-                className="h-10"
-                placeholder="All pages — or specify: 1-5, 10, 15-20"
-                value={pageRange}
-                onChange={(e) => onPageRangeChange(e.target.value)}
-              />
-            </div>
-
-            {/* Options */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between py-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-md flex items-center justify-center bg-muted text-muted-foreground">
-                    <Sparkles className="w-4 h-4" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-foreground">
-                      Enhanced Detection
+                          <InfoTooltip
+                            variant="info"
+                            content="Note that Google collects anything read by Gemini for training purposes."
+                            side="top"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <span>
-                        Use Gemini Flash 2 for better tables & equations
-                      </span>
-                      <InfoTooltip
-                        variant="info"
-                        content="Note that Google collects anything read by Gemini for training purposes."
-                        side="top"
-                      />
-                    </div>
+                    <Switch checked={useLlm} onCheckedChange={onUseLlmChange} />
                   </div>
-                </div>
-                <Switch checked={useLlm} onCheckedChange={onUseLlmChange} />
-              </div>
 
-              <div className="flex items-center justify-between py-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-md flex items-center justify-center bg-muted text-muted-foreground">
-                    <ScanLine className="w-4 h-4" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium text-foreground">
-                      Force OCR
+                  <div className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-md flex items-center justify-center bg-muted text-muted-foreground">
+                        <ScanLine className="w-4 h-4" strokeWidth={1.5} />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-foreground">
+                          Force OCR
+                        </div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          <span>Can help with equations</span>
+                          <InfoTooltip
+                            content="This is only applicable to searchable, text-based PDFs since scanned documents are subjected to OCR automatically."
+                            side="top"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <span>Can help with equations</span>
-                      <InfoTooltip
-                        content="This is only applicable to searchable, text-based PDFs since scanned documents are subjected to OCR automatically."
-                        side="top"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <Switch checked={forceOcr} onCheckedChange={onForceOcrChange} />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex gap-3 mt-2">
-              <Button variant="outline" onClick={onBack} className="h-10">
-                <ArrowLeft className="w-4 h-4 mr-2" strokeWidth={2} />
-                Back
-              </Button>
-              <Button
-                onClick={onStartConversion}
-                disabled={!uploadComplete}
-                className="flex-1 h-10"
-              >
-                {uploadComplete ? (
-                  "Convert"
-                ) : (
-                  <>
-                    <Loader2
-                      className="w-4 h-4 mr-2 animate-spin"
-                      strokeWidth={2}
+                    <Switch
+                      checked={forceOcr}
+                      onCheckedChange={onForceOcrChange}
                     />
-                    Uploading...
-                  </>
-                )}
-              </Button>
-            </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 mt-2">
+                  <Button variant="outline" onClick={onBack} className="h-10">
+                    <ArrowLeft className="w-4 h-4 mr-2" strokeWidth={2} />
+                    Back
+                  </Button>
+                  <Button
+                    onClick={onStartConversion}
+                    disabled={!uploadComplete}
+                    className="flex-1 h-10"
+                  >
+                    {uploadComplete ? (
+                      "Convert"
+                    ) : (
+                      <>
+                        <Loader2
+                          className="w-4 h-4 mr-2 animate-spin"
+                          strokeWidth={2}
+                        />
+                        Uploading...
+                      </>
+                    )}
+                  </Button>
+                </div>
               </>
             )}
           </div>

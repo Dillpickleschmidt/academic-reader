@@ -1,3 +1,7 @@
+import type { OutputFormat, ConversionProgress } from "../../api/src/types"
+
+export type { OutputFormat, ConversionProgress }
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 export interface UploadResponse {
@@ -7,7 +11,7 @@ export interface UploadResponse {
 }
 
 export interface ConversionOptions {
-  outputFormat: "html" | "markdown" | "json"
+  outputFormat: OutputFormat
   useLlm: boolean
   forceOcr: boolean
   pageRange: string
@@ -22,13 +26,6 @@ export interface JobStatus {
   }
   error?: string
   progress?: ConversionProgress
-}
-
-export interface ConversionProgress {
-  stage: string
-  current: number
-  total: number
-  elapsed: number
 }
 
 export async function uploadFile(file: File): Promise<UploadResponse> {

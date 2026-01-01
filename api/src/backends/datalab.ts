@@ -92,19 +92,15 @@ export class DatalabBackend implements ConversionBackend {
     return this.parseResponse(data);
   }
 
-  private mapStatus(datalabStatus: string, success?: boolean): JobStatus {
-    switch (datalabStatus) {
-      case 'pending':
-        return 'pending';
-      case 'processing':
-        return 'processing';
-      case 'complete':
-        return success ? 'completed' : 'failed';
-      case 'failed':
-        return 'failed';
-      default:
-        return 'pending';
-    }
+  private mapStatus(status: string, success?: boolean): JobStatus {
+    if (status === 'complete' && !success) return 'failed';
+    const STATUS_MAP: Record<string, JobStatus> = {
+      'pending': 'pending',
+      'processing': 'processing',
+      'complete': 'completed',
+      'failed': 'failed',
+    };
+    return STATUS_MAP[status] ?? 'pending';
   }
 
   private parseResponse(data: DatalabResponse): ConversionJob {
@@ -146,7 +142,7 @@ export class DatalabBackend implements ConversionBackend {
                 html: htmlContent,
                 markdown: data.markdown || '',
                 json: data.json,
-                chunks: data.chunks ?? null,
+                chunks: data.chunks,
               },
             }
           : undefined,

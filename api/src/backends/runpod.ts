@@ -84,19 +84,14 @@ export class RunpodBackend implements ConversionBackend {
     };
   }
 
-  private mapStatus(runpodStatus: string): JobStatus {
-    switch (runpodStatus) {
-      case 'IN_QUEUE':
-        return 'pending';
-      case 'IN_PROGRESS':
-        return 'processing';
-      case 'COMPLETED':
-        return 'completed';
-      case 'FAILED':
-        return 'failed';
-      default:
-        return 'pending';
-    }
+  private mapStatus(status: string): JobStatus {
+    const STATUS_MAP: Record<string, JobStatus> = {
+      'IN_QUEUE': 'pending',
+      'IN_PROGRESS': 'processing',
+      'COMPLETED': 'completed',
+      'FAILED': 'failed',
+    };
+    return STATUS_MAP[status] ?? 'pending';
   }
 
   supportsStreaming(): boolean {
