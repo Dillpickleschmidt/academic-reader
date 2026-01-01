@@ -35,7 +35,23 @@ app.use('*', async (c, next) => {
 // CORS middleware
 app.use('*', async (c, next) => {
   const origins = c.env.CORS_ORIGINS?.split(',').map((o) => o.trim()) || ['http://localhost:5173'];
-  return cors({ origin: origins })(c, next);
+  return cors({
+    origin: (origin) => {
+      // Allow exact matches
+      if (origins.includes(origin)) return origin;
+      // Allow Cloudflare Pages preview URLs (e.g., abc123.academic-reader-2w0.pages.dev)
+      for (const allowed of origins) {
+        const match = allowed.match(/^https:\/\/([^.]+\.pages\.dev)$/);
+        if (match) {
+          const projectDomain = match[1]; // e.g., "academic-reader-2w0.pages.dev"
+          if (origin.endsWith(`.${projectDomain}`) || origin === `https://${projectDomain}`) {
+            return origin;
+          }
+        }
+      }
+      return null;
+    },
+  })(c, next);
 });
 
 // Health check

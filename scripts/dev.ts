@@ -342,8 +342,10 @@ async function deploy(config: Config): Promise<void> {
 
   // Build frontend
   console.log(colors.cyan("\nBuilding frontend..."));
+  const apiUrl = `https://academic-reader-api-${config.BACKEND_MODE}.academic-reader.workers.dev`;
   const frontendBuild = await runProcess(["bun", "run", "build"], {
     cwd: resolve(ROOT_DIR, "frontend"),
+    env: { VITE_API_URL: apiUrl },
   });
   await frontendBuild.exited;
 
