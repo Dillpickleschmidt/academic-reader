@@ -55,7 +55,7 @@ app.use('*', async (c, next) => {
 });
 
 // Health check
-app.get('/health', (c) => c.json({ status: 'ok', backend: c.env.CONVERSION_BACKEND, mode: 'cloudflare' }));
+app.get('/health', (c) => c.json({ status: 'ok', backend: c.env.BACKEND_MODE, mode: 'cloudflare' }));
 
 // Mount route modules
 app.route('/', upload);

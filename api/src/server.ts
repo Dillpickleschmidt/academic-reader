@@ -25,7 +25,7 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 // Create storage instances (singleton for the process lifetime)
 const tempStorage = new MemoryTempStorage();
 const storage = createStorage({
-  CONVERSION_BACKEND: env.CONVERSION_BACKEND || 'datalab',
+  BACKEND_MODE: env.BACKEND_MODE || 'datalab',
   S3_ENDPOINT: env.S3_ENDPOINT,
   S3_ACCESS_KEY: env.S3_ACCESS_KEY,
   S3_SECRET_KEY: env.S3_SECRET_KEY,
@@ -37,13 +37,12 @@ const storage = createStorage({
 app.use('*', async (c, next) => {
   // Inject environment variables as bindings
   c.env = {
-    CONVERSION_BACKEND: (env.CONVERSION_BACKEND || 'datalab') as Env['CONVERSION_BACKEND'],
+    BACKEND_MODE: (env.BACKEND_MODE || 'datalab') as Env['BACKEND_MODE'],
     LOCAL_WORKER_URL: env.LOCAL_WORKER_URL,
     RUNPOD_ENDPOINT_ID: env.RUNPOD_ENDPOINT_ID,
     RUNPOD_API_KEY: env.RUNPOD_API_KEY,
     DATALAB_API_KEY: env.DATALAB_API_KEY,
-    WEBHOOK_SECRET: env.WEBHOOK_SECRET,
-    WEBHOOK_BASE_URL: env.WEBHOOK_BASE_URL,
+        WEBHOOK_BASE_URL: env.WEBHOOK_BASE_URL,
     S3_ENDPOINT: env.S3_ENDPOINT,
     S3_ACCESS_KEY: env.S3_ACCESS_KEY,
     S3_SECRET_KEY: env.S3_SECRET_KEY,
@@ -81,7 +80,7 @@ app.get('/health', (c) => c.json({ status: 'ok', mode: 'self-hosted' }));
 // Start server
 const port = parseInt(env.PORT || '8787', 10);
 console.log(`Starting self-hosted API on port ${port}`);
-console.log(`Backend: ${env.CONVERSION_BACKEND || 'datalab'}`);
+console.log(`Backend: ${env.BACKEND_MODE || 'datalab'}`);
 
 export default {
   port,

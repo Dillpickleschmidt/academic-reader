@@ -82,7 +82,7 @@ export interface PresignedUrlResult {
 // Environment bindings
 export interface Env {
   // Backend selection
-  CONVERSION_BACKEND: BackendType;
+  BACKEND_MODE: BackendType;
 
   // Local backend
   LOCAL_WORKER_URL?: string;
@@ -95,7 +95,6 @@ export interface Env {
   DATALAB_API_KEY?: string;
 
   // Webhook
-  WEBHOOK_SECRET?: string;
   WEBHOOK_BASE_URL?: string;
 
   // S3-compatible storage (for Runpod mode)

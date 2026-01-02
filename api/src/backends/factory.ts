@@ -8,7 +8,7 @@ import { createDatalabBackend } from './datalab';
  * Create the appropriate backend based on environment configuration.
  */
 export function createBackend(env: Env): ConversionBackend {
-  const backendType: BackendType = env.CONVERSION_BACKEND || 'local';
+  const backendType: BackendType = env.BACKEND_MODE || 'local';
 
   switch (backendType) {
     case 'local':
