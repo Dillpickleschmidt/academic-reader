@@ -38,7 +38,7 @@ Set `BACKEND_MODE` in `.env.local` to `local`, `runpod`, or `datalab`.
 | Self-hosted | `local`   | `worker/uploads/` on your machine                                                         |
 | Self-hosted | `runpod`  | MinIO (local S3) via cloudflared tunnel <sub>(temp anonymous URL, no auth required)</sub> |
 | Self-hosted | `datalab` | Uploaded directly to Datalab API                                                          |
-| Hosted      | `runpod`  | Cloudflare R2                                                                             |
+| Hosted      | `runpod`  | Cloudflare R2 <sub>(requires cloudflare account)</sub>                                    |
 | Hosted      | `datalab` | Cloudflare KV (temp), uploaded directly to Datalab API                                    |
 
 ## Commands
@@ -51,15 +51,26 @@ bun run deploy         # Deploy to Cloudflare
 
 ## Configuration
 
-| Variable             | Required        | Description                           |
-| -------------------- | --------------- | ------------------------------------- |
-| `BACKEND_MODE`       | Yes             | `local`, `runpod`, or `datalab`       |
-| `DATALAB_API_KEY`    | datalab         | From [datalab.to](https://datalab.to) |
-| `RUNPOD_API_KEY`     | runpod          | From Runpod dashboard                 |
-| `RUNPOD_ENDPOINT_ID` | runpod          | Your endpoint ID                      |
-| `S3_ENDPOINT`        | runpod (hosted) | S3-compatible endpoint                |
-| `S3_ACCESS_KEY`      | runpod (hosted) | S3 access key                         |
-| `S3_SECRET_KEY`      | runpod (hosted) | S3 secret key                         |
-| `S3_BUCKET`          | runpod (hosted) | Bucket name                           |
+| Variable             | Required        | Description                            |
+| -------------------- | --------------- | -------------------------------------- |
+| `BACKEND_MODE`       | Yes             | `local`, `runpod`, or `datalab`        |
+| `DATALAB_API_KEY`    | datalab         | From [datalab.to](https://datalab.to)  |
+| `RUNPOD_API_KEY`     | runpod          | From Runpod dashboard                  |
+| `RUNPOD_ENDPOINT_ID` | runpod          | Your endpoint ID                       |
+| `S3_ENDPOINT`        | runpod (hosted) | Cloudflare R2 endpoint (S3-compatible) |
+| `S3_ACCESS_KEY`      | runpod (hosted) | R2 access key (S3-compatible)          |
+| `S3_SECRET_KEY`      | runpod (hosted) | R2 secret key (S3-compatible)          |
+| `S3_BUCKET`          | runpod (hosted) | R2 bucket name (S3-compatible)         |
 
 See `.env.example` for all options.
+
+## Authentication
+
+| Environment         | Convex Backend                     | Setup Required                |
+| ------------------- | ---------------------------------- | ----------------------------- |
+| Development         | Self-hosted (Docker)               | None - starts automatically   |
+| Production (deploy) | [Convex Cloud](https://convex.dev) | Convex account + Google OAuth |
+
+**Development (`bun run dev`):** All modes (local, runpod, datalab) use self-hosted Convex via Docker - no account needed. A Convex dashboard is available at <http://localhost:6791> for browsing data.
+
+**Production (`bun run deploy`):** Requires Convex Cloud. Run `bunx convex deploy` in `frontend/` to create a production deployment, then add `CONVEX_DEPLOYMENT` and `CONVEX_URL` to `.env.local`. Also add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for OAuth.

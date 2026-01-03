@@ -5,7 +5,7 @@ export { MemoryTempStorage, KVTempStorage, type TempStorage, type TempFile } fro
 import { S3Storage } from './s3';
 
 interface StorageEnv {
-  CONVERSION_BACKEND?: string;
+  BACKEND_MODE?: string;
   S3_ENDPOINT?: string;
   S3_ACCESS_KEY?: string;
   S3_SECRET_KEY?: string;
@@ -19,7 +19,7 @@ interface StorageEnv {
  */
 export function createStorage(env: StorageEnv): S3Storage | null {
   // Only Runpod needs file storage
-  if (env.CONVERSION_BACKEND !== 'runpod') {
+  if (env.BACKEND_MODE !== 'runpod') {
     return null;
   }
 

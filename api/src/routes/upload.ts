@@ -13,7 +13,7 @@ const upload = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // Upload file directly
 upload.post('/upload', async (c) => {
-  const backend = c.env.CONVERSION_BACKEND || 'local';
+  const backend = c.env.BACKEND_MODE || 'local';
 
   // Local mode: passthrough to FastAPI worker
   if (backend === 'local') {
@@ -103,7 +103,7 @@ upload.post('/upload', async (c) => {
 
 // Get presigned upload URL (Runpod mode only)
 upload.post('/upload-url', async (c) => {
-  const backend = c.env.CONVERSION_BACKEND || 'local';
+  const backend = c.env.BACKEND_MODE || 'local';
 
   if (backend !== 'runpod') {
     return c.json({ error: 'Presigned URLs only available for Runpod mode' }, { status: 400 });
@@ -131,7 +131,7 @@ upload.post('/fetch-url', async (c) => {
     return c.json({ error: 'Missing url parameter' }, { status: 400 });
   }
 
-  const backend = c.env.CONVERSION_BACKEND || 'local';
+  const backend = c.env.BACKEND_MODE || 'local';
 
   // Local mode: passthrough to FastAPI worker
   if (backend === 'local') {

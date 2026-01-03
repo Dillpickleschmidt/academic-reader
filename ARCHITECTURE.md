@@ -39,9 +39,9 @@ The `/api` package routes requests to one of three backends:
 
 | Backend | Config | Use Case |
 |---------|--------|----------|
-| `local` | `CONVERSION_BACKEND=local` | Development |
-| `runpod` | `CONVERSION_BACKEND=runpod` | Self-hosted GPU |
-| `datalab` | `CONVERSION_BACKEND=datalab` | Hosted Marker API |
+| `local` | `BACKEND_MODE=local` | Development |
+| `runpod` | `BACKEND_MODE=runpod` | Self-hosted GPU |
+| `datalab` | `BACKEND_MODE=datalab` | Hosted Marker API |
 
 ### Endpoints
 

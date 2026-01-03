@@ -15,7 +15,7 @@ const convert = new Hono<{ Bindings: Env; Variables: Variables }>();
 convert.post('/convert/:fileId', async (c) => {
   const fileId = c.req.param('fileId');
   const query = c.req.query();
-  const backendType = c.env.CONVERSION_BACKEND || 'local';
+  const backendType = c.env.BACKEND_MODE || 'local';
 
   try {
     const backend = createBackend(c.env);
@@ -103,7 +103,7 @@ convert.post('/convert/:fileId', async (c) => {
 
 // Warm models (passthrough for local only)
 convert.post('/warm-models', async (c) => {
-  if (c.env.CONVERSION_BACKEND !== 'local') {
+  if (c.env.BACKEND_MODE !== 'local') {
     return c.json({ status: 'skipped', reason: 'Not applicable for cloud backends' });
   }
 

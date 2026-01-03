@@ -11,6 +11,7 @@
     "dev:runpod": "bun scripts/dev.ts dev --mode runpod",
     "dev:datalab": "bun scripts/dev.ts dev --mode datalab",
     "deploy": "bun scripts/dev.ts deploy",
+    "secrets": "bun scripts/dev.ts secrets",
     "config:status": "bun scripts/dev.ts status",
     "config:sync": "bun scripts/dev.ts sync",
     "build": "bun run --cwd frontend build",
