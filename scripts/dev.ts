@@ -108,7 +108,7 @@ function loadConfig(modeOverride?: string): Config {
     DATALAB_API_KEY: env.DATALAB_API_KEY,
     RUNPOD_API_KEY: env.RUNPOD_API_KEY,
     RUNPOD_ENDPOINT_ID: env.RUNPOD_ENDPOINT_ID,
-        CORS_ORIGINS: env.CORS_ORIGINS,
+    CORS_ORIGINS: env.CORS_ORIGINS,
     API_URL: env.API_URL,
     LOCAL_WORKER_URL: env.LOCAL_WORKER_URL || "http://localhost:8000",
     S3_ENDPOINT: env.S3_ENDPOINT,
@@ -165,7 +165,7 @@ function syncConfigs(config: Config): void {
       config.RUNPOD_ENDPOINT_ID
         ? `RUNPOD_ENDPOINT_ID=${config.RUNPOD_ENDPOINT_ID}`
         : "",
-            config.CORS_ORIGINS ? `CORS_ORIGINS=${config.CORS_ORIGINS}` : "",
+      config.CORS_ORIGINS ? `CORS_ORIGINS=${config.CORS_ORIGINS}` : "",
       // S3 config
       config.S3_ENDPOINT ? `S3_ENDPOINT=${config.S3_ENDPOINT}` : "",
       config.S3_ACCESS_KEY ? `S3_ACCESS_KEY=${config.S3_ACCESS_KEY}` : "",
@@ -274,7 +274,8 @@ async function syncConvexEnv(config: Config): Promise<void> {
     if (proc.exitCode === 0) {
       console.log(`  ${key} ${colors.green("✓")}`);
     } else {
-      console.log(`  ${key} ${colors.yellow("(skipped)")}`);
+      const stderr = await new Response(proc.stderr).text();
+      console.log(`  ${key} ${colors.yellow("(skipped)")} ${stderr.trim() || ""}`);
     }
   }
 }
@@ -423,7 +424,7 @@ async function pushSecrets(config: Config): Promise<void> {
     runpod: [
       "RUNPOD_API_KEY",
       "RUNPOD_ENDPOINT_ID",
-            "S3_ENDPOINT",
+      "S3_ENDPOINT",
       "S3_ACCESS_KEY",
       "S3_SECRET_KEY",
       "S3_BUCKET",

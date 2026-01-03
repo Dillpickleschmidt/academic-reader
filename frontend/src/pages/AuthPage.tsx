@@ -47,6 +47,7 @@ export function AuthPage() {
 
   const handleGoogleSignIn = async () => {
     setError("")
+    setLoading(true)
     try {
       await authClient.signIn.social({
         provider: "google",
@@ -54,6 +55,7 @@ export function AuthPage() {
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign in failed")
+      setLoading(false)
     }
   }
 
@@ -82,7 +84,7 @@ export function AuthPage() {
             onClick={handleGoogleSignIn}
             disabled={loading}
           >
-            <svg className="size-4" viewBox="0 0 24 24">
+            <svg className="size-4" viewBox="0 0 24 24" aria-label="Google logo" role="img">
               <path
                 fill="currentColor"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
