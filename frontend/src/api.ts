@@ -86,16 +86,6 @@ export async function startConversion(
   return res.json()
 }
 
-export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`${API_URL}/jobs/${jobId}`)
-
-  if (!res.ok) {
-    throw new Error("Failed to check job status")
-  }
-
-  return res.json()
-}
-
 export async function warmModels(): Promise<void> {
   // Fire-and-forget, don't await or check response
   fetch(`${API_URL}/warm-models`, { method: "POST" }).catch(() => {

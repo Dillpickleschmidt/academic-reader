@@ -81,12 +81,16 @@ async function setConvexEnvVars(
       stdout: "pipe",
       stderr: "pipe",
     });
-    await proc.exited;
+
+    // Consume streams before waiting for exit to avoid deadlock
+    const [stderr] = await Promise.all([
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
 
     if (proc.exitCode === 0) {
       console.log(`  ${key} ${colors.green("✓")}`);
     } else {
-      const stderr = await new Response(proc.stderr).text();
       console.log(
         `  ${key} ${colors.yellow("(skipped)")} ${stderr.trim() || ""}`,
       );

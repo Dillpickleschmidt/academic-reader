@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import type { Env, OutputFormat, ConversionInput } from '../types';
 import type { S3Storage, TempStorage } from '../storage';
 import { createBackend } from '../backends/factory';
-import { KV_KEYS, TTL } from '../constants';
 
 // Extended context with storage adapters
 type Variables = {
@@ -79,20 +78,6 @@ convert.post('/convert/:fileId', async (c) => {
     }
 
     const jobId = await backend.submitJob(input);
-
-    // Store job mapping in KV for webhook handling (if KV is available)
-    if (c.env.JOBS_KV) {
-      await c.env.JOBS_KV.put(
-        `${KV_KEYS.JOB}${jobId}`,
-        JSON.stringify({
-          fileId,
-          backend: backend.name,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-        }),
-        { expirationTtl: TTL.JOB }
-      );
-    }
 
     return c.json({ job_id: jobId });
   } catch (error) {

@@ -1,10 +1,5 @@
 // Shared type definitions
 
-// Stub for Cloudflare KVNamespace when used outside Workers context
-declare global {
-  interface KVNamespace {}
-}
-
 export type BackendType = 'local' | 'runpod' | 'datalab';
 export type OutputFormat = 'html' | 'markdown' | 'json';
 export type JobStatus = 'pending' | 'processing' | 'html_ready' | 'completed' | 'failed';
@@ -94,18 +89,12 @@ export interface Env {
   // Datalab backend
   DATALAB_API_KEY?: string;
 
-  // Webhook
-  WEBHOOK_BASE_URL?: string;
-
   // S3-compatible storage (for Runpod mode)
   S3_ENDPOINT?: string;
   S3_ACCESS_KEY?: string;
   S3_SECRET_KEY?: string;
   S3_BUCKET?: string;
 
-  // KV for job state (Cloudflare Workers only)
-  JOBS_KV?: KVNamespace;
-
-  // CORS
-  CORS_ORIGINS?: string;
+  // Frontend URL (used for CORS)
+  SITE_URL?: string;
 }

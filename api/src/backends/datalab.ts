@@ -3,7 +3,6 @@ import type { ChunkOutput, ConversionInput, ConversionJob, JobStatus } from '../
 
 interface DatalabConfig {
   apiKey: string;
-  webhookUrl?: string;
 }
 
 interface DatalabResponse {
@@ -54,10 +53,6 @@ export class DatalabBackend implements ConversionBackend {
 
     if (input.pageRange) {
       formData.append('page_range', input.pageRange);
-    }
-
-    if (this.config.webhookUrl) {
-      formData.append('webhook_url', this.config.webhookUrl);
     }
 
     const response = await fetch(this.baseUrl, {
@@ -119,17 +114,6 @@ export class DatalabBackend implements ConversionBackend {
       }
     }
 
-    // Log all formats for future use
-    if (data.chunks) {
-      console.log(`[Datalab] Got ${data.chunks.blocks?.length ?? 0} chunk blocks`);
-    }
-    if (data.json) {
-      console.log(`[Datalab] Got JSON output`);
-    }
-    if (data.markdown) {
-      console.log(`[Datalab] Got markdown (${data.markdown.length} chars)`);
-    }
-
     return {
       jobId: data.request_id,
       status: this.mapStatus(data.status, data.success),
@@ -153,11 +137,6 @@ export class DatalabBackend implements ConversionBackend {
   supportsStreaming(): boolean {
     return false;
   }
-
-  async handleWebhook(request: Request): Promise<ConversionJob> {
-    const data = (await request.json()) as DatalabResponse;
-    return this.parseResponse(data);
-  }
 }
 
 /**
@@ -165,7 +144,6 @@ export class DatalabBackend implements ConversionBackend {
  */
 export function createDatalabBackend(env: {
   DATALAB_API_KEY?: string;
-  WEBHOOK_BASE_URL?: string;
 }): DatalabBackend {
   if (!env.DATALAB_API_KEY) {
     throw new Error('Datalab backend requires DATALAB_API_KEY');
@@ -173,6 +151,5 @@ export function createDatalabBackend(env: {
 
   return new DatalabBackend({
     apiKey: env.DATALAB_API_KEY,
-    webhookUrl: env.WEBHOOK_BASE_URL ? `${env.WEBHOOK_BASE_URL}/webhooks/datalab` : undefined,
   });
 }

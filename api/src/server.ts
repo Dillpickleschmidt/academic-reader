@@ -42,14 +42,11 @@ app.use('*', async (c, next) => {
     RUNPOD_ENDPOINT_ID: env.RUNPOD_ENDPOINT_ID,
     RUNPOD_API_KEY: env.RUNPOD_API_KEY,
     DATALAB_API_KEY: env.DATALAB_API_KEY,
-        WEBHOOK_BASE_URL: env.WEBHOOK_BASE_URL,
     S3_ENDPOINT: env.S3_ENDPOINT,
     S3_ACCESS_KEY: env.S3_ACCESS_KEY,
     S3_SECRET_KEY: env.S3_SECRET_KEY,
     S3_BUCKET: env.S3_BUCKET,
-    CORS_ORIGINS: env.CORS_ORIGINS,
-    // No KV in self-hosted mode
-    JOBS_KV: undefined,
+    SITE_URL: env.SITE_URL,
   };
 
   // Inject storage adapters
@@ -59,12 +56,12 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// CORS
+// CORS - use SITE_URL as the allowed origin
 app.use('*', cors({
   origin: (origin) => {
-    const allowedOrigins = env.CORS_ORIGINS?.split(',') || ['*'];
-    if (allowedOrigins.includes('*')) return origin;
-    return allowedOrigins.includes(origin) ? origin : allowedOrigins[0];
+    const siteUrl = env.SITE_URL;
+    if (!siteUrl) return origin; // Allow all if not set
+    return origin === siteUrl ? origin : siteUrl;
   },
 }));
 

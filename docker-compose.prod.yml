@@ -1,0 +1,71 @@
+# Production Docker Compose for VPS deployment
+# Used by: bun run deploy
+
+services:
+  # API server (Hono on Bun)
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    restart: always
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "8787:8787"
+    env_file:
+      - .env
+    environment:
+      - PORT=8787
+      - BACKEND_MODE=${BACKEND_MODE}
+      - DATALAB_API_KEY=${DATALAB_API_KEY}
+      - RUNPOD_API_KEY=${RUNPOD_API_KEY}
+      - RUNPOD_ENDPOINT_ID=${RUNPOD_ENDPOINT_ID}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - S3_ENDPOINT=${PROD_S3_ENDPOINT}
+      - S3_ACCESS_KEY=${PROD_S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${PROD_S3_SECRET_KEY}
+      - S3_BUCKET=${PROD_S3_BUCKET}
+      - SITE_URL=${PROD_SITE_URL}
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+
+  # Self-hosted Convex backend
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:523c6812d3020300314f386b89a9c29560f21027
+    restart: always
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "3210:3210"
+      - "3211:3211"
+    environment:
+      - CONVEX_CLOUD_ORIGIN=${PROD_CONVEX_URL}
+      - CONVEX_SITE_ORIGIN=${PROD_CONVEX_SITE_URL}
+      - DISABLE_BEACON=true
+    volumes:
+      - convex_data:/convex/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Self-hosted Convex dashboard
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:523c6812d3020300314f386b89a9c29560f21027
+    restart: always
+    stop_grace_period: 10s
+    stop_signal: SIGINT
+    ports:
+      - "6791:6791"
+    env_file:
+      - .env
+    environment:
+      - NEXT_PUBLIC_DEPLOYMENT_URL=${PROD_CONVEX_URL}
+    depends_on:
+      convex-backend:
+        condition: service_healthy
+
+volumes:
+  convex_data:

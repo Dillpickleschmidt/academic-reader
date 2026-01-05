@@ -1,16 +1,12 @@
-// Type declarations for asset imports
+// Type declarations for asset imports (Bun)
 
 declare module '*.woff2' {
-  // Bun: file path string, Workers: ArrayBuffer (via wrangler rules)
-  const content: string | ArrayBuffer;
+  const content: string;
   export default content;
 }
 
 declare module '*.wasm' {
-  // Bun: file path string
-  // Workers with CompiledWasm: WebAssembly.Module
-  // Workers with Data: ArrayBuffer
-  const content: string | ArrayBuffer | WebAssembly.Module;
+  const content: string;
   export default content;
 }
 
@@ -18,3 +14,5 @@ declare module '*.css' {
   const content: string;
   export default content;
 }
+
+declare module 'katex/dist/contrib/copy-tex.min.js';

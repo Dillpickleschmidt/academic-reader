@@ -5,8 +5,8 @@
 ```
 academic-reader/
 ├── package.json          # Bun workspace root
-├── frontend/             # React + Vite (Cloudflare Pages)
-├── api/                  # Cloudflare Worker (API gateway)
+├── frontend/             # React + Vite
+├── api/                  # Hono API server (Bun)
 └── worker/               # Python FastAPI + Marker (Docker/Runpod)
 ```
 
@@ -14,60 +14,56 @@ academic-reader/
 
 | Mode | Frontend | API | GPU Worker |
 |------|----------|-----|------------|
-| **Local Dev** | `bun run dev` | Direct to worker | `docker compose up` |
-| **Cloud (Runpod)** | Cloudflare Pages | Cloudflare Worker | Runpod Serverless |
-| **Cloud (Datalab)** | Cloudflare Pages | Cloudflare Worker | Datalab API |
+| **Local Dev** | Vite (localhost:5173) | Bun (localhost:8787) | Docker |
+| **Production** | Static CDN | Bun (Hetzner VPS) | Runpod/Datalab |
 
-## Cloud Architecture
+## Architecture
 
 ```
 ┌──────────────┐     ┌─────────────────────┐     ┌─────────────────┐
-│   Frontend   │────▶│  Cloudflare Worker  │────▶│ Runpod/Datalab  │
-│    (Pages)   │     │    (API Gateway)    │     │   (GPU/API)     │
+│   Frontend   │────▶│   Hetzner VPS       │────▶│ Runpod/Datalab  │
+│ (Static CDN) │     │   (Bun API Server)  │     │   (GPU/API)     │
 └──────────────┘     └─────────────────────┘     └─────────────────┘
-                              │                         │
-                              ▼                         │ webhook
-                     ┌─────────────────────┐            │
-                     │    Cloudflare R2    │◀───────────┘
-                     │   (File Storage)    │
+                              │
+                              ▼
+                     ┌─────────────────────┐
+                     │  Cloudflare R2 or   │
+                     │  MinIO (S3 Storage) │
                      └─────────────────────┘
 ```
 
-## API Gateway (Cloudflare Worker)
+## API Server (Bun + Hono)
 
 The `/api` package routes requests to one of three backends:
 
 | Backend | Config | Use Case |
 |---------|--------|----------|
-| `local` | `BACKEND_MODE=local` | Development |
-| `runpod` | `BACKEND_MODE=runpod` | Self-hosted GPU |
-| `datalab` | `BACKEND_MODE=datalab` | Hosted Marker API |
+| `local` | `BACKEND_MODE=local` | Development with local GPU |
+| `runpod` | `BACKEND_MODE=runpod` | Production with Runpod GPU |
+| `datalab` | `BACKEND_MODE=datalab` | Production with Datalab API |
 
 ### Endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /upload` | Upload file to R2 |
+| `POST /upload` | Upload file (to S3 or temp storage) |
 | `POST /convert/:fileId` | Start conversion job |
 | `GET /jobs/:jobId` | Poll job status |
 | `GET /jobs/:jobId/stream` | SSE progress stream |
-| `POST /webhooks/runpod` | Runpod completion callback |
+| `GET /download/:jobId` | Download converted HTML |
 
 ### Storage
 
-- **R2**: PDF uploads, conversion results
-- **KV**: Job state (24hr TTL)
+- **S3/R2** (runpod mode): PDF uploads, conversion results
+- **Memory** (datalab mode): Temporary file storage before API call
+- **Local** (local mode): Files handled by FastAPI worker
 
 ## Local Development
 
 ```bash
-# All-in-one (starts frontend, API, and worker based on mode)
-bun run dev
-
-# Or specify a mode explicitly
-bun run dev:local    # Uses local Docker GPU worker
-bun run dev:runpod   # Uses Runpod serverless
-bun run dev:datalab  # Uses Datalab API
+bun run dev              # Start with .env.local settings
+bun run dev --mode local # Use local Docker GPU worker
+bun run dev --dashboard  # Enable Convex dashboard
 ```
 
 ## Scripts
@@ -78,8 +74,6 @@ bun run dev:datalab  # Uses Datalab API
 | `bun run dev:local` | Dev with local Docker worker |
 | `bun run dev:runpod` | Dev with Runpod backend |
 | `bun run dev:datalab` | Dev with Datalab backend |
-| `bun run deploy` | Deploy to Cloudflare |
 | `bun run config:status` | Check configuration status |
-| `bun run config:sync` | Sync env to wrangler secrets |
 | `bun run build` | Build frontend |
 | `bun run typecheck` | Typecheck all packages |

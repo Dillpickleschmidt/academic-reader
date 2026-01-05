@@ -40,22 +40,22 @@ export function loadEnv(modeOverride?: string): Env {
   }
 
   const env = parseEnvFile(ENV_FILE);
-  env.BACKEND_MODE = modeOverride || env.BACKEND_MODE || "local";
+  env.DEV_BACKEND_MODE = modeOverride || env.DEV_BACKEND_MODE || "local";
   return env;
 }
 
 export function syncConfigs(env: Env): void {
-  if (env.BACKEND_MODE !== "local") {
+  if (env.DEV_BACKEND_MODE !== "local") {
     const devVars = [
       "# Auto-generated from .env.local - do not edit directly",
-      `BACKEND_MODE=${env.BACKEND_MODE}`,
+      `BACKEND_MODE=${env.DEV_BACKEND_MODE}`,
       env.GOOGLE_API_KEY ? `GOOGLE_API_KEY=${env.GOOGLE_API_KEY}` : "",
       env.DATALAB_API_KEY ? `DATALAB_API_KEY=${env.DATALAB_API_KEY}` : "",
       env.RUNPOD_API_KEY ? `RUNPOD_API_KEY=${env.RUNPOD_API_KEY}` : "",
       env.RUNPOD_ENDPOINT_ID
         ? `RUNPOD_ENDPOINT_ID=${env.RUNPOD_ENDPOINT_ID}`
         : "",
-      env.CORS_ORIGINS ? `CORS_ORIGINS=${env.CORS_ORIGINS}` : "",
+      env.SITE_URL ? `SITE_URL=${env.SITE_URL}` : "",
       env.S3_ENDPOINT ? `S3_ENDPOINT=${env.S3_ENDPOINT}` : "",
       env.S3_ACCESS_KEY ? `S3_ACCESS_KEY=${env.S3_ACCESS_KEY}` : "",
       env.S3_SECRET_KEY ? `S3_SECRET_KEY=${env.S3_SECRET_KEY}` : "",
@@ -80,7 +80,7 @@ export function syncConfigs(env: Env): void {
   ].filter(Boolean);
 
   writeFileSync(DERIVED_ENV_FILES.frontend, frontendEnvLines.join("\n") + "\n");
-  console.log(colors.green(`Configs synced for mode: ${env.BACKEND_MODE}`));
+  console.log(colors.green(`Configs synced for mode: ${env.DEV_BACKEND_MODE}`));
 }
 
 export async function runProcess(

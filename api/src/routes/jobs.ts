@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { Env, ConversionJob } from '../types';
 import { createBackend } from '../backends/factory';
 import { LocalBackend } from '../backends/local';
-import { KV_KEYS, POLLING } from '../constants';
+import { POLLING } from '../constants';
 import { enhanceHtmlForReader } from '../utils/html-processing';
 import { transformSSEStream } from '../utils/sse-transform';
 
@@ -23,44 +23,6 @@ function enhanceJobHtml(job: ConversionJob): void {
   }
 }
 
-jobs.get('/jobs/:jobId', async (c) => {
-  const jobId = c.req.param('jobId');
-
-  try {
-    // Check KV cache first (for webhook results) - only if KV is available
-    if (c.env.JOBS_KV) {
-      const cached = await c.env.JOBS_KV.get(`${KV_KEYS.RESULT}${jobId}`);
-      if (cached) {
-        const job = JSON.parse(cached) as ConversionJob;
-        enhanceJobHtml(job);
-        return c.json({
-          job_id: jobId,
-          status: job.status,
-          result: job.result,
-          error: job.error,
-        });
-      }
-    }
-
-    // Fetch from backend directly
-    const backend = createBackend(c.env);
-    const job = await backend.getJobStatus(jobId);
-    enhanceJobHtml(job);
-
-    return c.json({
-      job_id: jobId,
-      status: job.status,
-      result: job.result,
-      html_content: job.htmlContent,
-      error: job.error,
-      progress: job.progress,
-    });
-  } catch (error) {
-    return c.json({ error: 'Job not found' }, { status: 404 });
-  }
-});
-
-// SSE stream endpoint
 jobs.get('/jobs/:jobId/stream', async (c) => {
   const jobId = c.req.param('jobId');
   const backend = createBackend(c.env);
@@ -108,36 +70,13 @@ jobs.get('/jobs/:jobId/stream', async (c) => {
 
       while (!completed && pollCount < POLLING.MAX_POLLS) {
         try {
-          let job: ConversionJob;
+          const job = await backend.getJobStatus(jobId);
 
-          // Check KV cache first (for webhook results) - only if KV is available
-          if (c.env.JOBS_KV) {
-            const cached = await c.env.JOBS_KV.get(`${KV_KEYS.RESULT}${jobId}`);
-            if (cached) {
-              job = JSON.parse(cached) as ConversionJob;
-            } else {
-              job = await backend.getJobStatus(jobId);
-            }
-
-            // Read progress from KV (sent by worker via progress webhook)
-            const progressData = await c.env.JOBS_KV.get(`${KV_KEYS.PROGRESS}${jobId}`);
-            const progress = progressData ? JSON.parse(progressData) : job.progress;
-            if (progress) {
-              const key = `${progress.stage}:${progress.current}:${progress.total}`;
-              if (key !== lastProgressKey) {
-                sendEvent('progress', progress);
-                lastProgressKey = key;
-              }
-            }
-          } else {
-            // No KV - just poll backend directly
-            job = await backend.getJobStatus(jobId);
-            if (job.progress) {
-              const key = `${job.progress.stage}:${job.progress.current}:${job.progress.total}`;
-              if (key !== lastProgressKey) {
-                sendEvent('progress', job.progress);
-                lastProgressKey = key;
-              }
+          if (job.progress) {
+            const key = `${job.progress.stage}:${job.progress.current}:${job.progress.total}`;
+            if (key !== lastProgressKey) {
+              sendEvent('progress', job.progress);
+              lastProgressKey = key;
             }
           }
 

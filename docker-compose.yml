@@ -5,8 +5,6 @@ services:
     build: ./worker
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    ports:
-      - "8000:8000"
     env_file:
       - .env.local
     volumes:
@@ -26,21 +24,26 @@ services:
       context: ./api
       dockerfile: Dockerfile
     profiles: ["local", "datalab", "runpod"]
+    stop_grace_period: 10s
+    stop_signal: SIGINT
     ports:
       - "8787:8787"
     env_file:
       - .env.local
     environment:
       - PORT=8787
-      - BACKEND_MODE=${BACKEND_MODE:-local}
+      - BACKEND_MODE=${DEV_BACKEND_MODE}
       - LOCAL_WORKER_URL=http://worker:8000
       - S3_ENDPOINT=http://minio:9000
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=academic-reader
     volumes:
       - ./api/src:/app/src
       - tunnel_url:/tunnel:ro
     depends_on:
+      convex-backend:
+        condition: service_healthy
       worker:
         condition: service_started
         required: false
@@ -54,9 +57,6 @@ services:
     image: minio/minio
     profiles: ["runpod"]
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -100,12 +100,10 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set myminio http://minio:9000 minioadmin minioadmin;
-      mc mb myminio/$${S3_BUCKET:-academic-reader} --ignore-existing;
-      mc anonymous set download myminio/$${S3_BUCKET:-academic-reader};
+      mc mb myminio/academic-reader --ignore-existing;
+      mc anonymous set download myminio/academic-reader;
       exit 0;
       "
-    environment:
-      S3_BUCKET: ${S3_BUCKET:-academic-reader}
 
   # Self-hosted Convex backend
   # Profiles: all dev modes (local, runpod, datalab)

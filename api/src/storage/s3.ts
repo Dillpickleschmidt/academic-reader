@@ -70,7 +70,7 @@ export class S3Storage {
     const url = this.getObjectUrl(key);
 
     const signedRequest = await this.client.sign(
-      new Request(url, { method: 'PUT' }),
+      new Request(url.toString(), { method: 'PUT' }),
       { aws: { signQuery: true } }
     );
 
@@ -101,7 +101,7 @@ export class S3Storage {
     }
 
     const signedRequest = await this.client.sign(
-      new Request(url, { method: 'GET' }),
+      new Request(url.toString(), { method: 'GET' }),
       { aws: { signQuery: true } }
     );
 

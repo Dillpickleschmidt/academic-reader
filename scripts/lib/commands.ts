@@ -1,5 +1,4 @@
 import { resolve } from "path";
-import { spawn } from "bun";
 import type { Subprocess } from "bun";
 import type { Command, CommandOptions, Env } from "./types";
 import {
@@ -8,14 +7,18 @@ import {
   syncConfigs,
   runProcess,
   generateBetterAuthSecret,
-  getSystemEnv,
 } from "./utils";
 import {
   getConvexEnv,
   generateConvexAdminKey,
   syncConvexEnvDev,
-  syncConvexEnvProd,
 } from "./convex";
+import {
+  validateEnv,
+  buildVpsEnv,
+  devEnvRules,
+  deployEnvRules,
+} from "./env";
 
 // =============================================================================
 // Public API
@@ -33,26 +36,21 @@ Usage: bun scripts/dev.ts <command> [options]
 
 Commands:
   ${colors.cyan("dev")}       Start development servers
-  ${colors.cyan("secrets")}   Push secrets to Cloudflare Workers
-  ${colors.cyan("deploy")}    Deploy to Cloudflare
+  ${colors.cyan("deploy")}    Deploy to production (VPS + Cloudflare Pages)
 
 Options:
-  ${colors.cyan("--mode <mode>")}   Override BACKEND_MODE (local/runpod/datalab)
+  ${colors.cyan("--mode <mode>")}   Override DEV_BACKEND_MODE (local/runpod/datalab)
   ${colors.cyan("--dashboard")}     Enable Convex dashboard (http://localhost:6791)
 
-Modes (dev):
+Modes:
   ${colors.cyan("local")}    Docker worker + self-hosted Convex + Vite
   ${colors.cyan("datalab")}  Datalab API + self-hosted Convex + Vite
   ${colors.cyan("runpod")}   Runpod + MinIO + self-hosted Convex + Vite
 
-Modes (deploy):
-  ${colors.cyan("datalab")}  Datalab API + Convex Cloud
-  ${colors.cyan("runpod")}   Runpod + S3 + Convex Cloud
-
 Examples:
   bun scripts/dev.ts dev                  # Use mode from .env.local
   bun scripts/dev.ts dev --mode datalab   # Override to datalab
-  bun scripts/dev.ts dev --dashboard      # Enable Convex dashboard
+  bun scripts/dev.ts deploy               # Deploy to production
 `);
 }
 
@@ -64,7 +62,9 @@ const devCommand: Command = {
   name: "dev",
   description: "Start development servers",
   async execute(env: Env, options: CommandOptions): Promise<void> {
-    const mode = env.BACKEND_MODE!;
+    validateEnv(env, devEnvRules);
+
+    const mode = env.DEV_BACKEND_MODE!;
     const processes: Subprocess[] = [];
 
     const profileArgs = ["--profile", mode];
@@ -111,7 +111,7 @@ const devCommand: Command = {
         "-d",
         "--wait",
       ],
-      { cwd: ROOT_DIR, env: { BACKEND_MODE: mode } },
+      { cwd: ROOT_DIR, env: { DEV_BACKEND_MODE: mode } },
     );
     await dockerUp.exited;
 
@@ -141,10 +141,15 @@ const devCommand: Command = {
       }),
     );
 
+    // Parse port from SITE_URL (e.g., http://localhost:5173 → 5173)
+    const siteUrl = env.SITE_URL!;
+    const apiUrl = env.API_URL || "http://localhost:8787";
+    const sitePort = new URL(siteUrl).port || "5173";
+
     processes.push(
-      await runProcess(["bun", "run", "dev"], {
+      await runProcess(["bun", "run", "dev", "--port", sitePort], {
         cwd: resolve(ROOT_DIR, "frontend"),
-        env: { VITE_API_URL: "http://localhost:8787" },
+        env: { VITE_API_URL: apiUrl },
       }),
     );
 
@@ -154,157 +159,95 @@ const devCommand: Command = {
 
 const deployCommand: Command = {
   name: "deploy",
-  description: "Deploy to Cloudflare",
+  description: "Deploy to production (VPS + Cloudflare Pages)",
   async execute(env: Env): Promise<void> {
-    if (env.BACKEND_MODE === "local") {
-      console.error(
-        colors.yellow("Warning: local mode cannot be deployed to production"),
-      );
-      console.log("Change BACKEND_MODE to 'runpod' or 'datalab' in .env.local");
+    validateEnv(env, deployEnvRules);
+
+    const mode = env.PROD_BACKEND_MODE!;
+
+    // Derive URLs from PROD_DOMAIN
+    const domain = env.PROD_DOMAIN!;
+    const apiUrl = `https://api.${domain}`;
+    const siteUrl = `https://${domain}`;
+    const convexUrl = `https://convex.${domain}`;
+    const convexSiteUrl = `https://convex-site.${domain}`;
+
+    console.log(colors.green(`\nDeploying to production (${mode} mode)\n`));
+
+    // 2. Generate and sync .env to VPS
+    console.log(colors.cyan("Syncing environment to VPS..."));
+    const vpsEnvLines = buildVpsEnv(env, {
+      BACKEND_MODE: mode,
+      PROD_SITE_URL: siteUrl,
+      PROD_CONVEX_URL: convexUrl,
+      PROD_CONVEX_SITE_URL: convexSiteUrl,
+    });
+
+    const sshTarget = `${env.PROD_VPS_USER}@${env.PROD_VPS_HOST_IP}`;
+    const vpsPath = env.PROD_VPS_PATH!;
+
+    // Write .env file to VPS
+    const writeEnvProcess = await runProcess([
+      "ssh", sshTarget,
+      `cat > ${vpsPath}/.env << 'ENVEOF'\n${vpsEnvLines}\nENVEOF`,
+    ]);
+    await writeEnvProcess.exited;
+    if (writeEnvProcess.exitCode !== 0) {
+      console.error(colors.red("Failed to sync environment to VPS"));
       process.exit(1);
     }
+    console.log(colors.green("✓ Environment synced to VPS\n"));
 
-    const missingConvex: string[] = [];
-    if (!env.CONVEX_URL) missingConvex.push("CONVEX_URL");
-    if (!env.CONVEX_DEPLOYMENT) missingConvex.push("CONVEX_DEPLOYMENT");
-
-    if (missingConvex.length > 0) {
-      console.error(
-        colors.red("Convex Cloud is required for production deployment:"),
-      );
-      missingConvex.forEach((v) => console.error(`  - ${v}`));
-      console.log(
-        "\nRun `bunx convex dev` in frontend/ to create a deployment,",
-      );
-      console.log("then add CONVEX_DEPLOYMENT and CONVEX_URL to .env.local");
+    // 3. Deploy API to VPS
+    console.log(colors.cyan("Deploying API to VPS..."));
+    const deployProcess = await runProcess([
+      "ssh", sshTarget,
+      `cd ${vpsPath} && git pull && docker compose -f docker-compose.prod.yml up -d --build`,
+    ]);
+    await deployProcess.exited;
+    if (deployProcess.exitCode !== 0) {
+      console.error(colors.red("VPS deployment failed"));
       process.exit(1);
     }
+    console.log(colors.green("✓ API deployed to VPS\n"));
 
-    console.log(
-      colors.green(`\nDeploying with ${env.BACKEND_MODE} backend...\n`),
-    );
-
-    console.log(colors.cyan("Deploying API worker..."));
-    const apiDeploy = await runProcess(
-      ["bun", "run", `deploy:${env.BACKEND_MODE}`],
-      {
-        cwd: resolve(ROOT_DIR, "api"),
-      },
-    );
-    await apiDeploy.exited;
-
-    if (!env.DEPLOY_SITE_URL) {
-      console.error(colors.red("DEPLOY_SITE_URL is required for deployment"));
-      console.log("Set it in .env.local to your Cloudflare Pages URL");
-      process.exit(1);
-    }
-
-    await syncConvexEnvProd(env, env.DEPLOY_SITE_URL);
-
-    console.log(colors.cyan("\nBuilding frontend..."));
-    if (!env.DEPLOY_API_URL) {
-      console.error(colors.red("DEPLOY_API_URL is required for deployment"));
-      console.log("Set it in .env.local to your deployed API URL");
-      process.exit(1);
-    }
-
-    const convexSiteUrl = env.CONVEX_URL!.replace(
-      ".convex.cloud",
-      ".convex.site",
-    );
-    const frontendBuild = await runProcess(["bun", "run", "build"], {
+    // 4. Build frontend with prod vars
+    console.log(colors.cyan("Building frontend..."));
+    const buildProcess = await runProcess(["bun", "run", "build"], {
       cwd: resolve(ROOT_DIR, "frontend"),
       env: {
-        VITE_API_URL: env.DEPLOY_API_URL,
-        VITE_CONVEX_URL: env.CONVEX_URL!,
+        VITE_API_URL: apiUrl,
+        VITE_CONVEX_URL: convexUrl,
         VITE_CONVEX_SITE_URL: convexSiteUrl,
       },
     });
-    await frontendBuild.exited;
+    await buildProcess.exited;
+    if (buildProcess.exitCode !== 0) {
+      console.error(colors.red("Frontend build failed"));
+      process.exit(1);
+    }
+    console.log(colors.green("✓ Frontend built\n"));
 
-    console.log(colors.cyan("\nDeploying frontend..."));
-    const frontendDeploy = await runProcess(
-      [
-        "wrangler",
-        "pages",
-        "deploy",
-        "frontend/dist",
-        "--project-name",
-        "academic-reader",
-      ],
-      { cwd: ROOT_DIR },
-    );
-    await frontendDeploy.exited;
-
-    console.log(colors.green("\nDeployment complete!"));
-  },
-};
-
-const secretsCommand: Command = {
-  name: "secrets",
-  description: "Push secrets to Cloudflare Workers",
-  async execute(env: Env): Promise<void> {
-    if (env.BACKEND_MODE === "local") {
-      console.error(colors.yellow("Local mode doesn't use Cloudflare secrets"));
+    // 5. Deploy to Cloudflare Pages
+    console.log(colors.cyan("Deploying to Cloudflare Pages..."));
+    const pagesProcess = await runProcess([
+      "bunx",
+      "wrangler",
+      "pages",
+      "deploy",
+      "frontend/dist",
+      "--project-name",
+      env.PROD_CLOUDFLARE_PROJECT!,
+    ]);
+    await pagesProcess.exited;
+    if (pagesProcess.exitCode !== 0) {
+      console.error(colors.red("Cloudflare Pages deployment failed"));
       process.exit(1);
     }
 
-    const secretsByMode: Record<string, string[]> = {
-      local: [],
-      datalab: ["DATALAB_API_KEY"],
-      runpod: [
-        "RUNPOD_API_KEY",
-        "RUNPOD_ENDPOINT_ID",
-        "S3_ENDPOINT",
-        "S3_ACCESS_KEY",
-        "S3_SECRET_KEY",
-        "S3_BUCKET",
-        "GOOGLE_API_KEY",
-      ],
-    };
-
-    const keys = secretsByMode[env.BACKEND_MODE!] || [];
-    const secrets = keys
-      .filter((key) => env[key])
-      .map((key) => ({ name: key, value: env[key] as string }));
-
-    if (secrets.length === 0) {
-      console.log(colors.yellow("No secrets to push"));
-      return;
-    }
-
-    console.log(
-      colors.cyan(`\nPushing secrets for ${env.BACKEND_MODE} environment...\n`),
-    );
-
-    for (const secret of secrets) {
-      const proc = spawn({
-        cmd: [
-          "wrangler",
-          "secret",
-          "put",
-          secret.name,
-          "--env",
-          env.BACKEND_MODE!,
-        ],
-        cwd: resolve(ROOT_DIR, "api"),
-        env: getSystemEnv(),
-        stdin: new TextEncoder().encode(secret.value),
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      await proc.exited;
-
-      if (proc.exitCode === 0) {
-        console.log(`  ${secret.name} ${colors.green("✓")}`);
-      } else {
-        const stderr = await new Response(proc.stderr).text();
-        console.log(`  ${secret.name} ${colors.red("✗")} ${stderr.trim()}`);
-      }
-    }
-
-    console.log(colors.green("\nSecrets pushed!"));
+    console.log(colors.green("\n✓ Deploy complete!"));
+    console.log(`  API: ${apiUrl}`);
+    console.log(`  Site: ${siteUrl}`);
   },
 };
 
@@ -312,4 +255,4 @@ const secretsCommand: Command = {
 // Registry
 // =============================================================================
 
-const commands: Command[] = [devCommand, deployCommand, secretsCommand];
+const commands: Command[] = [devCommand, deployCommand];

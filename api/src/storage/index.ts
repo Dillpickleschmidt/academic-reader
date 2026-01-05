@@ -1,6 +1,6 @@
 export type { UploadResult, PresignedUrlResult } from '../types';
 export { S3Storage, type S3Config } from './s3';
-export { MemoryTempStorage, KVTempStorage, type TempStorage, type TempFile } from './temp';
+export { MemoryTempStorage, type TempStorage, type TempFile } from './temp';
 
 import { S3Storage } from './s3';
 

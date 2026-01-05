@@ -33,10 +33,4 @@ export interface ConversionBackend {
    * @returns Stream URL or null if not supported
    */
   getStreamUrl?(jobId: string): string | null;
-
-  /**
-   * Handle webhook callback from backend
-   * Used by Runpod and Datalab for async completion
-   */
-  handleWebhook?(request: Request): Promise<ConversionJob>;
 }

@@ -2,9 +2,8 @@
 import { Hono } from 'hono';
 import * as cheerio from 'cheerio';
 import { minify } from 'html-minifier-terser';
-import type { Env, ConversionJob } from '../types';
+import type { Env } from '../types';
 import { createBackend } from '../backends/factory';
-import { KV_KEYS } from '../constants';
 import { enhanceHtmlForReader } from '../utils/html-processing';
 import {
   extractKatexFontUsage,
@@ -110,24 +109,8 @@ download.get('/api/jobs/:jobId/download', async (c) => {
   const title = c.req.query('title') || 'Document';
 
   try {
-    // Try KV cache first, then fall back to backend
-    let job: ConversionJob | null = null;
-
-    if (c.env.JOBS_KV) {
-      const cached = await c.env.JOBS_KV.get(`${KV_KEYS.RESULT}${jobId}`);
-      if (cached) {
-        try {
-          job = JSON.parse(cached) as ConversionJob;
-        } catch {
-          // Corrupted cache, fall back to backend
-        }
-      }
-    }
-
-    if (!job) {
-      const backend = createBackend(c.env);
-      job = await backend.getJobStatus(jobId);
-    }
+    const backend = createBackend(c.env);
+    const job = await backend.getJobStatus(jobId);
 
     let html = job.result?.content || job.htmlContent;
     if (!html) {
