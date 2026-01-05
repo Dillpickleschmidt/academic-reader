@@ -16,6 +16,8 @@ import {
 // Import CSS files as text
 import baseResultCss from '../styles/base-result.css' with { type: 'text' };
 import htmlResultCssRaw from '../styles/html-result.css' with { type: 'text' };
+// Import copy-tex script for LaTeX copy support
+import copyTexScript from 'katex/dist/contrib/copy-tex.min.js' with { type: 'text' };
 
 // Remove @fontsource import and fix font-family name
 const htmlResultCss = htmlResultCssRaw
@@ -89,6 +91,7 @@ ${renderedContent}
       });
     });
   </script>
+  <script>${copyTexScript}</script>
 </body>
 </html>`;
 }

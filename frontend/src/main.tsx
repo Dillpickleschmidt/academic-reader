@@ -4,6 +4,7 @@ import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react"
 import { convex } from "./lib/convex"
 import { authClient } from "./lib/auth-client"
 import "katex/dist/katex.min.css"
+import "katex/dist/contrib/copy-tex"
 import "./styles/App.css"
 import App from "./App.tsx"
 
