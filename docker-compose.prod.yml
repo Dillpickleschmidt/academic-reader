@@ -10,8 +10,6 @@ services:
     restart: always
     stop_grace_period: 10s
     stop_signal: SIGINT
-    ports:
-      - "8787:8787"
     env_file:
       - .env
     environment:
@@ -36,9 +34,6 @@ services:
     restart: always
     stop_grace_period: 10s
     stop_signal: SIGINT
-    ports:
-      - "3210:3210"
-      - "3211:3211"
     environment:
       - CONVEX_CLOUD_ORIGIN=${PROD_CONVEX_URL}
       - CONVEX_SITE_ORIGIN=${PROD_CONVEX_SITE_URL}
@@ -57,8 +52,6 @@ services:
     restart: always
     stop_grace_period: 10s
     stop_signal: SIGINT
-    ports:
-      - "6791:6791"
     env_file:
       - .env
     environment:
@@ -66,6 +59,18 @@ services:
     depends_on:
       convex-backend:
         condition: service_healthy
+
+  # Cloudflare Tunnel
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    env_file:
+      - .env
+    depends_on:
+      - api
+      - convex-backend
+      - convex-dashboard
 
 volumes:
   convex_data:

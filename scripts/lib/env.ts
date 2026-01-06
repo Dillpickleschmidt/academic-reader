@@ -45,6 +45,7 @@ export const deployEnvRules: EnvRule[] = [
 // =============================================================================
 
 const vpsEnvMapping = [
+  "CLOUDFLARE_TUNNEL_TOKEN",
   "DATALAB_API_KEY",
   "RUNPOD_API_KEY",
   "RUNPOD_ENDPOINT_ID",

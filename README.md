@@ -69,13 +69,22 @@ This will:
 3. Build frontend with production URLs
 4. Deploy frontend to Cloudflare Pages
 
-### DNS Setup (Cloudflare)
+### Cloudflare Tunnel Setup
 
-Create proxied A records pointing to your VPS:
+The following is for a vps in prod only. Dev sets a temporary zero-config tunnel for different purposes.
 
-- `api.yourdomain.com`
-- `convex.yourdomain.com`
-- `convex-site.yourdomain.com`
+1. Create a tunnel in Cloudflare Zero Trust → Networks → Tunnels
+2. Copy the tunnel token to `CLOUDFLARE_TUNNEL_TOKEN` in `.env.local`
+3. Configure public hostnames:
+
+| Subdomain   | Domain         | Service | URL                     |
+| ----------- | -------------- | ------- | ----------------------- |
+| api         | yourdomain.com | HTTP    | `api:8787`              |
+| convex      | yourdomain.com | HTTP    | `convex-backend:3210`   |
+| convex-site | yourdomain.com | HTTP    | `convex-backend:3211`   |
+| dashboard   | yourdomain.com | HTTP    | `convex-dashboard:6791` |
+
+4. Add a CNAME record for the root domain pointing to Cloudflare Pages
 
 ## Configuration
 
@@ -95,6 +104,7 @@ Create proxied A records pointing to your VPS:
 | Variable                  | Required | Description                     |
 | ------------------------- | -------- | ------------------------------- |
 | `PROD_BACKEND_MODE`       | Yes      | `datalab` or `runpod`           |
+| `CLOUDFLARE_TUNNEL_TOKEN` | Yes      | From Cloudflare Zero Trust      |
 | `PROD_VPS_HOST_IP`        | Yes      | VPS IP address                  |
 | `PROD_VPS_USER`           | Yes      | SSH user (default: root)        |
 | `PROD_VPS_PATH`           | Yes      | Repo path on VPS                |
