@@ -12,13 +12,11 @@ import {
   getConvexEnv,
   generateConvexAdminKey,
   syncConvexEnvDev,
+  getProdConvexEnv,
+  deployConvexFunctions,
+  syncConvexEnvProd,
 } from "./convex";
-import {
-  validateEnv,
-  buildVpsEnv,
-  devEnvRules,
-  deployEnvRules,
-} from "./env";
+import { validateEnv, devEnvRules, deployEnvRules } from "./env";
 
 // =============================================================================
 // Public API
@@ -39,7 +37,7 @@ Commands:
   ${colors.cyan("deploy")}    Deploy to production (VPS + Cloudflare Pages)
 
 Options:
-  ${colors.cyan("--mode <mode>")}   Override DEV_BACKEND_MODE (local/runpod/datalab)
+  ${colors.cyan("--mode <mode>")}   Override BACKEND_MODE (local/runpod/datalab)
   ${colors.cyan("--dashboard")}     Enable Convex dashboard (http://localhost:6791)
 
 Modes:
@@ -48,7 +46,7 @@ Modes:
   ${colors.cyan("runpod")}   Runpod + MinIO + self-hosted Convex + Vite
 
 Examples:
-  bun scripts/dev.ts dev                  # Use mode from .env.local
+  bun scripts/dev.ts dev                  # Use mode from .env.dev
   bun scripts/dev.ts dev --mode datalab   # Override to datalab
   bun scripts/dev.ts deploy               # Deploy to production
 `);
@@ -64,7 +62,7 @@ const devCommand: Command = {
   async execute(env: Env, options: CommandOptions): Promise<void> {
     validateEnv(env, devEnvRules);
 
-    const mode = env.DEV_BACKEND_MODE!;
+    const mode = env.BACKEND_MODE!;
     const processes: Subprocess[] = [];
 
     const profileArgs = ["--profile", mode];
@@ -79,6 +77,8 @@ const devCommand: Command = {
         "docker",
         "compose",
         ...profileArgs,
+        "--env-file",
+        ".env.dev",
         "down",
       ]);
       await dockerDown.exited;
@@ -106,12 +106,12 @@ const devCommand: Command = {
         "compose",
         ...profileArgs,
         "--env-file",
-        ".env.local",
+        ".env.dev",
         "up",
         "-d",
         "--wait",
       ],
-      { cwd: ROOT_DIR, env: { DEV_BACKEND_MODE: mode } },
+      { cwd: ROOT_DIR, env: { BACKEND_MODE: mode } },
     );
     await dockerUp.exited;
 
@@ -128,9 +128,18 @@ const devCommand: Command = {
     await syncConvexEnvDev(env);
 
     processes.push(
-      await runProcess(["docker", "compose", ...profileArgs, "logs", "-f"], {
-        cwd: ROOT_DIR,
-      }),
+      await runProcess(
+        [
+          "docker",
+          "compose",
+          ...profileArgs,
+          "--env-file",
+          ".env.dev",
+          "logs",
+          "-f",
+        ],
+        { cwd: ROOT_DIR },
+      ),
     );
 
     const convexEnv = getConvexEnv(env.CONVEX_SELF_HOSTED_ADMIN_KEY!);
@@ -163,8 +172,6 @@ const deployCommand: Command = {
   async execute(env: Env): Promise<void> {
     validateEnv(env, deployEnvRules);
 
-    const mode = env.PROD_BACKEND_MODE!;
-
     // Derive URLs from PROD_DOMAIN
     const domain = env.PROD_DOMAIN!;
     const apiUrl = `https://api.${domain}`;
@@ -172,36 +179,16 @@ const deployCommand: Command = {
     const convexUrl = `https://convex.${domain}`;
     const convexSiteUrl = `https://convex-site.${domain}`;
 
-    console.log(colors.green(`\nDeploying to production (${mode} mode)\n`));
-
-    // 2. Generate and sync .env to VPS
-    console.log(colors.cyan("Syncing environment to VPS..."));
-    const vpsEnvLines = buildVpsEnv(env, {
-      BACKEND_MODE: mode,
-      PROD_SITE_URL: siteUrl,
-      PROD_CONVEX_URL: convexUrl,
-      PROD_CONVEX_SITE_URL: convexSiteUrl,
-    });
-
     const sshTarget = `${env.PROD_VPS_USER}@${env.PROD_VPS_HOST_IP}`;
     const vpsPath = env.PROD_VPS_PATH!;
 
-    // Write .env file to VPS
-    const writeEnvProcess = await runProcess([
-      "ssh", sshTarget,
-      `cat > ${vpsPath}/.env << 'ENVEOF'\n${vpsEnvLines}\nENVEOF`,
-    ]);
-    await writeEnvProcess.exited;
-    if (writeEnvProcess.exitCode !== 0) {
-      console.error(colors.red("Failed to sync environment to VPS"));
-      process.exit(1);
-    }
-    console.log(colors.green("✓ Environment synced to VPS\n"));
+    console.log(colors.green(`\nDeploying to production\n`));
 
-    // 3. Deploy API to VPS
-    console.log(colors.cyan("Deploying API to VPS..."));
+    // 1. Deploy containers to VPS
+    console.log(colors.cyan("Deploying to VPS..."));
     const deployProcess = await runProcess([
-      "ssh", sshTarget,
+      "ssh",
+      sshTarget,
       `cd ${vpsPath} && git pull && docker compose -f docker-compose.prod.yml up -d --build`,
     ]);
     await deployProcess.exited;
@@ -209,7 +196,24 @@ const deployCommand: Command = {
       console.error(colors.red("VPS deployment failed"));
       process.exit(1);
     }
-    console.log(colors.green("✓ API deployed to VPS\n"));
+    console.log(colors.green("✓ Containers deployed to VPS\n"));
+
+    // 2. Deploy Convex functions
+    const convexEnv = getProdConvexEnv(
+      convexUrl,
+      env.CONVEX_SELF_HOSTED_ADMIN_KEY!,
+    );
+
+    const convexDeployed = await deployConvexFunctions(convexEnv);
+    if (!convexDeployed) {
+      console.error(colors.red("Convex deployment failed"));
+      process.exit(1);
+    }
+    console.log(colors.green("✓ Convex functions deployed\n"));
+
+    // 3. Sync Convex environment variables
+    await syncConvexEnvProd(env, siteUrl, convexEnv);
+    console.log(colors.green("✓ Convex environment synced\n"));
 
     // 4. Build frontend with prod vars
     console.log(colors.cyan("Building frontend..."));

@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { spawn } from "bun";
 import type { Env } from "./types";
-import { ROOT_DIR, ENV_FILE, colors, getSystemEnv } from "./utils";
+import { ROOT_DIR, DEV_ENV_FILE, colors, getSystemEnv } from "./utils";
 
 // =============================================================================
 // Public API
@@ -52,13 +52,17 @@ export async function generateConvexAdminKey(
 
   const adminKey = match[1];
 
-  const envContent = readFileSync(ENV_FILE, "utf-8");
-  if (!envContent.includes("CONVEX_SELF_HOSTED_ADMIN_KEY")) {
-    writeFileSync(
-      ENV_FILE,
-      envContent + `\nCONVEX_SELF_HOSTED_ADMIN_KEY=${adminKey}\n`,
-    );
-    console.log(colors.green("Admin key saved to .env.local"));
+  const envContent = readFileSync(DEV_ENV_FILE, "utf-8");
+  // Check for uncommented key with a value (not just a placeholder)
+  const hasKey = /^CONVEX_SELF_HOSTED_ADMIN_KEY=.+/m.test(envContent);
+  if (!hasKey) {
+    // Replace placeholder (commented or empty) in place, or append if not found
+    const placeholder = /^#?\s*CONVEX_SELF_HOSTED_ADMIN_KEY=.*$/m;
+    const newContent = placeholder.test(envContent)
+      ? envContent.replace(placeholder, `CONVEX_SELF_HOSTED_ADMIN_KEY=${adminKey}`)
+      : envContent.trimEnd() + `\nCONVEX_SELF_HOSTED_ADMIN_KEY=${adminKey}\n`;
+    writeFileSync(DEV_ENV_FILE, newContent);
+    console.log(colors.green("Admin key saved to .env.dev"));
   }
 
   return adminKey;
@@ -109,9 +113,37 @@ export async function syncConvexEnvDev(env: Env): Promise<void> {
   );
 }
 
+export function getProdConvexEnv(
+  convexUrl: string,
+  adminKey: string,
+): Record<string, string> {
+  return {
+    CONVEX_SELF_HOSTED_URL: convexUrl,
+    CONVEX_SELF_HOSTED_ADMIN_KEY: adminKey,
+  };
+}
+
+export async function deployConvexFunctions(
+  convexEnv: Record<string, string>,
+): Promise<boolean> {
+  console.log(colors.cyan("Deploying Convex functions..."));
+
+  const proc = spawn({
+    cmd: ["bunx", "convex", "deploy", "--yes"],
+    cwd: resolve(ROOT_DIR, "frontend"),
+    env: { ...getSystemEnv(), ...convexEnv },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  await proc.exited;
+  return proc.exitCode === 0;
+}
+
 export async function syncConvexEnvProd(
   env: Env,
   siteUrl: string,
+  convexEnv: Record<string, string>,
 ): Promise<void> {
   await setConvexEnvVars(
     {
@@ -120,9 +152,6 @@ export async function syncConvexEnvProd(
       GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
       BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
     },
-    {
-      ...getSystemEnv(),
-      CONVEX_DEPLOYMENT: env.CONVEX_DEPLOYMENT!,
-    },
+    { ...getSystemEnv(), ...convexEnv },
   );
 }

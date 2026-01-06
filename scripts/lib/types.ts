@@ -1,5 +1,3 @@
-export type BackendMode = "local" | "runpod" | "datalab";
-
 export type Env = Record<string, string | undefined>;
 
 export interface Command {

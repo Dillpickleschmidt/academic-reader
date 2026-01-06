@@ -11,7 +11,7 @@ services:
     stop_grace_period: 10s
     stop_signal: SIGINT
     env_file:
-      - .env
+      - .env.production
     environment:
       - PORT=8787
       - BACKEND_MODE=${BACKEND_MODE}
@@ -53,7 +53,7 @@ services:
     stop_grace_period: 10s
     stop_signal: SIGINT
     env_file:
-      - .env
+      - .env.production
     environment:
       - NEXT_PUBLIC_DEPLOYMENT_URL=${PROD_CONVEX_URL}
     depends_on:
@@ -66,7 +66,7 @@ services:
     restart: always
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     env_file:
-      - .env
+      - .env.production
     depends_on:
       - api
       - convex-backend

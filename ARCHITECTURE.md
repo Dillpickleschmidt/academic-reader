@@ -48,7 +48,6 @@ The `/api` package routes requests to one of three backends:
 |----------|---------|
 | `POST /upload` | Upload file (to S3 or temp storage) |
 | `POST /convert/:fileId` | Start conversion job |
-| `GET /jobs/:jobId` | Poll job status |
 | `GET /jobs/:jobId/stream` | SSE progress stream |
 | `GET /download/:jobId` | Download converted HTML |
 
@@ -61,7 +60,7 @@ The `/api` package routes requests to one of three backends:
 ## Local Development
 
 ```bash
-bun run dev              # Start with .env.local settings
+bun run dev              # Start with .env.dev settings
 bun run dev --mode local # Use local Docker GPU worker
 bun run dev --dashboard  # Enable Convex dashboard
 ```
@@ -74,6 +73,6 @@ bun run dev --dashboard  # Enable Convex dashboard
 | `bun run dev:local` | Dev with local Docker worker |
 | `bun run dev:runpod` | Dev with Runpod backend |
 | `bun run dev:datalab` | Dev with Datalab backend |
-| `bun run config:status` | Check configuration status |
+| `bun run deploy` | Deploy to production (VPS + Cloudflare) |
 | `bun run build` | Build frontend |
 | `bun run typecheck` | Typecheck all packages |

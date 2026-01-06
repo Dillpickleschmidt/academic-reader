@@ -8,7 +8,7 @@ import type { Env } from "./types";
 // =============================================================================
 
 export const ROOT_DIR = resolve(dirname(import.meta.path), "../..");
-export const ENV_FILE = resolve(ROOT_DIR, ".env.local");
+export const DEV_ENV_FILE = resolve(ROOT_DIR, ".env.dev");
 
 export const DERIVED_ENV_FILES = {
   frontend: resolve(ROOT_DIR, "frontend/.env.local"),
@@ -28,9 +28,9 @@ export const colors = {
 // =============================================================================
 
 export function loadEnv(modeOverride?: string): Env {
-  if (!existsSync(ENV_FILE)) {
-    console.error(colors.red("Error: .env.local not found"));
-    console.log(`Run: ${colors.cyan("cp .env.example .env.local")}`);
+  if (!existsSync(DEV_ENV_FILE)) {
+    console.error(colors.red("Error: .env.dev not found"));
+    console.log(`Run: ${colors.cyan("cp .env.dev.example .env.dev")}`);
     process.exit(1);
   }
 
@@ -39,16 +39,16 @@ export function loadEnv(modeOverride?: string): Env {
     if (existsSync(file)) unlinkSync(file);
   }
 
-  const env = parseEnvFile(ENV_FILE);
-  env.DEV_BACKEND_MODE = modeOverride || env.DEV_BACKEND_MODE || "local";
+  const env = parseEnvFile(DEV_ENV_FILE);
+  env.BACKEND_MODE = modeOverride || env.BACKEND_MODE || "local";
   return env;
 }
 
 export function syncConfigs(env: Env): void {
-  if (env.DEV_BACKEND_MODE !== "local") {
+  if (env.BACKEND_MODE !== "local") {
     const devVars = [
-      "# Auto-generated from .env.local - do not edit directly",
-      `BACKEND_MODE=${env.DEV_BACKEND_MODE}`,
+      "# Auto-generated from .env.dev - do not edit directly",
+      `BACKEND_MODE=${env.BACKEND_MODE}`,
       env.GOOGLE_API_KEY ? `GOOGLE_API_KEY=${env.GOOGLE_API_KEY}` : "",
       env.DATALAB_API_KEY ? `DATALAB_API_KEY=${env.DATALAB_API_KEY}` : "",
       env.RUNPOD_API_KEY ? `RUNPOD_API_KEY=${env.RUNPOD_API_KEY}` : "",
@@ -69,7 +69,7 @@ export function syncConfigs(env: Env): void {
 
   const apiUrl = env.API_URL || "http://localhost:8787";
   const frontendEnvLines = [
-    "# Auto-generated from .env.local - do not edit directly",
+    "# Auto-generated from .env.dev - do not edit directly",
     `VITE_API_URL=${apiUrl}`,
     `VITE_CONVEX_URL=http://localhost:3210`,
     `VITE_CONVEX_SITE_URL=http://localhost:3211`,
@@ -80,7 +80,7 @@ export function syncConfigs(env: Env): void {
   ].filter(Boolean);
 
   writeFileSync(DERIVED_ENV_FILES.frontend, frontendEnvLines.join("\n") + "\n");
-  console.log(colors.green(`Configs synced for mode: ${env.DEV_BACKEND_MODE}`));
+  console.log(colors.green(`Configs synced for mode: ${env.BACKEND_MODE}`));
 }
 
 export async function runProcess(
@@ -103,11 +103,18 @@ export function generateBetterAuthSecret(): string {
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  const envContent = readFileSync(ENV_FILE, "utf-8");
-  if (!envContent.includes("BETTER_AUTH_SECRET")) {
-    writeFileSync(ENV_FILE, envContent + `\nBETTER_AUTH_SECRET=${secret}\n`);
+  const envContent = readFileSync(DEV_ENV_FILE, "utf-8");
+  // Check for uncommented key with a value (not just a placeholder)
+  const hasKey = /^BETTER_AUTH_SECRET=.+/m.test(envContent);
+  if (!hasKey) {
+    // Replace placeholder (commented or empty) in place, or append if not found
+    const placeholder = /^#?\s*BETTER_AUTH_SECRET=.*$/m;
+    const newContent = placeholder.test(envContent)
+      ? envContent.replace(placeholder, `BETTER_AUTH_SECRET=${secret}`)
+      : envContent.trimEnd() + `\nBETTER_AUTH_SECRET=${secret}\n`;
+    writeFileSync(DEV_ENV_FILE, newContent);
     console.log(
-      colors.green("Generated BETTER_AUTH_SECRET and saved to .env.local"),
+      colors.green("Generated BETTER_AUTH_SECRET and saved to .env.dev"),
     );
   }
 

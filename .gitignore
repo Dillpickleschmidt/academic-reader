@@ -6,8 +6,8 @@ __pycache__/
 !bun.lock
 
 # Environment
-.env
-.env.local
+.env.dev
+.env.production
 .dev.vars
 api/.dev.vars
 frontend/.env.local

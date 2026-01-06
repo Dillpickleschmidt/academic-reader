@@ -7,8 +7,8 @@ Supports PDF, DOCX, XLSX, PPTX, HTML, EPUB, and images.
 ## Quick Start
 
 ```bash
-cp .env.example .env.local   # Configure API keys
-bun run dev                  # Start development servers
+cp .env.dev.example .env.dev   # Configure dev environment
+bun run dev                    # Start development servers
 ```
 
 ## Backend Modes
@@ -19,12 +19,12 @@ bun run dev                  # Start development servers
 | `runpod`  | Runpod cloud  | S3/R2/MinIO      | Runpod API key + S3 config |
 | `datalab` | Datalab cloud | Memory (temp)    | Datalab API key            |
 
-Set `DEV_BACKEND_MODE` in `.env.local` for development.
+Set `BACKEND_MODE` in `.env.dev` for development.
 
 ## Development
 
 ```bash
-bun run dev            # Start with mode from .env.local
+bun run dev            # Start with mode from .env.dev
 bun run dev:local      # Override to local mode
 bun run dev:datalab    # Override to datalab mode
 bun run dev:runpod     # Override to runpod mode
@@ -41,40 +41,54 @@ All modes use self-hosted Convex via Docker - no account needed.
 1. VPS with Docker installed (e.g., Hetzner)
 2. Domain with DNS on Cloudflare
 3. Cloudflare Pages project
+4. Cloudflare Tunnel configured
 
 ### Initial VPS Setup
 
 ```bash
+# SSH to VPS
 ssh root@<your-vps-ip>
+
+# Clone repo
 git clone <your-repo> /root/academic-reader
+cd /root/academic-reader
+
+# Create production env file
+cp .env.production.example .env.production
+# Edit .env.production with your production secrets
 ```
 
-### Configure & Deploy
+Copy `CONVEX_SELF_HOSTED_ADMIN_KEY` and `BETTER_AUTH_SECRET` from your local `.env.dev` to the VPS `.env.production`.
+
+### Configure Local Deploy Settings
+
+In your local `.env.dev`, set the deploy metadata:
 
 ```bash
-# In .env.local, set:
-# - PROD_BACKEND_MODE=datalab (or runpod)
-# - PROD_VPS_HOST_IP, PROD_VPS_USER, PROD_VPS_PATH
-# - PROD_DOMAIN=yourdomain.com
-# - PROD_CLOUDFLARE_PROJECT
-# - API keys for your chosen backend mode
+PROD_VPS_HOST_IP=<your-vps-ip>
+PROD_VPS_USER=root
+PROD_VPS_PATH=/root/academic-reader
+PROD_DOMAIN=yourdomain.com
+PROD_CLOUDFLARE_PROJECT=<your-pages-project>
+```
 
+### Deploy
+
+```bash
 bun run deploy
 ```
 
 This will:
 
-1. Sync environment to VPS
-2. Pull latest code and restart Docker (API + Convex + Dashboard)
+1. Pull latest code and restart Docker on VPS
+2. Deploy Convex functions
 3. Build frontend with production URLs
 4. Deploy frontend to Cloudflare Pages
 
 ### Cloudflare Tunnel Setup
 
-The following is for a vps in prod only. Dev sets a temporary zero-config tunnel for different purposes.
-
 1. Create a tunnel in Cloudflare Zero Trust → Networks → Tunnels
-2. Copy the tunnel token to `CLOUDFLARE_TUNNEL_TOKEN` in `.env.local`
+2. Copy the tunnel token to `CLOUDFLARE_TUNNEL_TOKEN` in VPS `.env.production`
 3. Configure public hostnames:
 
 | Subdomain   | Domain         | Service | URL                     |
@@ -88,35 +102,39 @@ The following is for a vps in prod only. Dev sets a temporary zero-config tunnel
 
 ## Configuration
 
-### Development
+### Development (.env.dev)
 
 | Variable             | Required     | Description                            |
 | -------------------- | ------------ | -------------------------------------- |
-| `DEV_BACKEND_MODE`   | Yes          | `local`, `runpod`, or `datalab`        |
+| `BACKEND_MODE`       | Yes          | `local`, `runpod`, or `datalab`        |
 | `SITE_URL`           | Yes          | Frontend URL (default: localhost:5173) |
 | `DATALAB_API_KEY`    | datalab      | From [datalab.to](https://datalab.to)  |
 | `RUNPOD_API_KEY`     | runpod       | From Runpod dashboard                  |
 | `RUNPOD_ENDPOINT_ID` | runpod       | Your endpoint ID                       |
 | `GOOGLE_API_KEY`     | local/runpod | For Gemini API                         |
 
-### Production
+### Production (.env.production on VPS)
+
+| Variable                        | Required | Description                       |
+| ------------------------------- | -------- | --------------------------------- |
+| `BACKEND_MODE`                  | Yes      | `datalab` or `runpod`             |
+| `SITE_URL`                      | Yes      | https://yourdomain.com            |
+| `PROD_CONVEX_URL`               | Yes      | https://convex.yourdomain.com     |
+| `PROD_CONVEX_SITE_URL`          | Yes      | https://convex-site.yourdomain.com|
+| `CLOUDFLARE_TUNNEL_TOKEN`       | Yes      | From Cloudflare Zero Trust        |
+| `CONVEX_SELF_HOSTED_ADMIN_KEY`  | Yes      | Copy from local .env.dev          |
+| `BETTER_AUTH_SECRET`            | Yes      | Copy from local .env.dev          |
+| `DATALAB_API_KEY`               | datalab  | Production API key                |
+| `PROD_S3_*`                     | runpod   | S3/R2 credentials                 |
+
+### Deploy Metadata (in .env.dev)
 
 | Variable                  | Required | Description                     |
 | ------------------------- | -------- | ------------------------------- |
-| `PROD_BACKEND_MODE`       | Yes      | `datalab` or `runpod`           |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Yes      | From Cloudflare Zero Trust      |
 | `PROD_VPS_HOST_IP`        | Yes      | VPS IP address                  |
 | `PROD_VPS_USER`           | Yes      | SSH user (default: root)        |
 | `PROD_VPS_PATH`           | Yes      | Repo path on VPS                |
 | `PROD_DOMAIN`             | Yes      | Your domain (e.g., example.com) |
 | `PROD_CLOUDFLARE_PROJECT` | Yes      | Cloudflare Pages project name   |
-| `PROD_S3_*`               | runpod   | S3/R2 credentials for runpod    |
 
-### Shared (dev & prod)
-
-| Variable               | Required | Description                |
-| ---------------------- | -------- | -------------------------- |
-| `GOOGLE_CLIENT_ID`     | OAuth    | Google OAuth client ID     |
-| `GOOGLE_CLIENT_SECRET` | OAuth    | Google OAuth client secret |
-
-See `.env.example` for all options.
+See `.env.dev.example` and `.env.production.example` for all options.
