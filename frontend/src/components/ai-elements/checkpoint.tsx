@@ -52,13 +52,13 @@ export const CheckpointTrigger = ({
 }: CheckpointTriggerProps) =>
   tooltip ? (
     <Tooltip>
-      <TooltipTrigger render={<Button size={size} type="button" variant={variant} {...props} />}>{children}</TooltipTrigger>
+      <TooltipTrigger render={<Button size={size} variant={variant} {...props} />}>{children}</TooltipTrigger>
       <TooltipContent align="start" side="bottom">
         {tooltip}
       </TooltipContent>
     </Tooltip>
   ) : (
-    <Button size={size} type="button" variant={variant} {...props}>
+    <Button size={size} variant={variant} {...props}>
       {children}
     </Button>
   );

@@ -53,7 +53,6 @@ export const ArtifactClose = ({
       className
     )}
     size={size}
-    type="button"
     variant={variant}
     {...props}
   >
@@ -112,7 +111,6 @@ export const ArtifactAction = ({
         className
       )}
       size={size}
-      type="button"
       variant={variant}
       {...props}
     >
