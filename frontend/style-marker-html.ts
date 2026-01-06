@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync } from "fs";
-import { basename, dirname, join } from "path";
+import { readFileSync, writeFileSync } from "fs"
+import { basename, dirname, join } from "path"
 
 const CSS = `
 * {
@@ -263,7 +263,7 @@ ul, ol {
 li {
   margin: 0.5rem 0;
 }
-`;
+`
 
 // JavaScript to style citations [Author et al. Year] patterns
 const CITATION_SCRIPT = `
@@ -377,10 +377,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 </script>
-`;
+`
 
 function styleHtml(inputPath: string): void {
-  const content = readFileSync(inputPath, "utf-8");
+  const content = readFileSync(inputPath, "utf-8")
 
   const THEME_TOGGLE = `
 <div class="theme-toggle">
@@ -388,7 +388,7 @@ function styleHtml(inputPath: string): void {
   <button data-theme="comfort">Comfort</button>
   <button data-theme="dark">Dark</button>
 </div>
-`;
+`
 
   const THEME_SCRIPT = `
 <script>
@@ -414,7 +414,7 @@ function styleHtml(inputPath: string): void {
   });
 })();
 </script>
-`;
+`
 
   const styledHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -432,24 +432,24 @@ ${content}
 ${CITATION_SCRIPT}
 ${THEME_SCRIPT}
 </body>
-</html>`;
+</html>`
 
-  const dir = dirname(inputPath);
-  const base = basename(inputPath, ".html");
-  const outputPath = join(dir, `${base}-styled.html`);
+  const dir = dirname(inputPath)
+  const base = basename(inputPath, ".html")
+  const outputPath = join(dir, `${base}-styled.html`)
 
-  writeFileSync(outputPath, styledHtml);
-  console.log(`Styled output written to: ${outputPath}`);
+  writeFileSync(outputPath, styledHtml)
+  console.log(`Styled output written to: ${outputPath}`)
 }
 
 // Main
-const args = process.argv.slice(2);
+const args = process.argv.slice(2)
 
 if (args.length === 0) {
-  console.error("Usage: bun run style-marker-html.ts <input.html>");
-  process.exit(1);
+  console.error("Usage: bun run style-marker-html.ts <input.html>")
+  process.exit(1)
 }
 
 for (const inputPath of args) {
-  styleHtml(inputPath);
+  styleHtml(inputPath)
 }

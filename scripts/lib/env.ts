@@ -1,15 +1,15 @@
-import type { Env } from "./types";
-import { colors } from "./utils";
+import type { Env } from "./types"
+import { colors } from "./utils"
 
 // =============================================================================
 // Validation Rules
 // =============================================================================
 
 type EnvRule = {
-  key: string;
-  required?: boolean | ((env: Env) => boolean);
-  message?: string;
-};
+  key: string
+  required?: boolean | ((env: Env) => boolean)
+  message?: string
+}
 
 // prettier-ignore
 export const devEnvRules: EnvRule[] = [
@@ -36,19 +36,19 @@ export const deployEnvRules: EnvRule[] = [
 // =============================================================================
 
 export function validateEnv(env: Env, rules: EnvRule[]): void {
-  const errors: string[] = [];
+  const errors: string[] = []
 
   for (const rule of rules) {
     const isRequired =
-      typeof rule.required === "function" ? rule.required(env) : rule.required;
+      typeof rule.required === "function" ? rule.required(env) : rule.required
 
     if (isRequired && !env[rule.key]) {
-      errors.push(rule.message || `Missing ${rule.key}`);
+      errors.push(rule.message || `Missing ${rule.key}`)
     }
   }
 
   if (errors.length) {
-    errors.forEach((e) => console.error(colors.red(e)));
-    process.exit(1);
+    errors.forEach((e) => console.error(colors.red(e)))
+    process.exit(1)
   }
 }

@@ -3,7 +3,9 @@
  * HTML downloads use server-side font subsetting for optimal file size.
  */
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/$/, "")
+const API_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8000"
+).replace(/\/$/, "")
 
 export type OutputFormat = "html" | "markdown" | "json"
 

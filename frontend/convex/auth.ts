@@ -9,7 +9,8 @@ import authConfig from "./auth.config"
 // SITE_URL for frontend origin (set via `convex env set` for production)
 const siteUrl = process.env.SITE_URL?.trim() || "http://localhost:5173"
 // CONVEX_SITE_URL auto-provided by self-hosted backend via CONVEX_SITE_ORIGIN
-const convexSiteUrl = process.env.CONVEX_SITE_URL?.trim() || "http://localhost:3211"
+const convexSiteUrl =
+  process.env.CONVEX_SITE_URL?.trim() || "http://localhost:3211"
 
 export const authComponent = createClient<DataModel>(components.betterAuth)
 

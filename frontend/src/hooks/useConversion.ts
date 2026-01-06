@@ -1,7 +1,11 @@
 import { useState, useRef, useCallback } from "react"
 import * as api from "../api"
 import type { ConversionProgress } from "../api"
-import { downloadFromApi, downloadContent, type OutputFormat } from "../utils/download"
+import {
+  downloadFromApi,
+  downloadContent,
+  type OutputFormat,
+} from "../utils/download"
 
 export type Page = "upload" | "configure" | "processing" | "result"
 export type { OutputFormat }
