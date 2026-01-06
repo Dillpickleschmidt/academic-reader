@@ -196,10 +196,7 @@ export function AuthDialog() {
 
             {error && (
               <div className="flex items-center gap-2 py-2.5 px-3 bg-destructive/10 rounded-md text-destructive text-sm">
-                <AlertCircle
-                  className="w-4 h-4 shrink-0"
-                  strokeWidth={1.5}
-                />
+                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={1.5} />
                 <span>{error}</span>
               </div>
             )}
@@ -209,11 +206,7 @@ export function AuthDialog() {
               disabled={loading}
               className="w-full h-10 mt-1"
             >
-              {loading
-                ? "Loading..."
-                : isSignUp
-                  ? "Create account"
-                  : "Sign in"}
+              {loading ? "Loading..." : isSignUp ? "Create account" : "Sign in"}
             </Button>
           </form>
 

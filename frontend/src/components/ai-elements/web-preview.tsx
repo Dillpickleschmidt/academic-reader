@@ -1,44 +1,44 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/collapsible"
+import { Input } from "@/components/ui/input"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { ChevronDownIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+} from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
+import { ChevronDownIcon } from "lucide-react"
+import type { ComponentProps, ReactNode } from "react"
+import { createContext, useContext, useEffect, useState } from "react"
 
 export type WebPreviewContextValue = {
-  url: string;
-  setUrl: (url: string) => void;
-  consoleOpen: boolean;
-  setConsoleOpen: (open: boolean) => void;
-};
+  url: string
+  setUrl: (url: string) => void
+  consoleOpen: boolean
+  setConsoleOpen: (open: boolean) => void
+}
 
-const WebPreviewContext = createContext<WebPreviewContextValue | null>(null);
+const WebPreviewContext = createContext<WebPreviewContextValue | null>(null)
 
 const useWebPreview = () => {
-  const context = useContext(WebPreviewContext);
+  const context = useContext(WebPreviewContext)
   if (!context) {
-    throw new Error("WebPreview components must be used within a WebPreview");
+    throw new Error("WebPreview components must be used within a WebPreview")
   }
-  return context;
-};
+  return context
+}
 
 export type WebPreviewProps = ComponentProps<"div"> & {
-  defaultUrl?: string;
-  onUrlChange?: (url: string) => void;
-};
+  defaultUrl?: string
+  onUrlChange?: (url: string) => void
+}
 
 export const WebPreview = ({
   className,
@@ -47,37 +47,37 @@ export const WebPreview = ({
   onUrlChange,
   ...props
 }: WebPreviewProps) => {
-  const [url, setUrl] = useState(defaultUrl);
-  const [consoleOpen, setConsoleOpen] = useState(false);
+  const [url, setUrl] = useState(defaultUrl)
+  const [consoleOpen, setConsoleOpen] = useState(false)
 
   const handleUrlChange = (newUrl: string) => {
-    setUrl(newUrl);
-    onUrlChange?.(newUrl);
-  };
+    setUrl(newUrl)
+    onUrlChange?.(newUrl)
+  }
 
   const contextValue: WebPreviewContextValue = {
     url,
     setUrl: handleUrlChange,
     consoleOpen,
     setConsoleOpen,
-  };
+  }
 
   return (
     <WebPreviewContext.Provider value={contextValue}>
       <div
         className={cn(
           "flex size-full flex-col rounded-lg border bg-card",
-          className
+          className,
         )}
         {...props}
       >
         {children}
       </div>
     </WebPreviewContext.Provider>
-  );
-};
+  )
+}
 
-export type WebPreviewNavigationProps = ComponentProps<"div">;
+export type WebPreviewNavigationProps = ComponentProps<"div">
 
 export const WebPreviewNavigation = ({
   className,
@@ -90,11 +90,11 @@ export const WebPreviewNavigation = ({
   >
     {children}
   </div>
-);
+)
 
 export type WebPreviewNavigationButtonProps = ComponentProps<typeof Button> & {
-  tooltip?: string;
-};
+  tooltip?: string
+}
 
 export const WebPreviewNavigationButton = ({
   onClick,
@@ -105,15 +105,28 @@ export const WebPreviewNavigationButton = ({
 }: WebPreviewNavigationButtonProps) => (
   <TooltipProvider>
     <Tooltip>
-      <TooltipTrigger render={<Button className="h-8 w-8 p-0 hover:text-foreground" disabled={disabled} onClick={onClick} size="sm" variant="ghost" {...props} />}>{children}</TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <Button
+            className="h-8 w-8 p-0 hover:text-foreground"
+            disabled={disabled}
+            onClick={onClick}
+            size="sm"
+            variant="ghost"
+            {...props}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
       <TooltipContent>
         <p>{tooltip}</p>
       </TooltipContent>
     </Tooltip>
   </TooltipProvider>
-);
+)
 
-export type WebPreviewUrlProps = ComponentProps<typeof Input>;
+export type WebPreviewUrlProps = ComponentProps<typeof Input>
 
 export const WebPreviewUrl = ({
   value,
@@ -121,26 +134,26 @@ export const WebPreviewUrl = ({
   onKeyDown,
   ...props
 }: WebPreviewUrlProps) => {
-  const { url, setUrl } = useWebPreview();
-  const [inputValue, setInputValue] = useState(url);
+  const { url, setUrl } = useWebPreview()
+  const [inputValue, setInputValue] = useState(url)
 
   // Sync input value with context URL when it changes externally
   useEffect(() => {
-    setInputValue(url);
-  }, [url]);
+    setInputValue(url)
+  }, [url])
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(event.target.value);
-    onChange?.(event);
-  };
+    setInputValue(event.target.value)
+    onChange?.(event)
+  }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
-      const target = event.target as HTMLInputElement;
-      setUrl(target.value);
+      const target = event.target as HTMLInputElement
+      setUrl(target.value)
     }
-    onKeyDown?.(event);
-  };
+    onKeyDown?.(event)
+  }
 
   return (
     <Input
@@ -151,12 +164,12 @@ export const WebPreviewUrl = ({
       value={value ?? inputValue}
       {...props}
     />
-  );
-};
+  )
+}
 
 export type WebPreviewBodyProps = ComponentProps<"iframe"> & {
-  loading?: ReactNode;
-};
+  loading?: ReactNode
+}
 
 export const WebPreviewBody = ({
   className,
@@ -164,7 +177,7 @@ export const WebPreviewBody = ({
   src,
   ...props
 }: WebPreviewBodyProps) => {
-  const { url } = useWebPreview();
+  const { url } = useWebPreview()
 
   return (
     <div className="flex-1">
@@ -177,16 +190,16 @@ export const WebPreviewBody = ({
       />
       {loading}
     </div>
-  );
-};
+  )
+}
 
 export type WebPreviewConsoleProps = ComponentProps<"div"> & {
   logs?: Array<{
-    level: "log" | "warn" | "error";
-    message: string;
-    timestamp: Date;
-  }>;
-};
+    level: "log" | "warn" | "error"
+    message: string
+    timestamp: Date
+  }>
+}
 
 export const WebPreviewConsole = ({
   className,
@@ -194,7 +207,7 @@ export const WebPreviewConsole = ({
   children,
   ...props
 }: WebPreviewConsoleProps) => {
-  const { consoleOpen, setConsoleOpen } = useWebPreview();
+  const { consoleOpen, setConsoleOpen } = useWebPreview()
 
   return (
     <Collapsible
@@ -203,17 +216,26 @@ export const WebPreviewConsole = ({
       open={consoleOpen}
       {...props}
     >
-      <CollapsibleTrigger render={<Button className="flex w-full items-center justify-between p-4 text-left font-medium hover:bg-muted/50" variant="ghost" />}>Console
-                    <ChevronDownIcon
-                      className={cn(
-                        "h-4 w-4 transition-transform duration-200",
-                        consoleOpen && "rotate-180"
-                      )}
-                    /></CollapsibleTrigger>
+      <CollapsibleTrigger
+        render={
+          <Button
+            className="flex w-full items-center justify-between p-4 text-left font-medium hover:bg-muted/50"
+            variant="ghost"
+          />
+        }
+      >
+        Console
+        <ChevronDownIcon
+          className={cn(
+            "h-4 w-4 transition-transform duration-200",
+            consoleOpen && "rotate-180",
+          )}
+        />
+      </CollapsibleTrigger>
       <CollapsibleContent
         className={cn(
           "px-4 pb-4",
-          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in"
+          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
         )}
       >
         <div className="max-h-48 space-y-1 overflow-y-auto">
@@ -226,7 +248,7 @@ export const WebPreviewConsole = ({
                   "text-xs",
                   log.level === "error" && "text-destructive",
                   log.level === "warn" && "text-yellow-600",
-                  log.level === "log" && "text-foreground"
+                  log.level === "log" && "text-foreground",
                 )}
                 key={`${log.timestamp.getTime()}-${index}`}
               >
@@ -241,5 +263,5 @@ export const WebPreviewConsole = ({
         </div>
       </CollapsibleContent>
     </Collapsible>
-  );
-};
+  )
+}
