@@ -1,3 +1,5 @@
+import "katex/dist/katex.min.css"
+import "katex/dist/contrib/copy-tex"
 import { ReaderLayout } from "../components/ReaderLayout"
 
 interface Props {

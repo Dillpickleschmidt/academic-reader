@@ -1,11 +1,19 @@
+import { lazy, Suspense } from "react"
 import "./styles/base-result.css"
 import "./styles/html-result.css"
 import "./styles/markdown-result.css"
 import "./styles/json-result.css"
 import { useConversion } from "./hooks/useConversion"
 import { UploadPage } from "./pages/UploadPage"
-import { ConfigureProcessingPage } from "./pages/ConfigureProcessingPage"
-import { ResultPage } from "./pages/ResultPage"
+
+const ConfigureProcessingPage = lazy(() =>
+  import("./pages/ConfigureProcessingPage").then((m) => ({
+    default: m.ConfigureProcessingPage,
+  })),
+)
+const ResultPage = lazy(() =>
+  import("./pages/ResultPage").then((m) => ({ default: m.ResultPage })),
+)
 
 function App() {
   const conversion = useConversion()
@@ -25,36 +33,40 @@ function App() {
     case "configure":
     case "processing":
       return (
-        <ConfigureProcessingPage
-          fileName={conversion.fileName}
-          uploadProgress={conversion.uploadProgress}
-          uploadComplete={conversion.uploadComplete}
-          outputFormat={conversion.outputFormat}
-          useLlm={conversion.useLlm}
-          forceOcr={conversion.forceOcr}
-          pageRange={conversion.pageRange}
-          error={conversion.error}
-          isProcessing={conversion.page === "processing"}
-          stages={conversion.stages}
-          onOutputFormatChange={conversion.setOutputFormat}
-          onUseLlmChange={conversion.setUseLlm}
-          onForceOcrChange={conversion.setForceOcr}
-          onPageRangeChange={conversion.setPageRange}
-          onStartConversion={conversion.startConversion}
-          onBack={conversion.reset}
-        />
+        <Suspense>
+          <ConfigureProcessingPage
+            fileName={conversion.fileName}
+            uploadProgress={conversion.uploadProgress}
+            uploadComplete={conversion.uploadComplete}
+            outputFormat={conversion.outputFormat}
+            useLlm={conversion.useLlm}
+            forceOcr={conversion.forceOcr}
+            pageRange={conversion.pageRange}
+            error={conversion.error}
+            isProcessing={conversion.page === "processing"}
+            stages={conversion.stages}
+            onOutputFormatChange={conversion.setOutputFormat}
+            onUseLlmChange={conversion.setUseLlm}
+            onForceOcrChange={conversion.setForceOcr}
+            onPageRangeChange={conversion.setPageRange}
+            onStartConversion={conversion.startConversion}
+            onBack={conversion.reset}
+          />
+        </Suspense>
       )
 
     case "result":
       return (
-        <ResultPage
-          fileName={conversion.fileName}
-          outputFormat={conversion.outputFormat}
-          content={conversion.content}
-          imagesReady={conversion.imagesReady}
-          onDownload={conversion.downloadResult}
-          onReset={conversion.reset}
-        />
+        <Suspense>
+          <ResultPage
+            fileName={conversion.fileName}
+            outputFormat={conversion.outputFormat}
+            content={conversion.content}
+            imagesReady={conversion.imagesReady}
+            onDownload={conversion.downloadResult}
+            onReset={conversion.reset}
+          />
+        </Suspense>
       )
   }
 }
