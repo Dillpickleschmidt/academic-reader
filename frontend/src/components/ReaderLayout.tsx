@@ -1,14 +1,18 @@
-import type { ReactNode } from "react"
-import { useEffect, useRef } from "react"
-import { Download, Plus } from "lucide-react"
+import { lazy, Suspense, useEffect, useRef, type ReactNode } from "react"
+import { BotMessageSquare, Download, Plus } from "lucide-react"
 import { THEMES, type ReaderTheme } from "../constants/themes"
 import { useReaderTheme } from "../hooks/useReaderTheme"
+
+const AIChat = lazy(() =>
+  import("./AI-Chat").then((m) => ({ default: m.AIChat })),
+)
 
 interface Props {
   children: ReactNode
   onDownload: () => void
   onReset: () => void
   showThemeToggle?: boolean
+  showAIChat?: boolean
   downloadDisabled?: boolean
 }
 
@@ -17,6 +21,7 @@ export function ReaderLayout({
   onDownload,
   onReset,
   showThemeToggle = false,
+  showAIChat = false,
   downloadDisabled = false,
 }: Props) {
   const [theme, setTheme] = useReaderTheme()
@@ -59,6 +64,17 @@ export function ReaderLayout({
       ))}
 
       <div className="reader-output">
+        {showAIChat && (
+          <Suspense>
+            <AIChat
+              trigger={
+                <button className="reader-ai-button" title="AI Summary">
+                  <BotMessageSquare size={18} />
+                </button>
+              }
+            />
+          </Suspense>
+        )}
         {showThemeToggle && (
           <div className="reader-theme-toggle">
             {THEMES.map((t) => {

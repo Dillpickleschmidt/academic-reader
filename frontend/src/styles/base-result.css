@@ -112,6 +112,36 @@ html:has(#theme-dark:checked)::-webkit-scrollbar-thumb:hover {
   box-sizing: border-box;
 }
 
+/* AI button - fixed top right, left of theme toggle */
+.reader-ai-button {
+  position: fixed;
+  top: 1rem;
+  right: calc(1rem + 108px + 0.5rem); /* theme toggle width + gap */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--reader-code-bg);
+  border: 1px solid var(--reader-border);
+  cursor: pointer;
+  border-radius: 8px;
+  color: var(--reader-text-muted);
+  transition: all 0.15s ease;
+  z-index: 1000;
+}
+
+.reader-ai-button:hover {
+  background: var(--reader-border);
+  border-color: var(--reader-border-strong);
+  color: var(--reader-text);
+}
+
+.reader-ai-button svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* Theme toggle - fixed top right */
 .reader-theme-toggle {
   position: fixed;

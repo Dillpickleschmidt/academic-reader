@@ -1,8 +1,6 @@
-import { Fragment, useState } from "react"
+import { Fragment, useState, type ReactElement } from "react"
 import { DefaultChatTransport } from "ai"
 import { useChat } from "@ai-sdk/react"
-import { MessageSquare } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -31,7 +29,11 @@ import {
 } from "@/components/ai-elements/prompt-input"
 import { Loader } from "@/components/ai-elements/loader"
 
-export function AIChat() {
+interface Props {
+  trigger: ReactElement
+}
+
+export function AIChat({ trigger }: Props) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState("")
   const { messages, sendMessage, status } = useChat({
@@ -52,10 +54,7 @@ export function AIChat() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="ghost" size="icon" />}>
-        <MessageSquare className="size-5" />
-        <span className="sr-only">Open chat</span>
-      </DialogTrigger>
+      <DialogTrigger render={trigger} />
       <DialogContent className="flex h-[80vh] max-h-200 w-full max-w-2xl flex-col gap-0 p-0">
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle>Chat</DialogTitle>

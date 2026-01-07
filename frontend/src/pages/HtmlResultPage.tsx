@@ -20,6 +20,7 @@ export function HtmlResultPage({
       onDownload={onDownload}
       onReset={onReset}
       showThemeToggle
+      showAIChat
       downloadDisabled={!imagesReady}
     >
       <div dangerouslySetInnerHTML={{ __html: content }} />
