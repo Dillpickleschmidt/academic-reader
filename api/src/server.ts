@@ -86,6 +86,7 @@ const authProxy = async (c: Context) => {
         ...c.req.header(),
         host: "convex-backend:3211",
       },
+      redirect: "manual", // Don't follow redirects, pass them to browser
     })
   } catch (error) {
     console.error("Auth proxy error:", error)
