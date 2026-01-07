@@ -1,7 +1,5 @@
 // Proxies /api/* (except auth) to Hono API
-export async function onRequest(
-  context: EventContext<unknown, string, unknown>,
-) {
+export async function onRequest(context: { request: Request }) {
   const url = new URL(context.request.url)
   const path = url.pathname.replace("/api", "")
   const targetUrl = `https://api.academic-reader.com${path}${url.search}`

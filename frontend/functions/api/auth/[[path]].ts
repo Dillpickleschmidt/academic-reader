@@ -1,7 +1,5 @@
 // Proxies /api/auth/* to Better Auth on Convex Site
-export async function onRequest(
-  context: EventContext<unknown, string, unknown>,
-) {
+export async function onRequest(context: { request: Request }) {
   const url = new URL(context.request.url)
   const targetUrl = `https://convex-site.academic-reader.com${url.pathname}${url.search}`
 
