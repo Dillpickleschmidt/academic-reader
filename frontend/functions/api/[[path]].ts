@@ -13,11 +13,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     const convexSiteHost = context.env.CONVEX_SITE_HOST
     const targetUrl = `https://${convexSiteHost}${url.pathname}${url.search}`
 
-    const response = await fetch(targetUrl, {
-      method: context.request.method,
-      headers: context.request.headers,
-      body: context.request.body,
-    })
+    // Create new request with target URL, preserving all original properties
+    const proxyRequest = new Request(targetUrl, context.request)
+    const response = await fetch(proxyRequest)
 
     // Rewrite Set-Cookie domain to match the request origin
     const newHeaders = new Headers()
@@ -45,9 +43,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const apiHost = context.env.API_HOST
   const targetUrl = `https://${apiHost}${path}${url.search}`
 
-  return fetch(targetUrl, {
-    method: context.request.method,
-    headers: context.request.headers,
-    body: context.request.body,
-  })
+  // Create new request with target URL, preserving all original properties
+  const proxyRequest = new Request(targetUrl, context.request)
+  return fetch(proxyRequest)
 }
