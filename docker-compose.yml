@@ -21,8 +21,8 @@ services:
   # Profiles: local, datalab, runpod
   api:
     build:
-      context: ./api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: api/Dockerfile
     profiles: ["local", "datalab", "runpod"]
     stop_grace_period: 10s
     stop_signal: SIGINT

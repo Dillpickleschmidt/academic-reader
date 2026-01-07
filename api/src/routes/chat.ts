@@ -8,6 +8,7 @@ import {
 } from "ai"
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import type { Env } from "../types"
+import { requireAuth } from "../middleware/auth"
 
 const tools = {}
 
@@ -15,6 +16,8 @@ export type ChatTools = InferUITools<typeof tools>
 export type ChatMessage = UIMessage<never, UIDataTypes, ChatTools>
 
 export const chat = new Hono<{ Bindings: Env }>()
+
+chat.use("/chat", requireAuth)
 
 chat.post("/chat", async (c) => {
   try {

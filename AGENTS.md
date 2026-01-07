@@ -25,7 +25,7 @@ bun run dev --dashboard  # Enable Convex dashboard at localhost:6791
 bun run typecheck        # Typecheck all packages
 bun run lint             # Lint frontend
 bun run build            # Build frontend
-bun run deploy           # Deploy to VPS + Cloudflare Pages
+bun run deploy           # Deploy to VPS
 ```
 
 ### Package-Specific Commands
@@ -131,10 +131,11 @@ Bun workspace monorepo with three packages:
 - `datalab` - Datalab API (no GPU required)
 
 ### API Endpoints
-- `POST /upload` - Upload file
-- `POST /convert/:fileId` - Start conversion job
-- `GET /jobs/:jobId/stream` - SSE progress stream
-- `GET /download/:jobId` - Download converted result
+- `POST /api/upload` - Upload file
+- `POST /api/convert/:fileId` - Start conversion job
+- `GET /api/jobs/:jobId/stream` - SSE progress stream
+- `GET /api/download/:jobId` - Download converted result
+- `/api/auth/*` - Auth (proxied to Convex)
 
 ## Directory Structure
 ```
@@ -144,8 +145,8 @@ Bun workspace monorepo with three packages:
 │   └── storage/          # Storage adapters (s3, temp)
 ├── frontend/src/         # React SPA
 │   ├── components/ui/    # shadcn/ui primitives (base-vega style)
-│   ├── hooks/            # Custom React hooks
-│   └── convex/           # Convex functions + better-auth integration
+│   └── hooks/            # Custom React hooks
+├── frontend/convex/      # Convex functions + better-auth integration
 ├── worker/               # Python GPU worker (Docker)
 └── scripts/              # Dev/deploy scripts
 ```

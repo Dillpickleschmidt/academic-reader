@@ -67,12 +67,9 @@ export function syncConfigs(env: Env): void {
     writeFileSync(DERIVED_ENV_FILES.api, devVars + "\n")
   }
 
-  const apiUrl = env.API_URL || "http://localhost:8787"
   const frontendEnvLines = [
     "# Auto-generated from .env.dev - do not edit directly",
-    `VITE_API_URL=${apiUrl}`,
     `VITE_CONVEX_URL=http://localhost:3210`,
-    `VITE_CONVEX_SITE_URL=http://localhost:3211`,
     `CONVEX_SELF_HOSTED_URL=http://localhost:3210`,
     env.CONVEX_SELF_HOSTED_ADMIN_KEY
       ? `CONVEX_SELF_HOSTED_ADMIN_KEY=${env.CONVEX_SELF_HOSTED_ADMIN_KEY}`

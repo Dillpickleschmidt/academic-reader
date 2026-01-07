@@ -28,7 +28,6 @@ export const deployEnvRules: EnvRule[] = [
   { key: "PROD_VPS_USER", required: true },
   { key: "PROD_VPS_PATH", required: true },
   { key: "PROD_DOMAIN", required: true },
-  { key: "PROD_CLOUDFLARE_PROJECT", required: true },
 ];
 
 // =============================================================================

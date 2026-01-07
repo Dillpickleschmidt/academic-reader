@@ -38,7 +38,7 @@ export function AIChat({ trigger }: Props) {
   const [input, setInput] = useState("")
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/chat`,
+      api: "/api/chat",
     }),
   })
 

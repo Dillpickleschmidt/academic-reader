@@ -1,9 +1,11 @@
 /**
  * Self-hosted API entry point.
- * Runs on Bun for self-hosted deployments (Datalab, Runpod with MinIO).
+ * Serves both API routes (/api/*) and frontend static files.
  */
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { cors } from "hono/cors"
+import { serveStatic } from "hono/bun"
+import { proxy } from "hono/proxy"
 import { upload } from "./routes/upload"
 import { convert } from "./routes/convert"
 import { jobs } from "./routes/jobs"
@@ -17,16 +19,13 @@ import {
 } from "./storage"
 import type { Env } from "./types"
 
-// Access environment variables via Bun's API
 const env = Bun.env
 
-// Extended context with storage adapters
 type Variables = {
   storage: S3Storage | null
   tempStorage: TempStorage | null
 }
 
-// Create app with typed bindings
 const app = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Create storage instances (singleton for the process lifetime)
@@ -41,7 +40,6 @@ const storage = createStorage({
 
 // Middleware to inject environment and storage
 app.use("*", async (c, next) => {
-  // Inject environment variables as bindings
   c.env = {
     BACKEND_MODE: (env.BACKEND_MODE || "datalab") as Env["BACKEND_MODE"],
     LOCAL_WORKER_URL: env.LOCAL_WORKER_URL,
@@ -55,39 +53,68 @@ app.use("*", async (c, next) => {
     S3_BUCKET: env.S3_BUCKET,
     SITE_URL: env.SITE_URL,
   }
-
-  // Inject storage adapters
   c.set("storage", storage)
   c.set("tempStorage", tempStorage)
-
   await next()
 })
 
-// CORS - use SITE_URL as the allowed origin
+// CORS for API routes only
 app.use(
-  "*",
+  "/api/*",
   cors({
     origin: (origin) => {
       const siteUrl = env.SITE_URL
-      if (!siteUrl) return origin // Allow all if not set
-      return origin === siteUrl ? origin : siteUrl
+      if (!siteUrl) return origin
+      // Only allow requests from the configured site URL
+      return origin === siteUrl ? origin : null
     },
+    credentials: true,
   }),
 )
 
-// Mount routes
-app.route("/", upload)
-app.route("/", convert)
-app.route("/", jobs)
-app.route("/", download)
-app.route("/", chat)
+// ─────────────────────────────────────────────────────────────
+// Auth Proxy (must be before /api mount to match first)
+// ─────────────────────────────────────────────────────────────
+const authProxy = async (c: Context) => {
+  const url = new URL(c.req.url)
+  const targetUrl = `http://convex-backend:3211${url.pathname}${url.search}`
 
-// Health check
-app.get("/health", (c) => c.json({ status: "ok", mode: "self-hosted" }))
+  try {
+    return await proxy(targetUrl, {
+      ...c.req,
+      headers: {
+        ...c.req.header(),
+        host: "convex-backend:3211",
+      },
+    })
+  } catch (error) {
+    console.error("Auth proxy error:", error)
+    return c.json({ error: "Auth service unavailable" }, 502)
+  }
+}
+app.all("/api/auth/*", authProxy)
+
+// ─────────────────────────────────────────────────────────────
+// API Routes
+// ─────────────────────────────────────────────────────────────
+const api = new Hono<{ Bindings: Env; Variables: Variables }>()
+api.route("/", upload)
+api.route("/", convert)
+api.route("/", jobs)
+api.route("/", download)
+api.route("/", chat)
+api.get("/health", (c) => c.json({ status: "ok", mode: env.BACKEND_MODE }))
+app.route("/api", api)
+
+// ─────────────────────────────────────────────────────────────
+// Static Files (SPA)
+// ─────────────────────────────────────────────────────────────
+app.use("/*", serveStatic({ root: "./frontend/dist" }))
+app.use("/*", serveStatic({ path: "./frontend/dist/index.html" })) // SPA fallback
 
 // Start server
 const port = parseInt(env.PORT || "8787", 10)
-console.log(`Starting self-hosted API on port ${port}`)
+console.log(`Starting server on port ${port}`)
 console.log(`Backend: ${env.BACKEND_MODE || "datalab"}`)
 
 export default {

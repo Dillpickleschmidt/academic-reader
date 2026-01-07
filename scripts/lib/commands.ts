@@ -33,7 +33,7 @@ Usage: bun scripts/dev.ts <command> [options]
 
 Commands:
   ${colors.cyan("dev")}       Start development servers
-  ${colors.cyan("deploy")}    Deploy to production (VPS + Cloudflare Pages)
+  ${colors.cyan("deploy")}    Deploy to production VPS
 
 Options:
   ${colors.cyan("--mode <mode>")}   Override BACKEND_MODE (local/runpod/datalab)
@@ -166,13 +166,11 @@ const devCommand: Command = {
 
 const deployCommand: Command = {
   name: "deploy",
-  description: "Deploy to production (VPS + Cloudflare Pages)",
+  description: "Deploy to production VPS",
   async execute(env: Env): Promise<void> {
     validateEnv(env, deployEnvRules)
 
-    // Derive URLs from PROD_DOMAIN
     const domain = env.PROD_DOMAIN!
-    const apiUrl = `https://${domain}/api`
     const siteUrl = `https://${domain}`
     const convexUrl = `https://convex.${domain}`
 
@@ -181,7 +179,7 @@ const deployCommand: Command = {
 
     console.log(colors.green(`\nDeploying to production\n`))
 
-    // 1. Deploy containers to VPS
+    // 1. Deploy containers to VPS (includes frontend build)
     console.log(colors.cyan("Deploying to VPS..."))
     const deployProcess = await runProcess([
       "ssh",
@@ -232,7 +230,6 @@ const deployCommand: Command = {
         process.exit(1)
       }
 
-      // Save to .env.production on VPS
       const saveKeyProc = spawn({
         cmd: [
           "ssh",
@@ -251,7 +248,6 @@ const deployCommand: Command = {
 
     // 3. Deploy Convex functions
     const convexEnv = getConvexEnv(prodAdminKey, convexUrl)
-
     const convexDeployed = await deployConvexFunctions(convexEnv)
     if (!convexDeployed) {
       console.error(colors.red("Convex deployment failed"))
@@ -263,48 +259,9 @@ const deployCommand: Command = {
     await syncConvexEnv(env, convexEnv, siteUrl)
     console.log(colors.green("✓ Convex environment synced\n"))
 
-    // 5. Build frontend with prod vars
-    console.log(colors.cyan("Building frontend..."))
-    const buildProcess = await runProcess(["bun", "run", "build"], {
-      cwd: resolve(ROOT_DIR, "frontend"),
-      env: {
-        VITE_API_URL: apiUrl,
-        VITE_CONVEX_URL: convexUrl,
-        VITE_CONVEX_SITE_URL: siteUrl,
-      },
-    })
-    await buildProcess.exited
-    if (buildProcess.exitCode !== 0) {
-      console.error(colors.red("Frontend build failed"))
-      process.exit(1)
-    }
-    console.log(colors.green("✓ Frontend built\n"))
-
-    // 6. Write wrangler.toml with env vars
-    const wranglerConfig = `name = "academic-reader"
-pages_build_output_dir = "./dist"
-
-[vars]
-API_HOST = "api.${domain}"
-CONVEX_SITE_HOST = "convex-site.${domain}"
-`
-    await Bun.write(resolve(ROOT_DIR, "frontend/wrangler.toml"), wranglerConfig)
-
-    // 7. Deploy to Cloudflare Pages
-    console.log(colors.cyan("Deploying to Cloudflare Pages..."))
-    const pagesProcess = await runProcess(
-      ["bunx", "wrangler", "pages", "deploy"],
-      { cwd: resolve(ROOT_DIR, "frontend") },
-    )
-    await pagesProcess.exited
-    if (pagesProcess.exitCode !== 0) {
-      console.error(colors.red("Cloudflare Pages deployment failed"))
-      process.exit(1)
-    }
-
     console.log(colors.green("\n✓ Deploy complete!"))
-    console.log(`  API: ${apiUrl}`)
     console.log(`  Site: ${siteUrl}`)
+    console.log(`  Convex: ${convexUrl}`)
   },
 }
 

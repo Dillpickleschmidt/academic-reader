@@ -3,10 +3,6 @@
  * HTML downloads use server-side font subsetting for optimal file size.
  */
 
-const API_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:8000"
-).replace(/\/$/, "")
-
 export type OutputFormat = "html" | "markdown" | "json"
 
 export const getDownloadExtension = (format: OutputFormat): string =>
@@ -40,7 +36,7 @@ const downloadBlob = (
  */
 export const downloadFromApi = (jobId: string, fileName: string): void => {
   const baseName = fileName.replace(/\.[^/.]+$/, "")
-  const url = `${API_URL}/api/jobs/${jobId}/download?title=${encodeURIComponent(baseName)}`
+  const url = `/api/jobs/${jobId}/download?title=${encodeURIComponent(baseName)}`
 
   const a = document.createElement("a")
   a.href = url

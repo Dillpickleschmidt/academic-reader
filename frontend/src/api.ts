@@ -2,8 +2,6 @@ import type { OutputFormat, ConversionProgress } from "../../api/src/types"
 
 export type { OutputFormat, ConversionProgress }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
-
 export interface UploadResponse {
   file_id: string
   filename: string
@@ -32,7 +30,7 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
   const formData = new FormData()
   formData.append("file", file)
 
-  const res = await fetch(`${API_URL}/upload`, {
+  const res = await fetch("/api/upload", {
     method: "POST",
     body: formData,
   })
@@ -46,12 +44,9 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
 }
 
 export async function fetchFromUrl(url: string): Promise<UploadResponse> {
-  const res = await fetch(
-    `${API_URL}/fetch-url?url=${encodeURIComponent(url)}`,
-    {
-      method: "POST",
-    },
-  )
+  const res = await fetch(`/api/fetch-url?url=${encodeURIComponent(url)}`, {
+    method: "POST",
+  })
 
   if (!res.ok) {
     const err = await res.json()
@@ -74,7 +69,7 @@ export async function startConversion(
     params.set("page_range", options.pageRange.trim())
   }
 
-  const res = await fetch(`${API_URL}/convert/${fileId}?${params}`, {
+  const res = await fetch(`/api/convert/${fileId}?${params}`, {
     method: "POST",
   })
 
@@ -87,10 +82,7 @@ export async function startConversion(
 }
 
 export async function warmModels(): Promise<void> {
-  // Fire-and-forget, don't await or check response
-  fetch(`${API_URL}/warm-models`, { method: "POST" }).catch(() => {
-    // Ignore errors - model warming is best-effort
-  })
+  fetch("/api/warm-models", { method: "POST" }).catch(() => {})
 }
 
 export function subscribeToJob(
@@ -100,7 +92,7 @@ export function subscribeToJob(
   onComplete: (result: NonNullable<JobStatus["result"]>) => void,
   onError: (error: string) => void,
 ): () => void {
-  const eventSource = new EventSource(`${API_URL}/jobs/${jobId}/stream`)
+  const eventSource = new EventSource(`/api/jobs/${jobId}/stream`)
 
   eventSource.addEventListener("progress", (e: MessageEvent) => {
     const progress = JSON.parse(e.data)
@@ -129,7 +121,6 @@ export function subscribeToJob(
   })
 
   eventSource.onerror = () => {
-    // Connection error - notify caller to fall back to polling
     onError("Connection failed")
     eventSource.close()
   }

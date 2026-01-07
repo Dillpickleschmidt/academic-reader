@@ -24,10 +24,10 @@ Set `BACKEND_MODE` in `.env.dev` for development.
 ## Architecture
 
 ```
-┌──────────────┐     ┌─────────────────────┐     ┌─────────────────┐
-│   Frontend   │────▶│         VPS         │────▶│ Runpod/Datalab  │
-│ (Static CDN) │     │   (Bun API Server)  │     │   (GPU/API)     │
-└──────────────┘     └─────────────────────┘     └─────────────────┘
+                     ┌─────────────────────┐     ┌─────────────────┐
+     Browser ───────▶│         VPS         │────▶│ Runpod/Datalab  │
+                     │  (Hono + Frontend)  │     │   (GPU/API)     │
+                     └─────────────────────┘     └─────────────────┘
                               │
                               ▼
                      ┌─────────────────────┐
@@ -36,14 +36,17 @@ Set `BACKEND_MODE` in `.env.dev` for development.
                      └─────────────────────┘
 ```
 
+Frontend and API served from VPS. Cloudflare proxy (orange cloud DNS) provides CDN caching for static assets.
+
 ### API Endpoints
 
-| Endpoint                  | Purpose                     |
-| ------------------------- | --------------------------- |
-| `POST /upload`            | Upload file (to S3 or temp) |
-| `POST /convert/:fileId`   | Start conversion job        |
-| `GET /jobs/:jobId/stream` | SSE progress stream         |
-| `GET /download/:jobId`    | Download converted HTML     |
+| Endpoint                      | Purpose                     |
+| ----------------------------- | --------------------------- |
+| `POST /api/upload`            | Upload file (to S3 or temp) |
+| `POST /api/convert/:fileId`   | Start conversion job        |
+| `GET /api/jobs/:jobId/stream` | SSE progress stream         |
+| `GET /api/download/:jobId`    | Download converted HTML     |
+| `GET /api/auth/*`             | Auth (proxied to Convex)    |
 
 ### Storage
 
@@ -69,9 +72,8 @@ All modes use self-hosted Convex via Docker - no account needed.
 ### Prerequisites
 
 1. VPS with Docker installed (e.g., Hetzner)
-2. Domain with DNS on Cloudflare
-3. Cloudflare Pages project
-4. Cloudflare Tunnel configured
+2. Domain with DNS on Cloudflare (proxy enabled for CDN caching)
+3. Cloudflare Tunnel for Convex backend access
 
 ### Initial VPS Setup
 
@@ -99,7 +101,6 @@ PROD_VPS_HOST_IP=<your-vps-ip>
 PROD_VPS_USER=root
 PROD_VPS_PATH=/root/academic-reader
 PROD_DOMAIN=yourdomain.com
-PROD_CLOUDFLARE_PROJECT=<your-pages-project>
 ```
 
 ### Deploy
@@ -110,25 +111,27 @@ bun run deploy
 
 This will:
 
-1. Pull latest code and restart Docker on VPS
+1. Pull latest code and rebuild Docker containers on VPS (includes frontend build)
 2. Deploy Convex functions
-3. Build frontend with production URLs
-4. Deploy frontend to Cloudflare Pages
+3. Sync Convex environment variables
 
-### Cloudflare Tunnel Setup
+### Cloudflare Setup
+
+**DNS (for main app):**
+
+1. Add A record: `@` → `<VPS_IP>` with **Proxy enabled** (orange cloud)
+
+**Tunnel (for Convex backend):**
 
 1. Create a tunnel in Cloudflare Zero Trust → Networks → Tunnels
 2. Copy the tunnel token to `CLOUDFLARE_TUNNEL_TOKEN` in VPS `.env.production`
-3. Configure public hostnames:
+3. Configure public hostname:
 
-| Subdomain   | Domain         | Service | URL                     |
-| ----------- | -------------- | ------- | ----------------------- |
-| api         | yourdomain.com | HTTP    | `api:8787`              |
-| convex      | yourdomain.com | HTTP    | `convex-backend:3210`   |
-| convex-site | yourdomain.com | HTTP    | `convex-backend:3211`   |
-| dashboard   | yourdomain.com | HTTP    | `convex-dashboard:6791` |
+| Subdomain | Domain         | Service | URL                   |
+| --------- | -------------- | ------- | --------------------- |
+| convex    | yourdomain.com | HTTP    | `convex-backend:3210` |
 
-4. Add a CNAME record for the root domain pointing to Cloudflare Pages
+Dashboard is localhost-only for security. Access via SSH tunnel: `ssh -L 6791:localhost:6791 yourserver`
 
 ## Configuration
 
@@ -150,7 +153,6 @@ This will:
 | `BACKEND_MODE`                 | Yes      | `datalab` or `runpod`                |
 | `SITE_URL`                     | Yes      | <https://yourdomain.com>             |
 | `PROD_CONVEX_URL`              | Yes      | <https://convex.yourdomain.com>      |
-| `PROD_CONVEX_SITE_URL`         | Yes      | <https://convex-site.yourdomain.com> |
 | `CLOUDFLARE_TUNNEL_TOKEN`      | Yes      | From Cloudflare Zero Trust           |
 | `CONVEX_SELF_HOSTED_ADMIN_KEY` | Yes      | Copy from local .env.dev             |
 | `BETTER_AUTH_SECRET`           | Yes      | Copy from local .env.dev             |
@@ -159,12 +161,11 @@ This will:
 
 ### Deploy Metadata (in .env.dev)
 
-| Variable                  | Required | Description                     |
-| ------------------------- | -------- | ------------------------------- |
-| `PROD_VPS_HOST_IP`        | Yes      | VPS IP address                  |
-| `PROD_VPS_USER`           | Yes      | SSH user (default: root)        |
-| `PROD_VPS_PATH`           | Yes      | Repo path on VPS                |
-| `PROD_DOMAIN`             | Yes      | Your domain (e.g., example.com) |
-| `PROD_CLOUDFLARE_PROJECT` | Yes      | Cloudflare Pages project name   |
+| Variable           | Required | Description                     |
+| ------------------ | -------- | ------------------------------- |
+| `PROD_VPS_HOST_IP` | Yes      | VPS IP address                  |
+| `PROD_VPS_USER`    | Yes      | SSH user (default: root)        |
+| `PROD_VPS_PATH`    | Yes      | Repo path on VPS                |
+| `PROD_DOMAIN`      | Yes      | Your domain (e.g., example.com) |
 
 See `.env.dev.example` and `.env.production.example` for all options.
