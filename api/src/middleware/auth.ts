@@ -20,7 +20,7 @@ export const requireAuth = createMiddleware<{ Bindings: Env }>(
 
     try {
       const response = await fetch(`${CONVEX_SITE_URL}/api/auth/get-session`, {
-        headers: { Cookie: `better-auth.session_token=${encodeURIComponent(sessionToken)}` },
+        headers: { Cookie: `better-auth.session_token=${sessionToken}` },
         signal: AbortSignal.timeout(5000),
       })
 
