@@ -9,10 +9,16 @@ const CONVEX_SITE_URL =
 
 export const requireAuth = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
+    // Debug: log all cookies
+    const allCookies = c.req.header("cookie")
+    console.log("Auth middleware - cookies:", allCookies?.substring(0, 100))
+
     // Cookie name has __Secure- prefix in production (HTTPS)
     const sessionToken =
       getCookie(c, "__Secure-better-auth.session_token") ||
       getCookie(c, "better-auth.session_token")
+    console.log("Auth middleware - sessionToken:", sessionToken ? "found" : "missing")
+
     if (!sessionToken) {
       console.warn("Authentication failed: No session token")
       return c.json({ error: "Unauthorized" }, 401)
