@@ -282,15 +282,10 @@ const deployCommand: Command = {
 
     // 6. Deploy to Cloudflare Pages
     console.log(colors.cyan("Deploying to Cloudflare Pages..."))
-    const pagesProcess = await runProcess([
-      "bunx",
-      "wrangler",
-      "pages",
-      "deploy",
-      "frontend/dist",
-      "--project-name",
-      env.PROD_CLOUDFLARE_PROJECT!,
-    ])
+    const pagesProcess = await runProcess(
+      ["bunx", "wrangler", "pages", "deploy"],
+      { cwd: resolve(ROOT_DIR, "frontend") },
+    )
     await pagesProcess.exited
     if (pagesProcess.exitCode !== 0) {
       console.error(colors.red("Cloudflare Pages deployment failed"))
