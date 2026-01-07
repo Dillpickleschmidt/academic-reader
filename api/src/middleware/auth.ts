@@ -9,37 +9,33 @@ const CONVEX_SITE_URL =
 
 export const requireAuth = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
-    // Debug: log all cookies
-    const allCookies = c.req.header("cookie")
-    console.log("Auth middleware - cookies:", allCookies?.substring(0, 100))
-
     // Cookie name has __Secure- prefix in production (HTTPS)
-    const sessionToken =
-      getCookie(c, "__Secure-better-auth.session_token") ||
-      getCookie(c, "better-auth.session_token")
-    console.log("Auth middleware - sessionToken:", sessionToken ? "found" : "missing")
+    const secureCookieName = "__Secure-better-auth.session_token"
+    const devCookieName = "better-auth.session_token"
+
+    let sessionToken = getCookie(c, secureCookieName)
+    let cookieName = secureCookieName
 
     if (!sessionToken) {
-      console.warn("Authentication failed: No session token")
+      sessionToken = getCookie(c, devCookieName)
+      cookieName = devCookieName
+    }
+
+    if (!sessionToken) {
       return c.json({ error: "Unauthorized" }, 401)
     }
 
     try {
       const response = await fetch(`${CONVEX_SITE_URL}/api/auth/get-session`, {
-        headers: { Cookie: `better-auth.session_token=${sessionToken}` },
+        headers: { Cookie: `${cookieName}=${sessionToken}` },
         signal: AbortSignal.timeout(5000),
       })
 
-      console.log("Auth middleware - Convex response status:", response.status)
-
       if (!response.ok) {
-        const errorText = await response.text()
-        console.log("Auth middleware - Convex error:", errorText.substring(0, 200))
         return c.json({ error: "Unauthorized" }, 401)
       }
 
       const session = (await response.json()) as { user?: unknown }
-      console.log("Auth middleware - session has user:", !!session?.user)
       if (!session?.user) {
         return c.json({ error: "Unauthorized" }, 401)
       }
