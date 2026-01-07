@@ -30,11 +30,16 @@ export const requireAuth = createMiddleware<{ Bindings: Env }>(
         signal: AbortSignal.timeout(5000),
       })
 
+      console.log("Auth middleware - Convex response status:", response.status)
+
       if (!response.ok) {
+        const errorText = await response.text()
+        console.log("Auth middleware - Convex error:", errorText.substring(0, 200))
         return c.json({ error: "Unauthorized" }, 401)
       }
 
       const session = (await response.json()) as { user?: unknown }
+      console.log("Auth middleware - session has user:", !!session?.user)
       if (!session?.user) {
         return c.json({ error: "Unauthorized" }, 401)
       }
