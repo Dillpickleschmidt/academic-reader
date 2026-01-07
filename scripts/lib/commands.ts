@@ -280,7 +280,17 @@ const deployCommand: Command = {
     }
     console.log(colors.green("✓ Frontend built\n"))
 
-    // 6. Deploy to Cloudflare Pages
+    // 6. Write wrangler.toml with env vars
+    const wranglerConfig = `name = "academic-reader"
+pages_build_output_dir = "./dist"
+
+[vars]
+API_HOST = "api.${domain}"
+CONVEX_SITE_HOST = "convex-site.${domain}"
+`
+    await Bun.write(resolve(ROOT_DIR, "frontend/wrangler.toml"), wranglerConfig)
+
+    // 7. Deploy to Cloudflare Pages
     console.log(colors.cyan("Deploying to Cloudflare Pages..."))
     const pagesProcess = await runProcess(
       ["bunx", "wrangler", "pages", "deploy"],

@@ -15,6 +15,9 @@ frontend/.env.local
 # Build outputs
 dist/
 
+# Generated config
+frontend/wrangler.toml
+
 # Logs
 *.log
 
