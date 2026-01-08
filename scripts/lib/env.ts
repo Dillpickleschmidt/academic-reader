@@ -21,15 +21,6 @@ export const devEnvRules: EnvRule[] = [
   { key: "RUNPOD_ENDPOINT_ID", required: (env) => env.BACKEND_MODE === "runpod" },
 ];
 
-// prettier-ignore
-export const deployEnvRules: EnvRule[] = [
-  // Deploy metadata (in .env.dev, not secrets)
-  { key: "PROD_VPS_HOST_IP", required: true },
-  { key: "PROD_VPS_USER", required: true },
-  { key: "PROD_VPS_PATH", required: true },
-  { key: "PROD_DOMAIN", required: true },
-];
-
 // =============================================================================
 // Helpers
 // =============================================================================

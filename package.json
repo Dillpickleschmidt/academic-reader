@@ -10,10 +10,6 @@
     "dev:local": "bun scripts/dev.ts dev --mode local",
     "dev:runpod": "bun scripts/dev.ts dev --mode runpod",
     "dev:datalab": "bun scripts/dev.ts dev --mode datalab",
-    "deploy": "bun scripts/dev.ts deploy",
-    "deploy:runpod": "bun scripts/dev.ts deploy --mode runpod",
-    "deploy:datalab": "bun scripts/dev.ts deploy --mode datalab",
-    "config:status": "bun scripts/dev.ts status",
     "build": "bun run --cwd frontend build",
     "typecheck": "bun run --cwd api typecheck && bun run --cwd frontend tsc -p tsconfig.app.json --noEmit && bun run --cwd frontend tsc -p tsconfig.node.json --noEmit && bun run --cwd frontend tsc -p convex/tsconfig.json --noEmit && tsc --project scripts/tsconfig.json",
     "lint": "bun run --cwd frontend lint"

@@ -18,7 +18,7 @@ export function getConvexEnv(
   }
 }
 
-export function parseAdminKey(output: string): string | null {
+function parseAdminKey(output: string): string | null {
   const match = output.match(/(convex-self-hosted\|\S+)/)
   return match ? match[1] : null
 }
@@ -125,21 +125,4 @@ export async function syncConvexEnv(
     },
     { ...getSystemEnv(), ...convexEnv },
   )
-}
-
-export async function deployConvexFunctions(
-  convexEnv: Record<string, string>,
-): Promise<boolean> {
-  console.log(colors.cyan("Deploying Convex functions..."))
-
-  const proc = spawn({
-    cmd: ["bunx", "convex", "deploy", "--yes"],
-    cwd: resolve(ROOT_DIR, "frontend"),
-    env: { ...getSystemEnv(), ...convexEnv },
-    stdout: "inherit",
-    stderr: "inherit",
-  })
-
-  await proc.exited
-  return proc.exitCode === 0
 }

@@ -24,19 +24,31 @@ Set `BACKEND_MODE` in `.env.dev` for development.
 ## Architecture
 
 ```
-                     ┌─────────────────────┐     ┌─────────────────┐
-     Browser ───────▶│         VPS         │────▶│ Runpod/Datalab  │
-                     │  (Hono + Frontend)  │     │   (GPU/API)     │
-                     └─────────────────────┘     └─────────────────┘
-                              │
-                              ▼
-                     ┌─────────────────────┐
-                     │  Cloudflare R2 or   │
-                     │  MinIO (S3 Storage) │
-                     └─────────────────────┘
+                                 Browser
+                                    │
+                                    ▼
+                           Cloudflare (proxy/protection)
+                                    │
+                                    ▼
+                             VPS port 443
+                                    │
+                                    ▼
+                          Traefik (Dokploy's proxy)
+                                    │
+                    ┌───────────────┴───────────────┐
+                    │                               │
+            Host: academic-reader.com      Host: convex.academic-reader.com
+                    │                               │
+                    ▼                               ▼
+              app container               convex-backend container
+                    │
+                    ▼
+        ┌────────── OR ──────────┐
+        │                        │
+     Datalab              Runpod ◀──▶ R2
 ```
 
-Frontend and API served from VPS. Cloudflare proxy (orange cloud DNS) provides CDN caching for static assets.
+Frontend and API served from VPS via Dokploy. Cloudflare proxy provides DDoS protection and caching.
 
 ### API Endpoints
 
@@ -52,7 +64,7 @@ Frontend and API served from VPS. Cloudflare proxy (orange cloud DNS) provides C
 
 - **local mode** - /tmp/academic-reader-uploads/{uuid}.{ext} (dev mode only)
 - **datalab mode** - In-Memory: API accepts files directly for processing
-- **runpod mode** - S3/R2 cloud for prod, and stored locally with MinIO and exposed to runpod instance via anonymous temp cloudflared tunnel for dev mode
+- **runpod mode** - S3/R2 cloud for prod, MinIO with temp tunnel for dev
 
 ## Development
 
@@ -69,69 +81,70 @@ All modes use self-hosted Convex via Docker - no account needed.
 
 ## Production Deployment
 
+Production uses [Dokploy](https://dokploy.com) for container orchestration with automatic deployments via GitHub Actions.
+
 ### Prerequisites
 
-1. VPS with Docker installed (e.g., Hetzner)
-2. Domain with DNS on Cloudflare (proxy enabled for CDN caching)
-3. Cloudflare Tunnel for Convex backend access
+1. VPS with Dokploy installed
+2. Domain with DNS on Cloudflare (proxy enabled)
+3. Docker Hub account
 
-### Initial VPS Setup
+### Deployment Flow
 
-```bash
-# SSH to VPS
-ssh root@<your-vps-ip>
-
-# Clone repo
-git clone <your-repo> /root/academic-reader
-cd /root/academic-reader
-
-# Create production env file
-cp .env.production.example .env.production
-# Edit .env.production with your production secrets
+```
+Push to main
+    │
+    ├─► GitHub Actions builds image
+    │   └─► Pushes to Docker Hub
+    │       └─► Dokploy detects new tag and redeploys
+    │
+    └─► If frontend/convex/* changed
+        └─► GitHub Actions deploys Convex functions
 ```
 
-Copy `CONVEX_SELF_HOSTED_ADMIN_KEY` and `BETTER_AUTH_SECRET` from your local `.env.dev` to the VPS `.env.production`.
+### Initial Setup
 
-### Configure Local Deploy Settings
+1. **Install Dokploy on VPS**
 
-In your local `.env.dev`, set the deploy metadata:
+   ```bash
+   curl -sSL https://dokploy.com/install.sh | sh
+   ```
 
-```bash
-PROD_VPS_HOST_IP=<your-vps-ip>
-PROD_VPS_USER=root
-PROD_VPS_PATH=/root/academic-reader
-PROD_DOMAIN=yourdomain.com
-```
+2. **Deploy Convex** (via Dokploy Compose with the self-hosted Convex blueprint)
 
-### Deploy
+3. **Deploy App** (via Dokploy Docker Image from Docker Hub)
 
-```bash
-bun run deploy
-```
+4. **Configure domains** in Dokploy:
+   - `yourdomain.com` → app container (port 8787)
+   - `convex.yourdomain.com` → convex-backend (port 3210)
 
-This will:
+5. **Set up Cloudflare DNS**:
 
-1. Pull latest code and rebuild Docker containers on VPS (includes frontend build)
-2. Deploy Convex functions
-3. Sync Convex environment variables
+   ```
+   A    @        <VPS_IP>    Proxied
+   A    convex   <VPS_IP>    Proxied
+   ```
 
-### Cloudflare Setup
+6. **Generate Convex admin key**:
 
-**DNS (for main app):**
+   ```bash
+   docker exec <convex-container> ./generate_admin_key.sh
+   ```
 
-1. Add A record: `@` → `<VPS_IP>` with **Proxy enabled** (orange cloud)
+7. **Add GitHub Secrets**:
+   - `DOCKERHUB_USERNAME`
+   - `DOCKERHUB_TOKEN`
+   - `CONVEX_ADMIN_KEY`
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `BETTER_AUTH_SECRET`
 
-**Tunnel (for Convex backend):**
+### Convex Dashboard
 
-1. Create a tunnel in Cloudflare Zero Trust → Networks → Tunnels
-2. Copy the tunnel token to `CLOUDFLARE_TUNNEL_TOKEN` in VPS `.env.production`
-3. Configure public hostname:
+The dashboard is not publicly exposed. Access options:
 
-| Subdomain | Domain         | Service | URL                   |
-| --------- | -------------- | ------- | --------------------- |
-| convex    | yourdomain.com | HTTP    | `convex-backend:3210` |
-
-Dashboard is localhost-only for security. Access via SSH tunnel: `ssh -L 6791:localhost:6791 yourserver`
+- Via Tailscale: `http://your-vps-tailscale-hostname:6791`
+- Via SSH tunnel: `ssh -L 6791:localhost:6791 user@your-vps`
 
 ## Configuration
 
@@ -146,26 +159,34 @@ Dashboard is localhost-only for security. Access via SSH tunnel: `ssh -L 6791:lo
 | `RUNPOD_ENDPOINT_ID` | runpod       | Your endpoint ID                       |
 | `GOOGLE_API_KEY`     | local/runpod | For Gemini API                         |
 
-### Production (.env.production on VPS)
+### Production (set in Dokploy UI)
 
-| Variable                       | Required | Description                          |
-| ------------------------------ | -------- | ------------------------------------ |
-| `BACKEND_MODE`                 | Yes      | `datalab` or `runpod`                |
-| `SITE_URL`                     | Yes      | <https://yourdomain.com>             |
-| `PROD_CONVEX_URL`              | Yes      | <https://convex.yourdomain.com>      |
-| `CLOUDFLARE_TUNNEL_TOKEN`      | Yes      | From Cloudflare Zero Trust           |
-| `CONVEX_SELF_HOSTED_ADMIN_KEY` | Yes      | Copy from local .env.dev             |
-| `BETTER_AUTH_SECRET`           | Yes      | Copy from local .env.dev             |
-| `DATALAB_API_KEY`              | datalab  | Production API key                   |
-| `PROD_S3_*`                    | runpod   | S3/R2 credentials                    |
+**App Container:**
 
-### Deploy Metadata (in .env.dev)
+| Variable          | Required | Description              |
+| ----------------- | -------- | ------------------------ |
+| `BACKEND_MODE`    | Yes      | `datalab` or `runpod`    |
+| `SITE_URL`        | Yes      | <https://yourdomain.com> |
+| `DATALAB_API_KEY` | datalab  | Production API key       |
+| `S3_*`            | runpod   | S3/R2 credentials        |
 
-| Variable           | Required | Description                     |
-| ------------------ | -------- | ------------------------------- |
-| `PROD_VPS_HOST_IP` | Yes      | VPS IP address                  |
-| `PROD_VPS_USER`    | Yes      | SSH user (default: root)        |
-| `PROD_VPS_PATH`    | Yes      | Repo path on VPS                |
-| `PROD_DOMAIN`      | Yes      | Your domain (e.g., example.com) |
+**Convex Container:**
+
+| Variable              | Required | Description                        |
+| --------------------- | -------- | ---------------------------------- |
+| `CONVEX_CLOUD_ORIGIN` | Yes      | <https://convex.yourdomain.com>    |
+| `CONVEX_SITE_ORIGIN`  | Yes      | <https://yourdomain.com>           |
+| `DISABLE_BEACON`      | No       | Set to `true` to disable telemetry |
+
+**GitHub Secrets:**
+
+| Secret                 | Description                |
+| ---------------------- | -------------------------- |
+| `DOCKERHUB_USERNAME`   | Docker Hub username        |
+| `DOCKERHUB_TOKEN`      | Docker Hub access token    |
+| `CONVEX_ADMIN_KEY`     | From generate_admin_key.sh |
+| `GOOGLE_CLIENT_ID`     | Google OAuth client ID     |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `BETTER_AUTH_SECRET`   | Auth encryption secret     |
 
 See `.env.dev.example` and `.env.production.example` for all options.

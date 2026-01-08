@@ -1,11 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Development and deployment orchestration script.
+ * Development orchestration script.
  *
  * Usage:
  *   bun scripts/dev.ts dev           # Start dev servers (mode from .env.dev)
  *   bun scripts/dev.ts dev --mode X  # Override mode (local/runpod/datalab)
- *   bun scripts/dev.ts deploy        # Deploy to production
  */
 
 import { loadEnv } from "./lib/utils"
