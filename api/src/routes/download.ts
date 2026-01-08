@@ -4,6 +4,7 @@ import * as cheerio from "cheerio"
 import { minify } from "html-minifier-terser"
 import type { Env } from "../types"
 import { createBackend } from "../backends/factory"
+import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { enhanceHtmlForReader } from "../utils/html-processing"
 import {
   extractKatexFontUsage,
@@ -105,50 +106,65 @@ function escapeHtml(text: string): string {
 }
 
 download.get("/api/jobs/:jobId/download", async (c) => {
+  const event = c.get("event")
   const jobId = c.req.param("jobId")
   const title = c.req.query("title") || "Document"
 
-  try {
-    const backend = createBackend(c.env)
-    const job = await backend.getJobStatus(jobId)
+  event.jobId = jobId
+  event.backend = c.env.BACKEND_MODE || "local"
 
-    let html = job.result?.content || job.htmlContent
-    if (!html) {
-      return c.json(
-        { error: "No HTML content available for this job" },
-        { status: 404 },
-      )
-    }
+  const backendResult = await tryCatch(async () => createBackend(c.env))
+  if (!backendResult.success) {
+    event.error = { category: "backend", message: getErrorMessage(backendResult.error), code: "BACKEND_INIT_ERROR" }
+    return c.json({ error: "Failed to initialize backend" }, { status: 500 })
+  }
 
-    html = enhanceHtmlForReader(html)
-    const $ = cheerio.load(html)
+  const jobResult = await tryCatch(backendResult.data.getJobStatus(jobId))
+  if (!jobResult.success) {
+    event.error = { category: "backend", message: getErrorMessage(jobResult.error), code: "JOB_STATUS_ERROR" }
+    return c.json({ error: "Failed to get job status" }, { status: 500 })
+  }
 
-    const katexFontUsage = extractKatexFontUsage($)
+  let html = jobResult.data.result?.content || jobResult.data.htmlContent
+  if (!html) {
+    event.error = { category: "validation", message: "No HTML content available", code: "NO_CONTENT" }
+    return c.json({ error: "No HTML content available for this job" }, { status: 404 })
+  }
 
-    const [sourceSansCss, katexFontsCss] = await Promise.all([
-      embedSourceSans(),
-      subsetKatexFonts(katexFontUsage),
-    ])
+  html = enhanceHtmlForReader(html)
+  const $ = cheerio.load(html)
 
-    const fontCss = `${sourceSansCss}\n${katexFontsCss}`
-    const fullHtml = generateHtmlDocument(html, title, fontCss, katexCssRules)
+  const katexFontUsage = extractKatexFontUsage($)
 
-    // Minify HTML and embedded CSS/JS
-    const minifiedHtml = await minify(fullHtml, {
+  const fontsResult = await tryCatch(
+    Promise.all([embedSourceSans(), subsetKatexFonts(katexFontUsage)])
+  )
+  if (!fontsResult.success) {
+    event.error = { category: "internal", message: getErrorMessage(fontsResult.error), code: "FONT_EMBED_ERROR" }
+    return c.json({ error: "Failed to embed fonts" }, { status: 500 })
+  }
+
+  const [sourceSansCss, katexFontsCss] = fontsResult.data
+  const fontCss = `${sourceSansCss}\n${katexFontsCss}`
+  const fullHtml = generateHtmlDocument(html, title, fontCss, katexCssRules)
+
+  const minifyResult = await tryCatch(
+    minify(fullHtml, {
       collapseWhitespace: true,
       removeComments: true,
       minifyCSS: true,
       minifyJS: true,
     })
-
-    return new Response(minifiedHtml, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(title)}.html"; filename*=UTF-8''${encodeURIComponent(title)}.html`,
-      },
-    })
-  } catch (error) {
-    console.error("Download error:", error)
+  )
+  if (!minifyResult.success) {
+    event.error = { category: "internal", message: getErrorMessage(minifyResult.error), code: "MINIFY_ERROR" }
     return c.json({ error: "Failed to generate download" }, { status: 500 })
   }
+
+  return new Response(minifyResult.data, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(title)}.html"; filename*=UTF-8''${encodeURIComponent(title)}.html`,
+    },
+  })
 })

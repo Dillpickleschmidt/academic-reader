@@ -17,6 +17,7 @@ import {
   type S3Storage,
   type TempStorage,
 } from "./storage"
+import { wideEvent } from "./middleware/wide-event"
 import type { Env } from "./types"
 
 const env = Bun.env
@@ -37,6 +38,9 @@ const storage = createStorage({
   S3_SECRET_KEY: env.S3_SECRET_KEY,
   S3_BUCKET: env.S3_BUCKET,
 })
+
+// Wide event middleware for API routes only (not static files)
+app.use("/api/*", wideEvent)
 
 // Middleware to inject environment and storage
 app.use("*", async (c, next) => {
@@ -89,7 +93,9 @@ const authProxy = async (c: Context) => {
       redirect: "manual", // Don't follow redirects, pass them to browser
     })
   } catch (error) {
-    console.error("Auth proxy error:", error)
+    const event = c.get("event")
+    const message = error instanceof Error ? error.message : "Unknown error"
+    event.error = { category: "auth", message, code: "AUTH_PROXY_ERROR" }
     return c.json({ error: "Auth service unavailable" }, 502)
   }
 }

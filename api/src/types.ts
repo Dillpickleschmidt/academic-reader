@@ -79,6 +79,56 @@ export interface PresignedUrlResult {
   expiresAt: string
 }
 
+// Wide event for structured logging
+export type ErrorCategory =
+  | "storage"
+  | "backend"
+  | "auth"
+  | "validation"
+  | "network"
+  | "internal"
+
+export interface WideEventError {
+  category: ErrorCategory
+  message: string
+  code?: string
+}
+
+export interface WideEvent {
+  // Core (set by middleware)
+  requestId: string
+  timestamp: string
+  service: string
+  version: string
+  environment: BackendType
+  deployment: "dev" | "prod"
+  method: string
+  path: string
+  status?: number
+  durationMs?: number
+
+  // Business context (set by handlers)
+  fileId?: string
+  jobId?: string
+  backend?: BackendType
+  filename?: string
+  fileSize?: number
+  contentType?: string
+  outputFormat?: OutputFormat
+  useLlm?: boolean
+  forceOcr?: boolean
+
+  // Error context
+  error?: WideEventError
+
+  // SSE streaming
+  isStreaming?: boolean
+  streamEvents?: number
+
+  // Extensible
+  [key: string]: unknown
+}
+
 // Environment bindings
 export interface Env {
   // Backend selection

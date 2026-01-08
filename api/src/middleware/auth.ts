@@ -42,13 +42,17 @@ export const requireAuth = createMiddleware<{ Bindings: Env }>(
 
       await next()
     } catch (error) {
+      const event = c.get("event")
       if (error instanceof Error && error.name === "TimeoutError") {
+        event.error = { category: "auth", message: "Auth service timeout", code: "AUTH_TIMEOUT" }
         return c.json({ error: "Auth service timeout" }, 504)
       }
       if (error instanceof Error && error.name === "AbortError") {
+        event.error = { category: "auth", message: "Auth service timeout", code: "AUTH_TIMEOUT" }
         return c.json({ error: "Auth service timeout" }, 504)
       }
-      console.error("Auth validation error:", error)
+      const message = error instanceof Error ? error.message : "Unknown error"
+      event.error = { category: "auth", message, code: "AUTH_SERVICE_ERROR" }
       return c.json({ error: "Auth service unavailable" }, 502)
     }
   },
