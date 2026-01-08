@@ -58,7 +58,6 @@ jobs:
 
       - name: Set Convex env vars
         if: steps.changes.outputs.convex == 'true'
-      - name: Set Convex env vars
         run: |
           bunx convex env set SITE_URL https://academic-reader.com
           bunx convex env set GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
