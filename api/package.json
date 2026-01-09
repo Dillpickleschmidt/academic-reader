@@ -3,12 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "bun run --watch src/server.ts",
-    "start": "bun run src/server.ts",
+    "dev": "bun --preload ./src/otel.ts --watch src/server.ts",
+    "start": "bun --preload ./src/otel.ts src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.2",
+    "@opentelemetry/api-logs": "^0.209.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.209.0",
+    "@opentelemetry/resources": "^2.3.0",
+    "@opentelemetry/sdk-logs": "^0.209.0",
+    "@opentelemetry/semantic-conventions": "^1.38.0",
     "@types/katex": "^0.16.7",
     "ai": "^6.0.7",
     "aws4fetch": "^1.0.20",

@@ -146,6 +146,13 @@ The dashboard is not publicly exposed. Access options:
 - Via Tailscale: `http://your-vps-tailscale-hostname:6791`
 - Via SSH tunnel: `ssh -L 6791:localhost:6791 user@your-vps`
 
+### Monitoring (Optional)
+
+For structured logging via Grafana/Loki:
+
+1. Deploy [dokploy-grafana-compose](https://github.com/quochuydev/dokploy-grafana-compose) as a Compose project in Dokploy
+2. Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318` in the app container
+
 ## Configuration
 
 ### Development (.env.dev)
@@ -163,21 +170,22 @@ The dashboard is not publicly exposed. Access options:
 
 **App Container:**
 
-| Variable          | Required | Description              |
-| ----------------- | -------- | ------------------------ |
-| `BACKEND_MODE`    | Yes      | `datalab` or `runpod`    |
-| `SITE_URL`        | Yes      | <https://yourdomain.com> |
-| `DATALAB_API_KEY` | datalab  | Production API key       |
-| `RUNPOD_ENDPOINT_ID` | runpod | Your Runpod endpoint ID |
-| `S3_*`            | runpod   | S3/R2 credentials        |
+| Variable                      | Required | Description                             |
+| ----------------------------- | -------- | --------------------------------------- |
+| `BACKEND_MODE`                | Yes      | `datalab` or `runpod`                   |
+| `SITE_URL`                    | Yes      | <https://yourdomain.com>                |
+| `DATALAB_API_KEY`             | datalab  | Production API key                      |
+| `RUNPOD_ENDPOINT_ID`          | runpod   | Your Runpod endpoint ID                 |
+| `S3_*`                        | runpod   | S3/R2 credentials                       |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No       | `http://alloy:4318` for Grafana logging |
 
 **Convex Container:**
 
-| Variable              | Required | Description                        |
-| --------------------- | -------- | ---------------------------------- |
-| `CONVEX_CLOUD_ORIGIN` | Yes      | <https://convex-api.yourdomain.com>    |
+| Variable              | Required | Description                                  |
+| --------------------- | -------- | -------------------------------------------- |
+| `CONVEX_CLOUD_ORIGIN` | Yes      | <https://convex-api.yourdomain.com>          |
 | `CONVEX_SITE_ORIGIN`  | Yes      | <https://convex-http-actions.yourdomain.com> |
-| `DISABLE_BEACON`      | No       | Set to `true` to disable telemetry |
+| `DISABLE_BEACON`      | No       | Set to `true` to disable telemetry           |
 
 **GitHub Secrets:**
 

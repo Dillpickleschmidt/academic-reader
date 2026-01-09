@@ -3,6 +3,8 @@
  * One comprehensive log per request with all relevant context.
  */
 
+import { SeverityNumber } from "@opentelemetry/api-logs"
+import { logger } from "../otel"
 import type { BackendType, WideEvent } from "../types"
 import pkg from "../../package.json"
 
@@ -32,15 +34,23 @@ export function createWideEvent(
 }
 
 /**
- * Emit a wide event.
- * Currently logs to console as JSON.
- * Can be updated later to use OTel for export to Axiom/Grafana.
+ * Emit a wide event via OpenTelemetry.
+ * Sends to Alloy/Loki in production, console in development.
  */
 export function emitEvent(event: WideEvent): void {
   // Remove undefined values for cleaner output
   const clean = Object.fromEntries(
     Object.entries(event).filter(([, v]) => v !== undefined)
-  )
-  console.log(JSON.stringify(clean))
+  ) as Record<string, string | number | boolean>
+
+  const severityNumber = event.error ? SeverityNumber.ERROR : SeverityNumber.INFO
+  const severityText = event.error ? "ERROR" : "INFO"
+
+  logger.emit({
+    severityNumber,
+    severityText,
+    body: JSON.stringify(clean),
+    attributes: clean,
+  })
 }
 
