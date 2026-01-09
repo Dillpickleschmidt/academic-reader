@@ -26,7 +26,7 @@ jobs:
             dillpickleschmidt/academic-reader:latest
             dillpickleschmidt/academic-reader:${{ github.sha }}
           build-args: |
-            VITE_CONVEX_URL=https://convex.academic-reader.com
+            VITE_CONVEX_URL=https://convex-api.academic-reader.com
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -54,7 +54,7 @@ jobs:
         run: bunx convex deploy --yes
         working-directory: frontend
         env:
-          CONVEX_SELF_HOSTED_URL: https://convex.academic-reader.com
+          CONVEX_SELF_HOSTED_URL: https://convex-api.academic-reader.com
           CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
 
       - name: Set Convex env vars
@@ -66,7 +66,7 @@ jobs:
           bunx convex env set BETTER_AUTH_SECRET "$BETTER_AUTH_SECRET"
         working-directory: frontend
         env:
-          CONVEX_SELF_HOSTED_URL: https://convex.academic-reader.com
+          CONVEX_SELF_HOSTED_URL: https://convex-api.academic-reader.com
           CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

@@ -37,7 +37,7 @@ Set `BACKEND_MODE` in `.env.dev` for development.
                                     │
                     ┌───────────────┴───────────────┐
                     │                               │
-            Host: academic-reader.com      Host: convex.academic-reader.com
+            Host: academic-reader.com    Host: convex-api.academic-reader.com
                     │                               │
                     ▼                               ▼
               app container               convex-backend container
@@ -175,8 +175,8 @@ The dashboard is not publicly exposed. Access options:
 
 | Variable              | Required | Description                        |
 | --------------------- | -------- | ---------------------------------- |
-| `CONVEX_CLOUD_ORIGIN` | Yes      | <https://convex.yourdomain.com>    |
-| `CONVEX_SITE_ORIGIN`  | Yes      | <https://yourdomain.com>           |
+| `CONVEX_CLOUD_ORIGIN` | Yes      | <https://convex-api.yourdomain.com>    |
+| `CONVEX_SITE_ORIGIN`  | Yes      | <https://convex-http-actions.yourdomain.com> |
 | `DISABLE_BEACON`      | No       | Set to `true` to disable telemetry |
 
 **GitHub Secrets:**
