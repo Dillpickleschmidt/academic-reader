@@ -30,6 +30,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Deploy to Dokploy
+        run: curl -X POST "${{ secrets.DOKPLOY_WEBHOOK_URL }}"
+
   deploy-convex:
     runs-on: ubuntu-latest
     steps:
