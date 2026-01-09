@@ -2,10 +2,10 @@ import { createMiddleware } from "hono/factory"
 import { getCookie } from "hono/cookie"
 import type { Env } from "../types"
 
-// Internal Docker network URL for Convex site (auth endpoints)
-// Override with CONVEX_SITE_URL env var if hosting Convex separately (untested)
-const CONVEX_SITE_URL =
-  process.env.CONVEX_SITE_URL || "http://convex-backend:3211"
+// Convex HTTP actions URL (auth endpoints)
+// Defaults to localhost for local development
+const CONVEX_HTTP_URL =
+  process.env.CONVEX_HTTP_URL || "http://localhost:3211"
 
 export const requireAuth = createMiddleware<{ Bindings: Env }>(
   async (c, next) => {
@@ -26,7 +26,7 @@ export const requireAuth = createMiddleware<{ Bindings: Env }>(
     }
 
     try {
-      const response = await fetch(`${CONVEX_SITE_URL}/api/auth/get-session`, {
+      const response = await fetch(`${CONVEX_HTTP_URL}/api/auth/get-session`, {
         headers: { Cookie: `${cookieName}=${sessionToken}` },
         signal: AbortSignal.timeout(5000),
       })
