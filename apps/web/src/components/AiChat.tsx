@@ -1,5 +1,5 @@
-import { Fragment, useState, useRef, useEffect, type ReactElement } from "react"
-import { DefaultChatTransport } from "ai"
+import { useState, useRef, useEffect, memo, useMemo, useCallback, type ReactElement } from "react"
+import { DefaultChatTransport, type UIMessage } from "ai"
 import { useChat } from "@ai-sdk/react"
 import { LogIn } from "lucide-react"
 import type { ChunkBlock } from "@repo/core/client/api-client"
@@ -11,11 +11,7 @@ import {
   DialogTrigger,
 } from "@repo/core/ui/primitives/dialog"
 import { Button } from "@repo/core/ui/primitives/button"
-import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
-} from "@repo/core/ui/ai-elements/conversation"
+import { VirtualizedConversation } from "@repo/core/ui/ai-elements/virtualized-conversation"
 import {
   Message,
   MessageContent,
@@ -40,6 +36,45 @@ interface Props {
   chunks?: ChunkBlock[]
   filename?: string
 }
+
+// Memoized message component to prevent re-renders during streaming
+const ChatMessage = memo(
+  function ChatMessage({ message }: { message: UIMessage }) {
+    return (
+      <div>
+        {message.parts.map((part, i) => {
+          switch (part.type) {
+            case "text":
+              return (
+                <Message key={`${message.id}-${i}`} from={message.role}>
+                  <MessageContent>
+                    <MessageResponse>{part.text}</MessageResponse>
+                  </MessageContent>
+                </Message>
+              )
+            case "tool-invocation":
+              if ("toolName" in part && part.toolName === "searchDocument") {
+                return (
+                  <div
+                    key={`${message.id}-${i}`}
+                    className="px-4 py-2 text-sm text-muted-foreground"
+                  >
+                    Searching document...
+                  </div>
+                )
+              }
+              return null
+            default:
+              return null
+          }
+        })}
+      </div>
+    )
+  },
+  (prev, next) =>
+    prev.message.id === next.message.id &&
+    prev.message.parts === next.message.parts,
+)
 
 export function AIChat({ trigger, markdown, chunks, filename }: Props) {
   const [open, setOpen] = useState(false)
@@ -123,13 +158,13 @@ export function AIChat({ trigger, markdown, chunks, filename }: Props) {
     ) {
       hasTriggeredRef.current = true
 
-      // Send summary request (body() will set hasSentSummaryRef)
-      sendMessage({
-        text: "Please summarize this document.",
+      // Defer to next frame - lets dialog fully render and paint first
+      const rafId = requestAnimationFrame(() => {
+        sendMessage({ text: "Please summarize this document." })
+        storeDocument()
       })
 
-      // Store document in parallel (for RAG follow-ups)
-      storeDocument()
+      return () => cancelAnimationFrame(rafId)
     }
   }, [open, user, markdown, messages.length, sendMessage])
 
@@ -151,6 +186,26 @@ export function AIChat({ trigger, markdown, chunks, filename }: Props) {
     setInput("")
     // hasSentSummaryRef is updated in body() when needed
   }
+
+  // Memoize footer to prevent recreation on every render
+  const conversationFooter = useMemo(() => {
+    const isLoading = status === "submitted" || status === "streaming"
+    if (!isLoading && !storageError) return null
+    return (
+      <>
+        {isLoading && <Loader />}
+        {storageError && (
+          <div className="text-sm text-amber-600">{storageError}</div>
+        )}
+      </>
+    )
+  }, [status, storageError])
+
+  // Stable renderMessage callback
+  const renderMessage = useCallback(
+    (message: UIMessage) => <ChatMessage message={message} />,
+    [],
+  )
 
   const handleSignIn = async () => {
     try {
@@ -197,52 +252,12 @@ export function AIChat({ trigger, markdown, chunks, filename }: Props) {
           <AuthPrompt />
         ) : (
           <div className="flex flex-1 flex-col overflow-hidden">
-            <Conversation className="flex-1">
-              <ConversationContent>
-                {messages.map((message) => (
-                  <div key={message.id}>
-                    {message.parts.map((part, i) => {
-                      switch (part.type) {
-                        case "text":
-                          return (
-                            <Fragment key={`${message.id}-${i}`}>
-                              <Message from={message.role}>
-                                <MessageContent>
-                                  <MessageResponse>{part.text}</MessageResponse>
-                                </MessageContent>
-                              </Message>
-                            </Fragment>
-                          )
-                        case "tool-invocation":
-                          // Show searching indicator for RAG tool calls
-                          if ("toolName" in part && part.toolName === "searchDocument") {
-                            return (
-                              <div
-                                key={`${message.id}-${i}`}
-                                className="px-4 py-2 text-sm text-muted-foreground"
-                              >
-                                Searching document...
-                              </div>
-                            )
-                          }
-                          return null
-                        default:
-                          return null
-                      }
-                    })}
-                  </div>
-                ))}
-                {(status === "submitted" || status === "streaming") && (
-                  <Loader />
-                )}
-                {storageError && (
-                  <div className="px-4 py-2 text-sm text-amber-600">
-                    {storageError}
-                  </div>
-                )}
-              </ConversationContent>
-              <ConversationScrollButton />
-            </Conversation>
+            <VirtualizedConversation
+              messages={messages}
+              className="flex-1"
+              renderMessage={renderMessage}
+              footer={conversationFooter}
+            />
 
             <div className="border-t p-4">
               <PromptInput onSubmit={handleSubmit}>
