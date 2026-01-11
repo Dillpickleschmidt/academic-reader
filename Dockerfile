@@ -3,35 +3,55 @@
 # ─────────────────────────────────────────────────────────────
 FROM oven/bun:1 AS frontend
 
-WORKDIR /frontend
+WORKDIR /app
+
+# Copy workspace config and package files
+COPY package.json bun.lock* tsconfig.base.json ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/core/package.json ./packages/core/
+COPY packages/convex/package.json ./packages/convex/
 
 # Install dependencies
-COPY frontend/package.json frontend/bun.lockb* ./
-RUN bun install --frozen-lockfile || bun install
+RUN bun install --frozen-lockfile
 
-# Copy source and build
-COPY frontend/ ./
+# Copy source
+COPY apps/web/ ./apps/web/
+COPY packages/ ./packages/
+
+# Build
 ARG VITE_CONVEX_URL
 ENV VITE_CONVEX_URL=$VITE_CONVEX_URL
-RUN bun run build
+RUN bun run --cwd apps/web build
 
 # ─────────────────────────────────────────────────────────────
-# Stage 2: Build API + Serve Frontend
+# Stage 2: Server + Serve Frontend
 # ─────────────────────────────────────────────────────────────
 FROM oven/bun:1
 
 WORKDIR /app
 
-# Install API dependencies
-COPY api/package.json api/bun.lockb* ./
-RUN bun install --frozen-lockfile || bun install
+# Copy workspace config and package files
+COPY package.json bun.lock* tsconfig.base.json ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/core/package.json ./packages/core/
 
-# Copy API source
-COPY api/src ./src
+# Install dependencies
+RUN bun install --frozen-lockfile
 
-# Copy frontend build
-COPY --from=frontend /frontend/dist ./frontend/dist
+# Copy web source (includes server) and packages
+COPY apps/web/ ./apps/web/
+COPY packages/core/ ./packages/core/
+
+# Copy frontend build from stage 1
+COPY --from=frontend /app/apps/web/dist ./apps/web/dist
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 bunuser && \
+    chown -R bunuser:nodejs /app
+
+USER bunuser
 
 EXPOSE 8787
 
-CMD ["bun", "run", "src/server.ts"]
+CMD ["bun", "run", "--cwd", "apps/web", "start"]

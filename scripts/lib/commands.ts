@@ -4,7 +4,6 @@ import type { Command, CommandOptions, Env } from "./types"
 import {
   ROOT_DIR,
   colors,
-  syncConfigs,
   runProcess,
   generateBetterAuthSecret,
 } from "./utils"
@@ -42,7 +41,7 @@ Modes:
   ${colors.cyan("runpod")}   Runpod + MinIO + self-hosted Convex + Vite
 
 Examples:
-  bun scripts/dev.ts dev                  # Use mode from .env.dev
+  bun scripts/dev.ts dev                  # Use mode from .env.local
   bun scripts/dev.ts dev --mode datalab   # Override to datalab
 `)
 }
@@ -73,7 +72,7 @@ const devCommand: Command = {
         "compose",
         ...profileArgs,
         "--env-file",
-        ".env.dev",
+        ".env.local",
         "down",
       ])
       await dockerDown.exited
@@ -101,7 +100,7 @@ const devCommand: Command = {
         "compose",
         ...profileArgs,
         "--env-file",
-        ".env.dev",
+        ".env.local",
         "up",
         "-d",
         "--wait",
@@ -120,7 +119,6 @@ const devCommand: Command = {
     }
 
     const convexEnv = getConvexEnv(env.CONVEX_SELF_HOSTED_ADMIN_KEY!)
-    syncConfigs(env)
     await syncConvexEnv(env, convexEnv)
 
     processes.push(
@@ -130,7 +128,7 @@ const devCommand: Command = {
           "compose",
           ...profileArgs,
           "--env-file",
-          ".env.dev",
+          ".env.local",
           "logs",
           "-f",
         ],
@@ -139,7 +137,7 @@ const devCommand: Command = {
     )
     processes.push(
       await runProcess(["bunx", "convex", "dev"], {
-        cwd: resolve(ROOT_DIR, "frontend"),
+        cwd: resolve(ROOT_DIR, "packages/convex"),
         env: convexEnv,
       }),
     )
@@ -151,7 +149,7 @@ const devCommand: Command = {
 
     processes.push(
       await runProcess(["bun", "run", "dev", "--port", sitePort], {
-        cwd: resolve(ROOT_DIR, "frontend"),
+        cwd: resolve(ROOT_DIR, "apps/web"),
         env: { VITE_API_URL: apiUrl },
       }),
     )

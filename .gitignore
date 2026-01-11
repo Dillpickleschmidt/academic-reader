@@ -6,17 +6,13 @@ __pycache__/
 !bun.lock
 
 # Environment
-.env.dev
+.env.local
 .env.production
 .dev.vars
-api/.dev.vars
-frontend/.env.local
 
 # Build outputs
 dist/
-
-# Generated config
-frontend/wrangler.toml
+*.tsbuildinfo
 
 # Logs
 *.log

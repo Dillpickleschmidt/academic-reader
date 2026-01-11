@@ -2,20 +2,24 @@
   "name": "academic-reader",
   "private": true,
   "workspaces": [
-    "frontend",
-    "api"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev": "bun scripts/dev.ts dev",
     "dev:local": "bun scripts/dev.ts dev --mode local",
     "dev:runpod": "bun scripts/dev.ts dev --mode runpod",
     "dev:datalab": "bun scripts/dev.ts dev --mode datalab",
-    "build": "bun run --cwd frontend build",
-    "typecheck": "bun run --cwd api typecheck && bun run --cwd frontend tsc -p tsconfig.app.json --noEmit && bun run --cwd frontend tsc -p tsconfig.node.json --noEmit && bun run --cwd frontend tsc -p convex/tsconfig.json --noEmit && tsc --project scripts/tsconfig.json",
-    "lint": "bun run --cwd frontend lint"
+    "build": "bun run --cwd apps/web build",
+    "typecheck": "bun run --cwd packages/core typecheck && bun run --cwd packages/convex typecheck && bun run --cwd apps/web typecheck",
+    "lint": "bun run --cwd apps/web lint"
   },
   "devDependencies": {
     "@types/bun": "^1.3.5",
     "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   }
 }

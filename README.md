@@ -139,6 +139,27 @@ Push to main
    - `GOOGLE_CLIENT_SECRET`
    - `BETTER_AUTH_SECRET`
 
+8. **Configure SSRF protection** (required for `/fetch-url` endpoint):
+
+   ```bash
+   # Block containers from accessing private/internal IPs (IPv4)
+   iptables -I DOCKER-USER -d 169.254.0.0/16 -j REJECT  # Metadata/link-local
+   iptables -I DOCKER-USER -d 127.0.0.0/8 -j REJECT     # Localhost
+   iptables -I DOCKER-USER -d 10.0.0.0/8 -j REJECT      # Private
+   iptables -I DOCKER-USER -d 192.168.0.0/16 -j REJECT  # Private
+
+   # Block IPv6 private ranges
+   ip6tables -I DOCKER-USER -d ::1 -j REJECT            # Localhost
+   ip6tables -I DOCKER-USER -d fc00::/7 -j REJECT       # Private (ULA)
+   ip6tables -I DOCKER-USER -d fe80::/10 -j REJECT      # Link-local
+
+   # Persist across reboots
+   apt install -y iptables-persistent
+   netfilter-persistent save
+   ```
+
+   This prevents the URL fetch endpoint from being used to access internal services.
+
 ### Convex Dashboard
 
 The dashboard is not publicly exposed. Access options:

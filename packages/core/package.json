@@ -1,0 +1,37 @@
+{
+  "name": "@repo/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./types/api": "./src/types/api.ts",
+    "./lib/utils": "./src/lib/utils.ts",
+    "./ui/primitives/*": "./src/ui/primitives/*.tsx",
+    "./ui/ai-elements/*": "./src/ui/ai-elements/*.tsx",
+    "./ui/info-tooltip": "./src/ui/info-tooltip.tsx",
+    "./client/api-client": "./src/client/api-client.ts",
+    "./client/download": "./src/client/download.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.0.0",
+    "@radix-ui/react-use-controllable-state": "^1.2.2",
+    "@xyflow/react": "^12.10.0",
+    "ai": "^6.0.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "embla-carousel-react": "^8.6.0",
+    "lucide-react": "^0.562.0",
+    "motion": "^12.24.0",
+    "nanoid": "^5.1.6",
+    "shiki": "^3.20.0",
+    "sonner": "^2.0.7",
+    "streamdown": "^1.6.10",
+    "tailwind-merge": "^3.4.0",
+    "tokenlens": "^1.3.1",
+    "use-stick-to-bottom": "^1.1.1"
+  }
+}
