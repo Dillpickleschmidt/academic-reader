@@ -48,11 +48,10 @@ jobs:
       - uses: oven-sh/setup-bun@v1
 
       - run: bun install
-        working-directory: frontend
 
       - name: Deploy Convex functions
         run: bunx convex deploy --yes
-        working-directory: frontend
+        working-directory: packages/convex
         env:
           CONVEX_SELF_HOSTED_URL: https://convex-api.academic-reader.com
           CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
@@ -63,10 +62,11 @@ jobs:
           bunx convex env set GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
           bunx convex env set GOOGLE_CLIENT_SECRET "$GOOGLE_CLIENT_SECRET"
           bunx convex env set BETTER_AUTH_SECRET "$BETTER_AUTH_SECRET"
-        working-directory: frontend
+        working-directory: packages/convex
         env:
           CONVEX_SELF_HOSTED_URL: https://convex-api.academic-reader.com
           CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+
