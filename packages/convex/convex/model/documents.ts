@@ -1,7 +1,6 @@
 /**
  * Document model - business logic for RAG document operations.
- * Note: createDocumentWithChunks accepts userId from web server (pre-authenticated).
- * Other functions use requireAuth for Convex-native auth.
+ * All functions use requireAuth for Convex-native auth.
  */
 
 import type { MutationCtx, QueryCtx, ActionCtx } from "../_generated/server"
@@ -19,7 +18,6 @@ export interface ChunkInput {
 }
 
 export interface CreateDocumentInput {
-  userId: string
   filename: string
   pageCount?: number
   chunks: ChunkInput[] // Without embeddings
@@ -36,8 +34,10 @@ export async function createDocumentWithChunks(
   ctx: MutationCtx,
   input: CreateDocumentInput,
 ) {
+  const user = await requireAuth(ctx)
+
   const documentId = await ctx.db.insert("documents", {
-    userId: input.userId,
+    userId: user._id,
     filename: input.filename,
     pageCount: input.pageCount,
     createdAt: Date.now(),
@@ -234,6 +234,7 @@ interface ChunkSearchResult {
 /**
  * Search chunks using vector similarity.
  * Called from an action context since vectorSearch requires it.
+ * Verifies document ownership before searching.
  */
 export async function searchChunks(
   ctx: ActionCtx,
@@ -244,6 +245,9 @@ export async function searchChunks(
   },
 ): Promise<ChunkSearchResult[]> {
   const { documentId, queryEmbedding, limit = 5 } = args
+
+  // Verify user owns this document (throws if unauthorized or not found)
+  await ctx.runQuery(internal.api.documents.verifyDocumentAccess, { documentId })
 
   // Vector search
   const results = await ctx.vectorSearch("chunks", "by_embedding", {

@@ -17,11 +17,9 @@ import * as Documents from "../model/documents"
 /**
  * Create a document with chunks (no embeddings).
  * Called at conversion completion for authenticated users.
- * Note: userId is passed explicitly since admin API calls don't have auth context.
  */
 export const create = mutation({
   args: {
-    userId: v.string(),
     filename: v.string(),
     pageCount: v.optional(v.number()),
     chunks: v.array(
@@ -36,7 +34,6 @@ export const create = mutation({
   },
   handler: (ctx, args) =>
     Documents.createDocumentWithChunks(ctx, {
-      userId: args.userId,
       filename: args.filename,
       pageCount: args.pageCount,
       chunks: args.chunks,
@@ -123,6 +120,14 @@ export const getChunkInternal = internalQuery({
     chunkId: v.id("chunks"),
   },
   handler: (ctx, { chunkId }) => Documents.getChunk(ctx, chunkId),
+})
+
+// Internal query to verify document access (throws if unauthorized)
+export const verifyDocumentAccess = internalQuery({
+  args: {
+    documentId: v.id("documents"),
+  },
+  handler: (ctx, { documentId }) => Documents.getDocument(ctx, documentId),
 })
 
 // ===== Actions =====

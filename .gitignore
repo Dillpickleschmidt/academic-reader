@@ -31,4 +31,4 @@ dist/
 *.sw?
 
 # Local storage
-/data/
+/minio-data/

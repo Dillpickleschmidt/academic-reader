@@ -119,12 +119,27 @@ async def convert(
     use_llm: bool = False,
     force_ocr: bool = False,
     page_range: str | None = None,
+    file_url: str | None = None,
 ):
-    matching_files = list(UPLOAD_DIR.glob(f"{file_id}.*"))
-    if not matching_files:
-        raise HTTPException(status_code=404, detail="File not found. Upload first.")
+    if file_url:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+                response = await client.get(file_url)
+                response.raise_for_status()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=400, detail=f"Failed to download file: {str(e)}")
 
-    file_path = matching_files[0]
+        # Determine extension from URL path (before query params)
+        url_path = file_url.split("?")[0]
+        ext = Path(url_path).suffix.lower() or ".pdf"
+        file_path = UPLOAD_DIR / f"{file_id}{ext}"
+        file_path.write_bytes(response.content)
+    else:
+        matching_files = list(UPLOAD_DIR.glob(f"{file_id}.*"))
+        if not matching_files:
+            raise HTTPException(status_code=404, detail="File not found. Upload first or provide file_url.")
+        file_path = matching_files[0]
+
     job_id = str(uuid.uuid4())
 
     manager = get_process_manager()

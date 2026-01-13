@@ -9,7 +9,7 @@
  */
 
 import type { Storage } from "../storage/types"
-import { convex } from "./convex"
+import type { ConvexHttpClient } from "convex/browser"
 import { api } from "@repo/convex/convex/_generated/api"
 
 /** Chunk input for document creation */
@@ -23,7 +23,7 @@ export interface ChunkInput {
 
 /** Input for persisting a document */
 export interface PersistDocumentInput {
-  userId: string
+  userId: string // Still needed for storage paths
   filename: string
   pageCount?: number
   chunks: ChunkInput[]
@@ -46,11 +46,11 @@ export function getStoragePaths(userId: string, documentId: string) {
  */
 export async function persistDocument(
   storage: Storage,
+  convex: ConvexHttpClient,
   input: PersistDocumentInput,
 ): Promise<string> {
-  // 1. Create document + chunks in Convex
+  // 1. Create document + chunks in Convex (userId derived from auth context)
   const { documentId } = await convex.mutation(api.api.documents.create, {
-    userId: input.userId,
     filename: input.filename,
     pageCount: input.pageCount,
     chunks: input.chunks,

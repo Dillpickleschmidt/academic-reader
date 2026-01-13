@@ -1,6 +1,5 @@
 import type { Storage } from "./types"
 import { S3Storage } from "./s3"
-import { DiskStorage } from "./disk"
 
 interface StorageEnv {
   S3_ENDPOINT?: string
@@ -10,31 +9,19 @@ interface StorageEnv {
 }
 
 /**
- * Create unified storage for all file operations.
- * Uses S3 in production, local filesystem in development.
+ * Create S3-compatible storage.
+ * Dev: credentials auto-provided by docker-compose (MinIO)
+ * Prod: credentials must be set in deployment config (real S3/R2)
  */
 export function createStorage(env: StorageEnv): Storage {
-  const isProduction = process.env.NODE_ENV === "production"
-
-  if (isProduction) {
-    if (
-      !env.S3_ENDPOINT ||
-      !env.S3_ACCESS_KEY ||
-      !env.S3_SECRET_KEY ||
-      !env.S3_BUCKET
-    ) {
-      throw new Error(
-        "Production requires S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, and S3_BUCKET",
-      )
-    }
-
-    return new S3Storage({
-      endpoint: env.S3_ENDPOINT,
-      accessKeyId: env.S3_ACCESS_KEY,
-      secretAccessKey: env.S3_SECRET_KEY,
-      bucket: env.S3_BUCKET,
-    })
+  if (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY || !env.S3_SECRET_KEY || !env.S3_BUCKET) {
+    throw new Error("Storage requires S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, and S3_BUCKET")
   }
 
-  return new DiskStorage()
+  return new S3Storage({
+    endpoint: env.S3_ENDPOINT,
+    accessKeyId: env.S3_ACCESS_KEY,
+    secretAccessKey: env.S3_SECRET_KEY,
+    bucket: env.S3_BUCKET,
+  })
 }

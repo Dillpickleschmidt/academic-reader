@@ -7,7 +7,7 @@ import type { Id } from "@repo/convex/convex/_generated/dataModel"
 import { api } from "@repo/convex/convex/_generated/api"
 import { requireAuth } from "../middleware/auth"
 import { generateEmbeddings } from "../services/embeddings"
-import { convex } from "../services/convex"
+import { createAuthenticatedConvexClient } from "../services/convex"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 
@@ -24,6 +24,14 @@ documentEmbeddings.post("/documents/:documentId/embeddings", requireAuth, async 
   const event = c.get("event")
   event.backend = (process.env.BACKEND_MODE || "local") as "local" | "runpod" | "datalab"
   const startTime = performance.now()
+
+  // Create authenticated Convex client
+  const convex = await createAuthenticatedConvexClient(c.req.raw.headers)
+  if (!convex) {
+    event.error = { category: "auth", message: "Failed to authenticate with Convex", code: "CONVEX_AUTH_ERROR" }
+    emitStreamingEvent(event, { status: 401 })
+    return c.json({ error: "Authentication failed" }, 401)
+  }
 
   const documentId = c.req.param("documentId")
   event.documentId = documentId

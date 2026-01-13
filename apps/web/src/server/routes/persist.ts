@@ -8,6 +8,7 @@ import type { Storage } from "../storage/types"
 import { resultCache } from "../storage/result-cache"
 import { requireAuth } from "../middleware/auth"
 import { persistDocument } from "../services/document-persistence"
+import { createAuthenticatedConvexClient } from "../services/convex"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 
@@ -75,9 +76,17 @@ persist.post("/documents/persist", requireAuth, async (c) => {
   const userId = c.get("userId")
   const storage = c.get("storage")
 
+  // Create authenticated Convex client
+  const convex = await createAuthenticatedConvexClient(c.req.raw.headers)
+  if (!convex) {
+    event.error = { category: "auth", message: "Failed to authenticate with Convex", code: "CONVEX_AUTH_ERROR" }
+    emitStreamingEvent(event, { status: 401 })
+    return c.json({ error: "Authentication failed" }, 401)
+  }
+
   // Persist document
   const persistResult = await tryCatch(
-    persistDocument(storage, {
+    persistDocument(storage, convex, {
       userId,
       filename: cachedResult.filename,
       pageCount: cachedResult.metadata.pages,

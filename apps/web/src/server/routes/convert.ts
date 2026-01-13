@@ -59,12 +59,10 @@ convert.post("/convert/:fileId", async (c) => {
   }
 
   let input: ConversionInput
+  const storage = c.get("storage")
 
-  if (backendType === "local") {
-    const localUrl = process.env.LOCAL_WORKER_URL || "http://localhost:8000"
-    input = { ...baseInput, fileUrl: `${localUrl}/files/${fileId}` }
-  } else if (backendType === "datalab") {
-    const storage = c.get("storage")
+  if (backendType === "datalab") {
+    // Datalab is an external API that can't access MinIO, so send bytes directly
     const bytesResult = await tryCatch(storage.getFileBytes(uploadKey))
     if (!bytesResult.success) {
       event.error = {
@@ -75,8 +73,7 @@ convert.post("/convert/:fileId", async (c) => {
       return c.json({ error: "Failed to retrieve file" }, { status: 500 })
     }
     input = { ...baseInput, fileData: bytesResult.data, filename }
-  } else if (backendType === "runpod") {
-    const storage = c.get("storage")
+  } else if (backendType === "local" || backendType === "runpod") {
     const fileUrlResult = await tryCatch(storage.getFileUrl(uploadKey))
     if (!fileUrlResult.success) {
       event.error = {
@@ -109,12 +106,7 @@ convert.post("/convert/:fileId", async (c) => {
   event.jobId = jobResult.data
 
   // Track job-file association for cleanup and persistence
-  jobFileMap.set(
-    jobResult.data,
-    backendType === "local" ? fileId : uploadKey,
-    filename,
-    backendType as BackendType,
-  )
+  jobFileMap.set(jobResult.data, uploadKey, filename, backendType as BackendType)
 
   return c.json({ job_id: jobResult.data })
 })

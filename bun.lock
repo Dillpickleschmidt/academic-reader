@@ -19,6 +19,7 @@
       "dependencies": {
         "@ai-sdk/google": "^3.0.2",
         "@ai-sdk/react": "^3.0.7",
+        "@convex-dev/better-auth": "^0.10.9",
         "@fontsource-variable/inter": "^5.2.8",
         "@fontsource-variable/source-sans-3": "^5.2.9",
         "@opentelemetry/api-logs": "^0.209.0",

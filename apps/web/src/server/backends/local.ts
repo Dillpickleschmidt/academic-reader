@@ -26,6 +26,10 @@ export class LocalBackend implements ConversionBackend {
       params.set("page_range", input.pageRange)
     }
 
+    if (input.fileUrl) {
+      params.set("file_url", input.fileUrl)
+    }
+
     const response = await fetch(
       `${this.baseUrl}/convert/${input.fileId}?${params}`,
       { method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS) },

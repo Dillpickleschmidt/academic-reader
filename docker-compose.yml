@@ -32,12 +32,12 @@ services:
     env_file:
       - .env.local
     environment:
+      - NODE_ENV=development
       - PORT=8787
       - BACKEND_MODE=${BACKEND_MODE}
       - CONVEX_HTTP_URL=http://convex-backend:3211
       - CONVEX_SITE_URL=http://convex-backend:3210
       - LOCAL_WORKER_URL=http://worker:8000
-      - LOCAL_STORAGE_DIR=/app/data
       - S3_ENDPOINT=http://minio:9000
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
@@ -45,7 +45,6 @@ services:
     volumes:
       - ./apps/web/src/server:/app/apps/web/src/server
       - ./packages/core/src:/app/packages/core/src
-      - ${LOCAL_STORAGE_DIR:-./data}:/app/data
       - tunnel_url:/tunnel:ro
     depends_on:
       convex-backend:
@@ -54,20 +53,20 @@ services:
         condition: service_started
         required: false
       minio:
-        condition: service_started
-        required: false
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
 
-  # MinIO for self-hosted Runpod (S3-compatible storage)
-  # Profile: runpod
+  # MinIO S3-compatible storage for all dev profiles
   minio:
     image: minio/minio
-    profiles: ["runpod"]
+    profiles: ["local", "datalab", "runpod"]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     volumes:
-      - minio_data:/data
+      - ./minio-data:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
@@ -99,7 +98,7 @@ services:
   # MinIO bucket initialization
   minio-init:
     image: minio/mc
-    profiles: ["runpod"]
+    profiles: ["local", "datalab", "runpod"]
     depends_on:
       minio:
         condition: service_healthy
@@ -149,6 +148,5 @@ services:
       retries: 5
 
 volumes:
-  minio_data:
   tunnel_url:
   convex_data:

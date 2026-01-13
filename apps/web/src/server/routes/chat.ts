@@ -1,8 +1,12 @@
 import { Hono } from "hono"
 import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai"
 import { z } from "zod"
+import type { ConvexHttpClient } from "convex/browser"
+import type { Id } from "@repo/convex/convex/_generated/dataModel"
+import { api } from "@repo/convex/convex/_generated/api"
 import { createChatModel } from "../providers/models"
 import { generateEmbedding } from "../services/embeddings"
+import { createAuthenticatedConvexClient } from "../services/convex"
 import { requireAuth } from "../middleware/auth"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
@@ -19,8 +23,8 @@ interface ChatRequest {
   documentContext?: DocumentContext
 }
 
-// Create search tool with documentId captured via closure
-function createSearchTool(documentId: string | undefined) {
+// Create search tool with documentId and authenticated client
+function createSearchTool(documentId: string | undefined, convex: ConvexHttpClient) {
   return tool({
     description:
       "Search the uploaded document for relevant information to answer the user's question",
@@ -36,26 +40,12 @@ function createSearchTool(documentId: string | undefined) {
         // Generate embedding for query
         const queryEmbedding = await generateEmbedding(query)
 
-        // Call Convex to search (admin API on port 3210)
-        const convexUrl = process.env.CONVEX_SITE_URL || "http://localhost:3210"
-        const response = await fetch(`${convexUrl}/api/action`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            path: "api/documents:search",
-            args: {
-              documentId,
-              queryEmbedding,
-              limit: 5,
-            },
-          }),
+        // Call Convex to search using authenticated client
+        const chunks = await convex.action(api.api.documents.search, {
+          documentId: documentId as Id<"documents">,
+          queryEmbedding,
+          limit: 5,
         })
-
-        if (!response.ok) {
-          return "Search failed. Please try again."
-        }
-
-        const chunks = await response.json()
 
         if (!chunks || chunks.length === 0) {
           return "No relevant information found in the document."
@@ -82,6 +72,14 @@ chat.use("/chat", requireAuth)
 
 chat.post("/chat", async (c) => {
   const event = c.get("event")
+
+  // Create authenticated Convex client for RAG searches
+  const convex = await createAuthenticatedConvexClient(c.req.raw.headers)
+  if (!convex) {
+    event.error = { category: "auth", message: "Failed to authenticate with Convex", code: "CONVEX_AUTH_ERROR" }
+    emitStreamingEvent(event, { status: 401 })
+    return c.json({ error: "Authentication failed" }, 401)
+  }
 
   const bodyResult = await tryCatch(c.req.json<ChatRequest>())
   if (!bodyResult.success) {
@@ -150,7 +148,7 @@ If the user asks a general question not about the document, answer normally with
   // Create tools with documentId context (undefined for summary mode)
   const tools = isSummaryMode
     ? undefined
-    : { searchDocument: createSearchTool(documentContext?.documentId) }
+    : { searchDocument: createSearchTool(documentContext?.documentId, convex) }
 
   const streamStart = performance.now()
   let streamError: string | undefined
