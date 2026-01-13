@@ -1,7 +1,8 @@
 import { Hono } from "hono"
 import type { BackendType } from "../types"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
-import type { S3Storage, TempStorage } from "../storage"
+import type { Storage } from "../storage/types"
+import { S3Storage } from "../storage/s3"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 
 // Worker upload response type and validator
@@ -16,10 +17,8 @@ function isWorkerUploadResponse(v: unknown): v is WorkerUploadResponse {
   )
 }
 
-// Extended context with storage adapters
 type Variables = {
-  storage: S3Storage | null
-  tempStorage: TempStorage | null
+  storage: Storage
 }
 
 export const upload = new Hono<{ Variables: Variables }>()
@@ -70,66 +69,9 @@ upload.post("/upload", async (c) => {
     return c.json(result)
   }
 
-  // Datalab mode: store in temp storage for later direct upload
-  if (backend === "datalab") {
-    const tempStorage = c.get("tempStorage")
-    if (!tempStorage) {
-      event.error = { category: "storage", message: "Temp storage not configured", code: "TEMP_STORAGE_MISSING" }
-      return c.json({ error: "Temp storage not configured" }, { status: 500 })
-    }
-
-    const formDataResult = await tryCatch(c.req.formData())
-    if (!formDataResult.success) {
-      event.error = { category: "validation", message: getErrorMessage(formDataResult.error), code: "FORM_PARSE_ERROR" }
-      return c.json({ error: "Invalid form data" }, { status: 400 })
-    }
-
-    const file = formDataResult.data.get("file") as File | null
-    if (!file || typeof file === "string") {
-      event.error = { category: "validation", message: "No file provided", code: "MISSING_FILE" }
-      return c.json({ error: "No file provided" }, { status: 400 })
-    }
-
-    event.filename = file.name
-    event.contentType = file.type
-
-    const arrayBufferResult = await tryCatch(file.arrayBuffer())
-    if (!arrayBufferResult.success) {
-      event.error = { category: "validation", message: getErrorMessage(arrayBufferResult.error), code: "FILE_READ_ERROR" }
-      return c.json({ error: "Failed to read file" }, { status: 500 })
-    }
-
-    event.fileSize = arrayBufferResult.data.byteLength
-    const fileId = crypto.randomUUID()
-    event.fileId = fileId
-
-    const storeResult = await tryCatch(
-      tempStorage.store(fileId, {
-        data: arrayBufferResult.data,
-        filename: file.name,
-        contentType: file.type || "application/pdf",
-        expiresAt: Date.now() + 5 * 60 * 1000,
-      })
-    )
-    if (!storeResult.success) {
-      event.error = { category: "storage", message: getErrorMessage(storeResult.error), code: "TEMP_STORE_ERROR" }
-      return c.json({ error: "Upload failed" }, { status: 500 })
-    }
-
-    return c.json({
-      file_id: fileId,
-      filename: file.name,
-      size: arrayBufferResult.data.byteLength,
-    })
-  }
-
-  // Runpod mode: upload to S3 storage
-  if (backend === "runpod") {
+  // Datalab/Runpod modes: upload to unified storage
+  if (backend === "datalab" || backend === "runpod") {
     const storage = c.get("storage")
-    if (!storage) {
-      event.error = { category: "storage", message: "S3 storage not configured", code: "S3_STORAGE_MISSING" }
-      return c.json({ error: "S3 storage not configured" }, { status: 500 })
-    }
 
     const formDataResult = await tryCatch(c.req.formData())
     if (!formDataResult.success) {
@@ -158,7 +100,7 @@ upload.post("/upload", async (c) => {
       storage.uploadFile(arrayBufferResult.data, file.name, file.type || "application/pdf")
     )
     if (!uploadResult.success) {
-      event.error = { category: "storage", message: getErrorMessage(uploadResult.error), code: "S3_UPLOAD_ERROR" }
+      event.error = { category: "storage", message: getErrorMessage(uploadResult.error), code: "UPLOAD_ERROR" }
       return c.json({ error: "Upload failed" }, { status: 500 })
     }
 
@@ -174,21 +116,18 @@ upload.post("/upload", async (c) => {
   return c.json({ error: `Unknown backend: ${backend}` }, { status: 400 })
 })
 
-// Get presigned upload URL (Runpod mode only)
+// Get presigned upload URL (S3 only - production)
 upload.post("/upload-url", async (c) => {
   const event = c.get("event")
   const backend = process.env.BACKEND_MODE || "local"
   event.backend = backend as BackendType
 
-  if (backend !== "runpod") {
-    event.error = { category: "validation", message: "Presigned URLs only available for Runpod mode", code: "WRONG_BACKEND" }
-    return c.json({ error: "Presigned URLs only available for Runpod mode" }, { status: 400 })
-  }
-
   const storage = c.get("storage")
-  if (!storage) {
-    event.error = { category: "storage", message: "S3 storage not configured", code: "S3_STORAGE_MISSING" }
-    return c.json({ error: "S3 storage not configured" }, { status: 500 })
+
+  // Presigned URLs only work with S3Storage
+  if (!(storage instanceof S3Storage)) {
+    event.error = { category: "validation", message: "Presigned URLs require S3 storage", code: "WRONG_STORAGE" }
+    return c.json({ error: "Presigned URLs require S3 storage" }, { status: 400 })
   }
 
   const bodyResult = await tryCatch(c.req.json<{ filename: string }>())
@@ -355,50 +294,15 @@ upload.post("/fetch-url", async (c) => {
   event.contentType = contentType
   event.fileSize = arrayBufferResult.data.byteLength
 
-  // Datalab mode: store in temp storage
-  if (backend === "datalab") {
-    const tempStorage = c.get("tempStorage")
-    if (!tempStorage) {
-      event.error = { category: "storage", message: "Temp storage not configured", code: "TEMP_STORAGE_MISSING" }
-      return c.json({ error: "Temp storage not configured" }, { status: 500 })
-    }
-
-    const fileId = crypto.randomUUID()
-    event.fileId = fileId
-
-    const storeResult = await tryCatch(
-      tempStorage.store(fileId, {
-        data: arrayBufferResult.data,
-        filename,
-        contentType,
-        expiresAt: Date.now() + 5 * 60 * 1000,
-      })
-    )
-    if (!storeResult.success) {
-      event.error = { category: "storage", message: getErrorMessage(storeResult.error), code: "TEMP_STORE_ERROR" }
-      return c.json({ error: "Failed to store file" }, { status: 500 })
-    }
-
-    return c.json({
-      file_id: fileId,
-      filename,
-      size: arrayBufferResult.data.byteLength,
-    })
-  }
-
-  // Runpod mode: store in S3
-  if (backend === "runpod") {
+  // Datalab/Runpod modes: upload to unified storage
+  if (backend === "datalab" || backend === "runpod") {
     const storage = c.get("storage")
-    if (!storage) {
-      event.error = { category: "storage", message: "S3 storage not configured", code: "S3_STORAGE_MISSING" }
-      return c.json({ error: "S3 storage not configured" }, { status: 500 })
-    }
 
     const uploadResult = await tryCatch(
       storage.uploadFile(arrayBufferResult.data, filename, contentType)
     )
     if (!uploadResult.success) {
-      event.error = { category: "storage", message: getErrorMessage(uploadResult.error), code: "S3_UPLOAD_ERROR" }
+      event.error = { category: "storage", message: getErrorMessage(uploadResult.error), code: "UPLOAD_ERROR" }
       return c.json({ error: "Failed to store file" }, { status: 500 })
     }
 

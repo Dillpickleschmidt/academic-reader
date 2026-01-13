@@ -4,7 +4,7 @@
  */
 import { Hono } from "hono"
 import { z } from "zod"
-import type { PersistentStorage } from "../storage"
+import type { Storage } from "../storage/types"
 import { resultCache } from "../storage/result-cache"
 import { requireAuth } from "../middleware/auth"
 import { persistDocument } from "../services/document-persistence"
@@ -16,7 +16,7 @@ const requestSchema = z.object({
 })
 
 type Variables = {
-  persistentStorage: PersistentStorage | null
+  storage: Storage
   userId: string
 }
 
@@ -71,24 +71,13 @@ persist.post("/documents/persist", requireAuth, async (c) => {
     return c.json({ error: "Result not found or expired. Please convert again." }, 404)
   }
 
-  // Check persistent storage is available
-  const persistentStorage = c.get("persistentStorage")
-  if (!persistentStorage) {
-    event.error = {
-      category: "storage",
-      message: "Persistent storage not configured",
-      code: "STORAGE_NOT_CONFIGURED",
-    }
-    emitStreamingEvent(event, { status: 500 })
-    return c.json({ error: "Storage not available" }, 500)
-  }
-
-  // Get authenticated user
+  // Get authenticated user and storage
   const userId = c.get("userId")
+  const storage = c.get("storage")
 
   // Persist document
   const persistResult = await tryCatch(
-    persistDocument(persistentStorage, {
+    persistDocument(storage, {
       userId,
       filename: cachedResult.filename,
       pageCount: cachedResult.metadata.pages,

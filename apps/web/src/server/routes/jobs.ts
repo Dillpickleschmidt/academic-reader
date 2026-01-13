@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 import type { BackendType, ConversionJob, WideEvent } from "../types"
-import type { S3Storage, TempStorage } from "../storage"
-import { jobFileMap } from "../storage"
+import type { Storage } from "../storage/types"
+import { jobFileMap } from "../storage/job-file-map"
 import { resultCache } from "../storage/result-cache"
 import { cleanupJob } from "../cleanup"
 import { createBackend } from "../backends/factory"
@@ -15,8 +15,7 @@ import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 import type { ChunkInput } from "../services/document-persistence"
 
 type Variables = {
-  storage: S3Storage | null
-  tempStorage: TempStorage | null
+  storage: Storage
 }
 
 type CleanupReason = "cancelled" | "failed" | "timeout" | "client_disconnect"
@@ -24,13 +23,13 @@ type CleanupReason = "cancelled" | "failed" | "timeout" | "client_disconnect"
 async function handleCleanup(
   event: WideEvent,
   jobId: string,
-  storage: S3Storage | null,
+  storage: Storage,
   reason: CleanupReason,
 ): Promise<void> {
   const result = await tryCatch(cleanupJob(jobId, storage))
   event.cleanup = result.success
     ? { reason, ...result.data }
-    : { reason, cleaned: false, s3Error: getErrorMessage(result.error) }
+    : { reason, cleaned: false, deleteError: getErrorMessage(result.error) }
 }
 
 export const jobs = new Hono<{ Variables: Variables }>()
@@ -55,14 +54,18 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
   const event = c.get("event")
   const jobId = c.req.param("jobId")
   const backendType = process.env.BACKEND_MODE || "local"
-  const tempStorage = c.get("tempStorage")
+  const storage = c.get("storage")
 
   event.jobId = jobId
   event.backend = backendType as BackendType
 
   const backendResult = await tryCatch(async () => createBackend())
   if (!backendResult.success) {
-    event.error = { category: "backend", message: getErrorMessage(backendResult.error), code: "BACKEND_INIT_ERROR" }
+    event.error = {
+      category: "backend",
+      message: getErrorMessage(backendResult.error),
+      code: "BACKEND_INIT_ERROR",
+    }
     emitStreamingEvent(event)
     return c.json({ error: "Failed to initialize backend" }, 500)
   }
@@ -74,13 +77,21 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
 
     const responseResult = await tryCatch(fetch(streamUrl))
     if (!responseResult.success) {
-      event.error = { category: "network", message: getErrorMessage(responseResult.error), code: "STREAM_CONNECT_ERROR" }
+      event.error = {
+        category: "network",
+        message: getErrorMessage(responseResult.error),
+        code: "STREAM_CONNECT_ERROR",
+      }
       emitStreamingEvent(event)
       return c.json({ error: "Failed to connect to stream" }, 500)
     }
 
     if (!responseResult.data.ok || !responseResult.data.body) {
-      event.error = { category: "backend", message: "Stream not available", code: "STREAM_NOT_OK" }
+      event.error = {
+        category: "backend",
+        message: "Stream not available",
+        code: "STREAM_NOT_OK",
+      }
       emitStreamingEvent(event)
       return c.json({ error: "Failed to connect to stream" }, 500)
     }
@@ -129,7 +140,9 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
       const sendEvent = (sseEvent: string, data: unknown) => {
         eventCount++
         controller.enqueue(
-          encoder.encode(`event: ${sseEvent}\ndata: ${JSON.stringify(data)}\n\n`),
+          encoder.encode(
+            `event: ${sseEvent}\ndata: ${JSON.stringify(data)}\n\n`,
+          ),
         )
       }
 
@@ -139,8 +152,6 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
       let htmlReadySent = false
       let finalStatus: "completed" | "failed" | "timeout" | "cancelled" =
         "timeout"
-
-      const storage = c.get("storage")
 
       while (!completed && pollCount < POLLING.MAX_POLLS) {
         // Check if client disconnected
@@ -160,7 +171,11 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
         if (!jobResult.success) {
           sendEvent("error", { message: "Failed to get job status" })
           finalStatus = "failed"
-          event.error = { category: "backend", message: getErrorMessage(jobResult.error), code: "POLL_ERROR" }
+          event.error = {
+            category: "backend",
+            message: getErrorMessage(jobResult.error),
+            code: "POLL_ERROR",
+          }
           completed = true
           break
         }
@@ -188,30 +203,25 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
                   content: stripHtmlForEmbedding(chunk.html),
                   page: chunk.page,
                   section: chunk.section_hierarchy
-                    ? Object.values(chunk.section_hierarchy).filter(Boolean).join(" > ")
+                    ? Object.values(chunk.section_hierarchy)
+                        .filter(Boolean)
+                        .join(" > ")
                     : undefined,
                 }))
                 .filter((c) => c.content.trim().length > 0)
 
-              // Get original PDF from temp/S3 storage
+              // Get original PDF from storage and delete upload
               const fileInfo = jobFileMap.get(jobId)
               let originalPdf: Buffer | null = null
-              if (fileInfo?.fileId) {
-                if (tempStorage) {
-                  const temp = await tempStorage.retrieve(fileInfo.fileId)
-                  if (temp) originalPdf = Buffer.from(temp.data)
+              if (fileInfo?.uploadKey) {
+                const bytesResult = await tryCatch(
+                  storage.getFileBytes(fileInfo.uploadKey),
+                )
+                if (bytesResult.success) {
+                  originalPdf = bytesResult.data
                 }
-                if (!originalPdf && storage) {
-                  const urlResult = await tryCatch(storage.getFileUrl(fileInfo.fileId))
-                  if (urlResult.success) {
-                    try {
-                      const pdfRes = await fetch(urlResult.data)
-                      if (pdfRes.ok) originalPdf = Buffer.from(await pdfRes.arrayBuffer())
-                    } catch {
-                      // Network error fetching PDF - continue without it
-                    }
-                  }
-                }
+                // Delete upload immediately after reading
+                await storage.deleteUpload(fileInfo.uploadKey).catch(() => {})
               }
 
               // Cache for persist endpoint (5 min TTL)
@@ -219,7 +229,9 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
                 html: job.result.formats.html,
                 markdown: job.result.formats.markdown,
                 chunks,
-                metadata: { pages: (job.result.metadata as { pages?: number })?.pages },
+                metadata: {
+                  pages: (job.result.metadata as { pages?: number })?.pages,
+                },
                 filename: fileInfo?.filename || "document.pdf",
                 originalPdf,
               })
@@ -228,7 +240,7 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
             // Send completed event with jobId for potential persistence
             sendEvent("completed", { ...job.result, jobId })
             finalStatus = "completed"
-            // Remove file tracking (but keep S3 file on success)
+            // Remove file tracking (upload already deleted)
             jobFileMap.delete(jobId)
             completed = true
             break
@@ -236,7 +248,11 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
           case "failed": {
             sendEvent("failed", { error: job.error })
             finalStatus = "failed"
-            event.error = { category: "backend", message: job.error || "Job failed", code: "JOB_FAILED" }
+            event.error = {
+              category: "backend",
+              message: job.error || "Job failed",
+              code: "JOB_FAILED",
+            }
             await handleCleanup(event, jobId, storage, "failed")
             completed = true
             break
@@ -251,14 +267,20 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
         }
 
         if (!completed) {
-          await new Promise((resolve) => setTimeout(resolve, POLLING.INTERVAL_MS))
+          await new Promise((resolve) =>
+            setTimeout(resolve, POLLING.INTERVAL_MS),
+          )
           pollCount++
         }
       }
 
       if (!completed) {
         sendEvent("error", { message: "Polling timeout" })
-        event.error = { category: "backend", message: "Polling timeout", code: "POLL_TIMEOUT" }
+        event.error = {
+          category: "backend",
+          message: "Polling timeout",
+          code: "POLL_TIMEOUT",
+        }
         // Cleanup on timeout
         if (backend.supportsCancellation() && backend.cancelJob) {
           void backend.cancelJob(jobId).catch(() => {})
@@ -272,7 +294,12 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
       emitStreamingEvent(event, {
         streamEvents: eventCount,
         durationMs: Math.round(performance.now() - streamStart),
-        status: finalStatus === "completed" ? 200 : finalStatus === "cancelled" ? 499 : 500,
+        status:
+          finalStatus === "completed"
+            ? 200
+            : finalStatus === "cancelled"
+              ? 499
+              : 500,
         pollCount,
       })
     },
@@ -293,7 +320,11 @@ jobs.post("/jobs/:jobId/cancel", async (c) => {
 
   const backendResult = await tryCatch(async () => createBackend())
   if (!backendResult.success) {
-    event.error = { category: "backend", message: getErrorMessage(backendResult.error), code: "BACKEND_INIT_ERROR" }
+    event.error = {
+      category: "backend",
+      message: getErrorMessage(backendResult.error),
+      code: "BACKEND_INIT_ERROR",
+    }
     return c.json({ error: "Failed to initialize backend" }, 500)
   }
   const backend = backendResult.data
@@ -304,7 +335,11 @@ jobs.post("/jobs/:jobId/cancel", async (c) => {
 
   const cancelResult = await tryCatch(backend.cancelJob!(jobId))
   if (!cancelResult.success) {
-    event.error = { category: "backend", message: getErrorMessage(cancelResult.error), code: "CANCEL_ERROR" }
+    event.error = {
+      category: "backend",
+      message: getErrorMessage(cancelResult.error),
+      code: "CANCEL_ERROR",
+    }
     return c.json({ error: "Failed to cancel job" }, 500)
   }
 

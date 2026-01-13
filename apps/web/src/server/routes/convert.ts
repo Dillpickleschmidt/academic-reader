@@ -1,14 +1,13 @@
 import { Hono } from "hono"
+import { extname } from "path"
 import type { BackendType, OutputFormat, ConversionInput } from "../types"
-import type { S3Storage, TempStorage } from "../storage"
-import { jobFileMap } from "../storage"
+import type { Storage } from "../storage/types"
+import { jobFileMap } from "../storage/job-file-map"
 import { createBackend } from "../backends/factory"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 
-// Extended context with storage adapters
 type Variables = {
-  storage: S3Storage | null
-  tempStorage: TempStorage | null
+  storage: Storage
 }
 
 export const convert = new Hono<{ Variables: Variables }>()
@@ -18,7 +17,17 @@ convert.post("/convert/:fileId", async (c) => {
   const fileId = c.req.param("fileId")
   const query = c.req.query()
   const backendType = process.env.BACKEND_MODE || "local"
-  const filename = query.filename || "document.pdf"
+  const filename = query.filename
+  if (!filename) {
+    return c.json({ error: "Missing filename parameter" }, { status: 400 })
+  }
+
+  // Compute upload key for storage operations
+  const ext = extname(filename).slice(1).toLowerCase()
+  if (!ext) {
+    return c.json({ error: "Filename must have an extension" }, { status: 400 })
+  }
+  const uploadKey = `uploads/${fileId}.${ext}`
 
   event.fileId = fileId
   event.backend = backendType as BackendType
@@ -41,90 +50,43 @@ convert.post("/convert/:fileId", async (c) => {
   }
   const backend = backendResult.data
 
+  const baseInput = {
+    fileId,
+    outputFormat: (query.output_format as OutputFormat) || "html",
+    useLlm: query.use_llm === "true",
+    forceOcr: query.force_ocr === "true",
+    pageRange: query.page_range || "",
+  }
+
   let input: ConversionInput
 
-  // Local mode: just pass fileId, worker has the file
   if (backendType === "local") {
     const localUrl = process.env.LOCAL_WORKER_URL || "http://localhost:8000"
-    input = {
-      fileId,
-      fileUrl: `${localUrl}/files/${fileId}`,
-      outputFormat: (query.output_format as OutputFormat) || "html",
-      useLlm: query.use_llm === "true",
-      forceOcr: query.force_ocr === "true",
-      pageRange: query.page_range || "",
-    }
-  }
-  // Datalab mode: get file from temp storage for direct upload
-  else if (backendType === "datalab") {
-    const tempStorage = c.get("tempStorage")
-    if (!tempStorage) {
+    input = { ...baseInput, fileUrl: `${localUrl}/files/${fileId}` }
+  } else if (backendType === "datalab") {
+    const storage = c.get("storage")
+    const bytesResult = await tryCatch(storage.getFileBytes(uploadKey))
+    if (!bytesResult.success) {
       event.error = {
         category: "storage",
-        message: "Temp storage not configured",
-        code: "TEMP_STORAGE_MISSING",
-      }
-      return c.json({ error: "Temp storage not configured" }, { status: 500 })
-    }
-
-    const tempFileResult = await tryCatch(tempStorage.retrieve(fileId))
-    if (!tempFileResult.success) {
-      event.error = {
-        category: "storage",
-        message: getErrorMessage(tempFileResult.error),
-        code: "TEMP_RETRIEVE_ERROR",
+        message: getErrorMessage(bytesResult.error),
+        code: "FILE_READ_ERROR",
       }
       return c.json({ error: "Failed to retrieve file" }, { status: 500 })
     }
-    if (!tempFileResult.data) {
-      event.error = {
-        category: "storage",
-        message: "File not found or expired",
-        code: "FILE_NOT_FOUND",
-      }
-      return c.json({ error: "File not found or expired" }, { status: 404 })
-    }
-
-    input = {
-      fileId,
-      fileData: tempFileResult.data.data,
-      filename: tempFileResult.data.filename,
-      outputFormat: (query.output_format as OutputFormat) || "html",
-      useLlm: query.use_llm === "true",
-      forceOcr: query.force_ocr === "true",
-      pageRange: query.page_range || "",
-    }
-  }
-  // Runpod mode: get file URL from S3
-  else if (backendType === "runpod") {
+    input = { ...baseInput, fileData: bytesResult.data, filename }
+  } else if (backendType === "runpod") {
     const storage = c.get("storage")
-    if (!storage) {
-      event.error = {
-        category: "storage",
-        message: "S3 storage not configured",
-        code: "S3_STORAGE_MISSING",
-      }
-      return c.json({ error: "S3 storage not configured" }, { status: 500 })
-    }
-
-    const fileUrlResult = await tryCatch(storage.getFileUrl(fileId))
+    const fileUrlResult = await tryCatch(storage.getFileUrl(uploadKey))
     if (!fileUrlResult.success) {
       event.error = {
         category: "storage",
         message: getErrorMessage(fileUrlResult.error),
-        code: "S3_URL_ERROR",
+        code: "FILE_URL_ERROR",
       }
       return c.json({ error: "Failed to get file URL" }, { status: 500 })
     }
-
-    input = {
-      fileId,
-      fileUrl: fileUrlResult.data,
-      outputFormat: (query.output_format as OutputFormat) || "html",
-      useLlm: query.use_llm === "true",
-      forceOcr: query.force_ocr === "true",
-      pageRange: query.page_range || "",
-    }
+    input = { ...baseInput, fileUrl: fileUrlResult.data }
   } else {
     event.error = {
       category: "validation",
@@ -146,18 +108,13 @@ convert.post("/convert/:fileId", async (c) => {
 
   event.jobId = jobResult.data
 
-  // Track job-file association for cleanup on cancel/failure and persistence
-  jobFileMap.set(jobResult.data, fileId, filename, backendType as BackendType)
-
-  // Best-effort cleanup for datalab temp files (don't fail request on cleanup errors)
-  if (backendType === "datalab") {
-    const tempStorage = c.get("tempStorage")
-    if (tempStorage) {
-      void tempStorage.delete(fileId).catch((err) => {
-        console.warn(`[convert] Failed to cleanup temp file ${fileId}:`, err)
-      })
-    }
-  }
+  // Track job-file association for cleanup and persistence
+  jobFileMap.set(
+    jobResult.data,
+    backendType === "local" ? fileId : uploadKey,
+    filename,
+    backendType as BackendType,
+  )
 
   return c.json({ job_id: jobResult.data })
 })

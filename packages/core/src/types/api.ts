@@ -12,7 +12,7 @@ export type JobStatus =
 export interface ConversionInput {
   fileId: string
   fileUrl?: string // For Runpod/local (S3 URL)
-  fileData?: ArrayBuffer // For Datalab (direct upload)
+  fileData?: ArrayBuffer | Buffer // For Datalab (direct upload)
   filename?: string // For Datalab (original filename)
   outputFormat: OutputFormat
   useLlm: boolean

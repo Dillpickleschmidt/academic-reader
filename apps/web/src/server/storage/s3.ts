@@ -2,6 +2,7 @@ import { AwsClient } from "aws4fetch"
 import { readFileSync, existsSync } from "fs"
 import { extname } from "path"
 import type { UploadResult, PresignedUrlResult } from "../types"
+import type { Storage } from "./types"
 
 const TUNNEL_URL_FILE = "/tunnel/url"
 
@@ -16,8 +17,7 @@ export interface S3Config {
  * S3-compatible storage.
  * Works with Cloudflare R2, MinIO, AWS S3, and other S3-compatible services.
  */
-export class S3Storage {
-  readonly name = "s3"
+export class S3Storage implements Storage {
   private config: S3Config
   private client: AwsClient
 
@@ -100,13 +100,12 @@ export class S3Storage {
     return undefined
   }
 
-  async getFileUrl(fileId: string): Promise<string> {
-    const key = await this.findFileKey(fileId)
-    const url = this.getObjectUrl(key)
+  async getFileUrl(uploadKey: string): Promise<string> {
+    const url = this.getObjectUrl(uploadKey)
 
     const tunnelUrl = this.getTunnelUrl()
     if (tunnelUrl) {
-      return `${tunnelUrl}/${this.config.bucket}/${key}`
+      return `${tunnelUrl}/${this.config.bucket}/${uploadKey}`
     }
 
     const signedRequest = await this.client.sign(
@@ -117,38 +116,12 @@ export class S3Storage {
     return signedRequest.url
   }
 
-  private async findFileKey(fileId: string): Promise<string> {
-    const prefix = `uploads/${fileId}`
-    const url = new URL(`${this.config.endpoint}/${this.config.bucket}`)
-    url.searchParams.set("list-type", "2")
-    url.searchParams.set("prefix", prefix)
-    url.searchParams.set("max-keys", "1")
-
-    const response = await this.client.fetch(url.toString(), {
-      method: "GET",
-    })
-
-    if (!response.ok) {
-      throw new Error(`S3 list failed: ${await response.text()}`)
-    }
-
-    const xml = await response.text()
-    const keyMatch = xml.match(/<Key>([^<]+)<\/Key>/)
-
-    if (!keyMatch) {
-      throw new Error(`File not found: ${fileId}`)
-    }
-
-    return keyMatch[1]
-  }
-
   /**
    * Delete a file from S3 storage.
    * @returns true if deleted successfully or already gone, false on error
    */
-  async deleteFile(fileId: string): Promise<boolean> {
+  async deleteFile(key: string): Promise<boolean> {
     try {
-      const key = await this.findFileKey(fileId)
       const url = this.getObjectUrl(key)
 
       const response = await this.client.fetch(url.toString(), {
@@ -158,11 +131,7 @@ export class S3Storage {
       // 204 = deleted, 404 = already gone - both are success
       return response.ok || response.status === 404
     } catch (error) {
-      // File not found in findFileKey means it's already deleted
-      if (error instanceof Error && error.message.includes("File not found")) {
-        return true
-      }
-      console.warn(`[S3] Failed to delete file ${fileId}:`, error)
+      console.warn(`[S3] Failed to delete file ${key}:`, error)
       return false
     }
   }
@@ -228,22 +197,19 @@ export class S3Storage {
     return response.ok
   }
 
+  // ===== Upload Operations (unified interface) =====
+
   /**
-   * Delete a file at a specific path.
-   * @returns true if deleted or doesn't exist, false on error
+   * Get raw bytes of uploaded file.
    */
-  async deleteFilePath(relativePath: string): Promise<boolean> {
-    try {
-      const url = this.getObjectUrl(relativePath)
+  async getFileBytes(uploadKey: string): Promise<Buffer> {
+    return this.readFile(uploadKey)
+  }
 
-      const response = await this.client.fetch(url.toString(), {
-        method: "DELETE",
-      })
-
-      return response.ok || response.status === 404
-    } catch (error) {
-      console.warn(`[S3] Failed to delete ${relativePath}:`, error)
-      return false
-    }
+  /**
+   * Delete an uploaded file.
+   */
+  async deleteUpload(uploadKey: string): Promise<boolean> {
+    return this.deleteFile(uploadKey)
   }
 }

@@ -3,13 +3,13 @@
  */
 import { Hono } from "hono"
 import { requireAuth } from "../middleware/auth"
-import type { PersistentStorage } from "../storage"
+import type { Storage } from "../storage/types"
 import { loadPersistedDocument } from "../services/document-persistence"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { enhanceHtmlForReader } from "../utils/html-processing"
 
 type Variables = {
-  persistentStorage: PersistentStorage | null
+  storage: Storage
   userId: string
 }
 
@@ -24,20 +24,10 @@ savedDocuments.get("/saved-documents/:documentId", requireAuth, async (c) => {
   event.backend = (process.env.BACKEND_MODE || "local") as "local" | "runpod" | "datalab"
   const documentId = c.req.param("documentId")
   const userId = c.get("userId")
+  const storage = c.get("storage")
   event.documentId = documentId
 
-  const persistentStorage = c.get("persistentStorage")
-
-  if (!persistentStorage) {
-    event.error = {
-      category: "configuration",
-      message: "Persistent storage not available",
-      code: "STORAGE_NOT_CONFIGURED",
-    }
-    return c.json({ error: "Persistent storage not available" }, 503)
-  }
-
-  const loadResult = await tryCatch(loadPersistedDocument(persistentStorage, userId, documentId))
+  const loadResult = await tryCatch(loadPersistedDocument(storage, userId, documentId))
 
   if (!loadResult.success) {
     event.error = {

@@ -1,21 +1,21 @@
-import type { S3Storage } from "../storage"
-import { jobFileMap } from "../storage"
+import type { Storage } from "../storage/types"
+import { jobFileMap } from "../storage/job-file-map"
 
 export interface CleanupResult {
   cleaned: boolean
-  fileId?: string
-  s3Deleted?: boolean
-  s3Error?: string
+  uploadKey?: string
+  uploadDeleted?: boolean
+  deleteError?: string
 }
 
 /**
  * Clean up resources associated with a job.
- * Deletes S3 file (if runpod mode) and removes job-file mapping.
- * Returns results for the caller to attach to the wide event.
+ * Deletes upload file and removes job-file mapping.
+ * Used for cancel/failure cases (success cleanup happens in jobs.ts).
  */
 export async function cleanupJob(
   jobId: string,
-  storage: S3Storage | null,
+  storage: Storage,
 ): Promise<CleanupResult> {
   const entry = jobFileMap.get(jobId)
 
@@ -23,25 +23,25 @@ export async function cleanupJob(
     return { cleaned: false }
   }
 
-  const { fileId, backendType } = entry
-  let s3Deleted: boolean | undefined
-  let s3Error: string | undefined
+  const { uploadKey, backendType } = entry
+  let uploadDeleted: boolean | undefined
+  let deleteError: string | undefined
 
-  // Only delete S3 files for runpod mode
-  if (backendType === "runpod" && storage) {
+  // Local mode files are managed by the worker, not our storage
+  if (backendType !== "local") {
     try {
-      s3Deleted = await storage.deleteFile(fileId)
-      if (!s3Deleted) {
-        s3Error = "deleteFile returned false"
+      uploadDeleted = await storage.deleteUpload(uploadKey)
+      if (!uploadDeleted) {
+        deleteError = "deleteUpload returned false"
       }
     } catch (err) {
-      s3Deleted = false
-      s3Error = err instanceof Error ? err.message : String(err)
+      uploadDeleted = false
+      deleteError = err instanceof Error ? err.message : String(err)
     }
   }
 
   // Always remove from tracking
   jobFileMap.delete(jobId)
 
-  return { cleaned: true, fileId, s3Deleted, s3Error }
+  return { cleaned: true, uploadKey, uploadDeleted, deleteError }
 }

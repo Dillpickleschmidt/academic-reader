@@ -14,47 +14,23 @@ import { persist } from "./routes/persist"
 import { documentEmbeddings } from "./routes/document-embeddings"
 import { savedDocuments } from "./routes/saved-documents"
 import { chat } from "./routes/chat"
-import {
-  createStorage,
-  createPersistentStorage,
-  MemoryTempStorage,
-  type S3Storage,
-  type TempStorage,
-  type PersistentStorage,
-} from "./storage"
+import type { Storage } from "./storage/types"
+import { createStorage } from "./storage/factory"
 import { wideEvent } from "./middleware/wide-event-middleware"
 
 type Variables = {
-  storage: S3Storage | null
-  tempStorage: TempStorage | null
-  persistentStorage: PersistentStorage | null
+  storage: Storage
 }
 
 const app = new Hono<{ Variables: Variables }>()
 
-// Create storage instances (singleton for the process lifetime)
-const tempStorage = new MemoryTempStorage()
+// Create unified storage (S3 in prod, Disk in dev)
 const storage = createStorage({
-  BACKEND_MODE: (process.env.BACKEND_MODE as "local" | "runpod" | "datalab") || "datalab",
   S3_ENDPOINT: process.env.S3_ENDPOINT,
   S3_ACCESS_KEY: process.env.S3_ACCESS_KEY,
   S3_SECRET_KEY: process.env.S3_SECRET_KEY,
   S3_BUCKET: process.env.S3_BUCKET,
 })
-
-// Persistent storage for saved documents (local in dev, S3 in prod)
-let persistentStorage: PersistentStorage | null = null
-try {
-  persistentStorage = createPersistentStorage({
-    S3_ENDPOINT: process.env.S3_ENDPOINT,
-    S3_ACCESS_KEY: process.env.S3_ACCESS_KEY,
-    S3_SECRET_KEY: process.env.S3_SECRET_KEY,
-    S3_BUCKET: process.env.S3_BUCKET,
-  })
-} catch (error) {
-  const message = error instanceof Error ? error.message : String(error)
-  console.warn("Persistent storage not available:", message)
-}
 
 // Wide event middleware for API routes only (not static files)
 app.use("/api/*", wideEvent)
@@ -62,8 +38,6 @@ app.use("/api/*", wideEvent)
 // Middleware to inject storage
 app.use("*", async (c, next) => {
   c.set("storage", storage)
-  c.set("tempStorage", tempStorage)
-  c.set("persistentStorage", persistentStorage)
   await next()
 })
 
@@ -135,7 +109,7 @@ const tlsCert = process.env.TLS_CERT
 const tlsKey = process.env.TLS_KEY
 
 console.log(`Starting server on port ${port}`)
-console.log(`Backend: ${process.env.BACKEND_MODE || "datalab"}`)
+console.log(`Backend: ${process.env.BACKEND_MODE || "local"}`)
 if (tlsCert && tlsKey) console.log("TLS: enabled")
 
 export default {

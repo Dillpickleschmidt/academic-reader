@@ -1,5 +1,7 @@
 import { mkdir, writeFile, readFile, unlink, access } from "fs/promises"
-import { join, dirname } from "path"
+import { join, dirname, extname } from "path"
+import type { UploadResult } from "../types"
+import type { Storage } from "./types"
 
 const DEFAULT_STORAGE_DIR = "./data"
 
@@ -7,8 +9,7 @@ const DEFAULT_STORAGE_DIR = "./data"
  * Disk-based filesystem storage for persistent documents.
  * Used in development (NODE_ENV !== 'production').
  */
-export class DiskStorage {
-  readonly name = "disk"
+export class DiskStorage implements Storage {
   private baseDir: string
 
   constructor(baseDir?: string) {
@@ -84,5 +85,52 @@ export class DiskStorage {
    */
   getFilePath(relativePath: string): string {
     return this.getFullPath(relativePath)
+  }
+
+  // ===== Upload Operations =====
+  // These methods handle temporary file uploads
+
+  /**
+   * Upload a file to disk storage.
+   * Stores in uploads/{fileId}.{ext}
+   */
+  async uploadFile(
+    file: ArrayBuffer,
+    filename: string,
+    _contentType: string,
+  ): Promise<UploadResult> {
+    const fileId = crypto.randomUUID()
+    const ext = extname(filename).slice(1).toLowerCase() || "pdf"
+    const key = `uploads/${fileId}.${ext}`
+
+    await this.saveFile(key, Buffer.from(file))
+
+    return {
+      fileId,
+      filename,
+      size: file.byteLength,
+    }
+  }
+
+  /**
+   * Get file URL/path for an uploaded file.
+   * For disk storage, returns the absolute filesystem path.
+   */
+  async getFileUrl(uploadKey: string): Promise<string> {
+    return this.getFullPath(uploadKey)
+  }
+
+  /**
+   * Get raw bytes of uploaded file.
+   */
+  async getFileBytes(uploadKey: string): Promise<Buffer> {
+    return this.readFile(uploadKey)
+  }
+
+  /**
+   * Delete an uploaded file.
+   */
+  async deleteUpload(uploadKey: string): Promise<boolean> {
+    return this.deleteFile(uploadKey)
   }
 }

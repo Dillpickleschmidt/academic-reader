@@ -70,9 +70,9 @@ export interface WideEvent {
   cleanup?: {
     reason: "cancelled" | "failed" | "timeout" | "client_disconnect"
     cleaned: boolean
-    fileId?: string
-    s3Deleted?: boolean
-    s3Error?: string
+    uploadKey?: string
+    uploadDeleted?: boolean
+    deleteError?: string
   }
 
   // Extensible

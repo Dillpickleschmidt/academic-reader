@@ -8,7 +8,7 @@
  *   documents/{userId}/{documentId}/content.md
  */
 
-import type { PersistentStorage } from "../storage"
+import type { Storage } from "../storage/types"
 import { convex } from "./convex"
 import { api } from "@repo/convex/convex/_generated/api"
 
@@ -45,7 +45,7 @@ export function getStoragePaths(userId: string, documentId: string) {
  * Persist a document: create Convex record and save files to storage.
  */
 export async function persistDocument(
-  storage: PersistentStorage,
+  storage: Storage,
   input: PersistDocumentInput,
 ): Promise<string> {
   // 1. Create document + chunks in Convex
@@ -73,7 +73,7 @@ export async function persistDocument(
  * Load a persisted document's content from storage.
  */
 export async function loadPersistedDocument(
-  storage: PersistentStorage,
+  storage: Storage,
   userId: string,
   documentId: string,
 ): Promise<{ html: string; markdown: string }> {

@@ -45,7 +45,11 @@ export class DatalabBackend implements ConversionBackend {
       throw new Error("Datalab backend requires fileData for direct upload")
     }
 
-    const blob = new Blob([input.fileData], { type: "application/pdf" })
+    // Convert Buffer to Uint8Array if needed (Blob accepts Uint8Array but not Buffer)
+    const fileBytes = Buffer.isBuffer(input.fileData)
+      ? new Uint8Array(input.fileData)
+      : input.fileData
+    const blob = new Blob([fileBytes], { type: "application/pdf" })
     formData.append("file", blob, input.filename || "document.pdf")
 
     // Request all output formats
