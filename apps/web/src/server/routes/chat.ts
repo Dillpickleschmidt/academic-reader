@@ -1,5 +1,11 @@
 import { Hono } from "hono"
-import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai"
+import {
+  streamText,
+  convertToModelMessages,
+  stepCountIs,
+  tool,
+  type UIMessage,
+} from "ai"
 import { z } from "zod"
 import type { ConvexHttpClient } from "convex/browser"
 import type { Id } from "@repo/convex/convex/_generated/dataModel"
@@ -24,7 +30,10 @@ interface ChatRequest {
 }
 
 // Create search tool with documentId and authenticated client
-function createSearchTool(documentId: string | undefined, convex: ConvexHttpClient) {
+function createSearchTool(
+  documentId: string | undefined,
+  convex: ConvexHttpClient,
+) {
   return tool({
     description:
       "Search the uploaded document for relevant information to answer the user's question",
@@ -54,7 +63,10 @@ function createSearchTool(documentId: string | undefined, convex: ConvexHttpClie
         // Format results with page citations
         return chunks
           .map(
-            (c: { content: string; page: number; section?: string }, i: number) =>
+            (
+              c: { content: string; page: number; section?: string },
+              i: number,
+            ) =>
               `[${i + 1}] (Page ${c.page}${c.section ? `, ${c.section}` : ""}): ${c.content}`,
           )
           .join("\n\n")
@@ -76,7 +88,11 @@ chat.post("/chat", async (c) => {
   // Create authenticated Convex client for RAG searches
   const convex = await createAuthenticatedConvexClient(c.req.raw.headers)
   if (!convex) {
-    event.error = { category: "auth", message: "Failed to authenticate with Convex", code: "CONVEX_AUTH_ERROR" }
+    event.error = {
+      category: "auth",
+      message: "Failed to authenticate with Convex",
+      code: "CONVEX_AUTH_ERROR",
+    }
     emitStreamingEvent(event, { status: 401 })
     return c.json({ error: "Authentication failed" }, 401)
   }
@@ -159,7 +175,7 @@ If the user asks a general question not about the document, answer normally with
       messages: await convertToModelMessages(messages),
       system: systemPrompt,
       tools,
-      stopWhen: isSummaryMode ? undefined : stepCountIs(3), // Allow tool use + response
+      stopWhen: isSummaryMode ? undefined : stepCountIs(20),
       onError: ({ error }) => {
         streamError = getErrorMessage(error)
       },
