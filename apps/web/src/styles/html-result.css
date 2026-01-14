@@ -10,22 +10,16 @@
 .reader-output {
   --reader-text-heading: oklch(0.218 0 0);
   --reader-text-heading-h2: var(--reader-text-heading);
-  --reader-citation-bg: #f8f9fa;
-  --reader-citation-text: #555;
 }
 
 :is([data-reader-mode="comfort"], #theme-comfort:checked ~ .reader-output) {
   --reader-text-heading: #2a2520;
   --reader-text-heading-h2: var(--reader-text-heading);
-  --reader-citation-bg: #ebe6db;
-  --reader-citation-text: #5a4f44;
 }
 
 :is([data-reader-mode="dark"], #theme-dark:checked ~ .reader-output) {
   --reader-text-heading: #e8e8e8;
   --reader-text-heading-h2: oklch(from var(--reader-link) L calc(C * 0.65) H);
-  --reader-citation-bg: #2d2d2d;
-  --reader-citation-text: #aaa;
 }
 
 /* Base typography - scoped to .reader-content to not affect chat panel */
@@ -136,11 +130,11 @@
 
 /* Citations */
 .reader-content .citation {
-  background: var(--reader-citation-bg);
+  background: var(--reader-code-bg);
   padding: 0.1em 0.3em;
   border-radius: 3px;
   font-size: 0.85rem;
-  color: var(--reader-citation-text);
+  color: var(--reader-text-muted);
   white-space: nowrap;
   transition:
     background 0.15s,
