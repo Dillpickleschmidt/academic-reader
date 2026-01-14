@@ -67,7 +67,7 @@ html:has(#theme-dark:checked)::-webkit-scrollbar-thumb:hover {
   --reader-text-muted: #666;
   --reader-border: #eee;
   --reader-border-strong: #e0e0e0;
-  --reader-link: #0066cc;
+  --reader-link: oklch(0.6 0.13 163);
   --reader-code-bg: #f5f5f5;
 }
 
@@ -89,7 +89,7 @@ html:has(#theme-dark:checked)::-webkit-scrollbar-thumb:hover {
   --reader-text-muted: oklch(0.708 0 0);
   --reader-border: oklch(1 0 0 / 10%);
   --reader-border-strong: oklch(0.371 0 0);
-  --reader-link: #6db3f2;
+  --reader-link: oklch(0.7 0.15 162);
   --reader-code-bg: oklch(0.269 0 0);
 }
 

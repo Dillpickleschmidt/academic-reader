@@ -6,6 +6,7 @@ import { BookOpen, Bot, Download, Plus, Volume2 } from "lucide-react"
 import { NavMain } from "@/components/sidebar/nav-main"
 import { NavActions } from "@/components/sidebar/nav-actions"
 import { ColorThemeSelector } from "@/components/sidebar/ColorThemeSelector"
+import { TypographyStyleToggle } from "@/components/sidebar/TypographyStyleToggle"
 import {
   Sidebar,
   SidebarContent,
@@ -72,6 +73,9 @@ export function ReaderSidebar({
       name: "Text to Speech",
       icon: Volume2,
       disabled: true, // Placeholder - not implemented yet
+    },
+    {
+      render: <TypographyStyleToggle />,
     },
     {
       name: "Download",
