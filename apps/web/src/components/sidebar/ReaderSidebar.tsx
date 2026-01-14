@@ -68,6 +68,13 @@ export function ReaderSidebar({
       tocItems?.map((item) => ({
         title: item.title,
         url: `#${item.id}`,
+        onClick: () => {
+          const element = document.getElementById(item.id)
+          const container = document.querySelector(".reader-content")?.parentElement
+          if (element && container) {
+            container.scrollTo({ top: element.offsetTop, behavior: "smooth" })
+          }
+        },
       })) ?? [],
   }
 

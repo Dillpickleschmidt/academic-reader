@@ -31,6 +31,7 @@ export function NavMain({
     items?: ({
       title: string
       url: string
+      onClick?: () => void
     } | {
       render: ReactNode
     })[]
@@ -65,7 +66,19 @@ export function NavMain({
                       </SidebarMenuSubItem>
                     ) : (
                       <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton render={<a href={subItem.url} />}>
+                        <SidebarMenuSubButton
+                          render={
+                            <a
+                              href={subItem.url}
+                              onClick={(e) => {
+                                if (subItem.onClick) {
+                                  e.preventDefault()
+                                  subItem.onClick()
+                                }
+                              }}
+                            />
+                          }
+                        >
                           <span>{subItem.title}</span>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
