@@ -3,14 +3,12 @@ import { Hono } from "hono"
 import * as cheerio from "cheerio"
 import type { CheerioAPI } from "cheerio"
 import { minify } from "html-minifier-terser"
-import type { BackendType } from "../types"
 import type { Storage } from "../storage/types"
 import { getDocumentPath } from "../storage/types"
-import { jobFileMap } from "../storage/job-file-map"
 import { getAuth } from "../middleware/auth"
-import { createBackend } from "../backends/factory"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { enhanceHtmlForReader } from "../utils/html-processing"
+import { getImageMimeType } from "../utils/mime-types"
 import {
   escapeHtml,
   sanitizeTitle,
@@ -114,14 +112,6 @@ ${renderedContent}
 </html>`
 }
 
-const MIME_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  gif: "image/gif",
-}
-
 /**
  * Embed images from R2 as base64 data URIs for self-contained HTML downloads.
  * Looks for img tags with src URLs containing the docPath/images/ pattern.
@@ -149,112 +139,13 @@ async function embedImagesFromStorage(
       try {
         const buffer = await storage.readFile(`${docPath}/images/${filename}`)
         const base64 = buffer.toString("base64")
-        const ext = filename.split(".").pop()?.toLowerCase() || "png"
-        const mimeType = MIME_TYPES[ext] || "image/png"
-        $(el).attr("src", `data:${mimeType};base64,${base64}`)
+        $(el).attr("src", `data:${getImageMimeType(filename)};base64,${base64}`)
       } catch {
-        // Image not found - leave src as-is (will show broken image)
         console.warn(`[download] Failed to embed image: ${filename}`)
       }
     }),
   )
 }
-
-download.get("/jobs/:jobId/download", async (c) => {
-  const event = c.get("event")
-  const jobId = c.req.param("jobId")
-  const title = sanitizeTitle(c.req.query("title") || "")
-  const storage = c.get("storage")
-
-  event.jobId = jobId
-  event.backend = (process.env.BACKEND_MODE || "local") as BackendType
-
-  const backendResult = await tryCatch(async () => createBackend())
-  if (!backendResult.success) {
-    event.error = {
-      category: "backend",
-      message: getErrorMessage(backendResult.error),
-      code: "BACKEND_INIT_ERROR",
-    }
-    return c.json({ error: "Failed to initialize backend" }, { status: 500 })
-  }
-
-  const jobResult = await tryCatch(backendResult.data.getJobStatus(jobId))
-  if (!jobResult.success) {
-    event.error = {
-      category: "backend",
-      message: getErrorMessage(jobResult.error),
-      code: "JOB_STATUS_ERROR",
-    }
-    return c.json({ error: "Failed to get job status" }, { status: 500 })
-  }
-
-  let html = jobResult.data.result?.content || jobResult.data.htmlContent
-  if (!html) {
-    event.error = {
-      category: "validation",
-      message: "No HTML content available",
-      code: "NO_CONTENT",
-    }
-    return c.json(
-      { error: "No HTML content available for this job" },
-      { status: 404 },
-    )
-  }
-
-  html = enhanceHtmlForReader(html)
-  const $ = cheerio.load(html)
-
-  // Embed images from R2 as base64 for self-contained download
-  const fileInfo = jobFileMap.get(jobId)
-  if (fileInfo?.documentPath) {
-    await embedImagesFromStorage($, storage, fileInfo.documentPath)
-  }
-
-  const katexFontUsage = extractKatexFontUsage($)
-
-  const fontsResult = await tryCatch(
-    Promise.all([embedSourceSans(), subsetKatexFonts(katexFontUsage)]),
-  )
-  if (!fontsResult.success) {
-    event.error = {
-      category: "internal",
-      message: getErrorMessage(fontsResult.error),
-      code: "FONT_EMBED_ERROR",
-    }
-    return c.json({ error: "Failed to embed fonts" }, { status: 500 })
-  }
-
-  const [sourceSansCss, katexFontsCss] = fontsResult.data
-  const fontCss = `${sourceSansCss}\n${katexFontsCss}`
-  // Get HTML from cheerio after image embedding
-  const finalHtml = $("body").html() || html
-  const fullHtml = generateHtmlDocument(finalHtml, title, fontCss, katexCssRules)
-
-  const minifyResult = await tryCatch(
-    minify(fullHtml, {
-      collapseWhitespace: true,
-      removeComments: true,
-      minifyCSS: true,
-      minifyJS: true,
-    }),
-  )
-  if (!minifyResult.success) {
-    event.error = {
-      category: "internal",
-      message: getErrorMessage(minifyResult.error),
-      code: "MINIFY_ERROR",
-    }
-    return c.json({ error: "Failed to generate download" }, { status: 500 })
-  }
-
-  return new Response(minifyResult.data, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Content-Disposition": contentDisposition(`${title}.html`),
-    },
-  })
-})
 
 /**
  * Download by fileId - reads HTML from S3 storage.

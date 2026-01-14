@@ -2,6 +2,7 @@ import { AwsClient } from "aws4fetch"
 import { readFileSync, existsSync } from "fs"
 import type { PresignedUrlResult } from "../types"
 import type { Storage } from "./types"
+import { getImageMimeType } from "../utils/mime-types"
 
 const TUNNEL_URL_FILE = "/tunnel/url"
 
@@ -168,14 +169,6 @@ export class S3Storage implements Storage {
     docPath: string,
     images: Record<string, string>,
   ): Promise<Record<string, string>> {
-    const CONTENT_TYPES: Record<string, string> = {
-      png: "image/png",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      webp: "image/webp",
-      gif: "image/gif",
-    }
-
     const baseUrl = (this.config.publicUrl ?? this.config.endpoint).replace(
       /\/+$/,
       "",
@@ -186,13 +179,10 @@ export class S3Storage implements Storage {
         const key = `${docPath}/images/${filename}`
         const buffer = Buffer.from(base64Data, "base64")
 
-        const ext = filename.split(".").pop()?.toLowerCase() ?? "png"
-        const contentType = CONTENT_TYPES[ext] ?? "image/png"
-
         const url = this.getObjectUrl(key)
         const response = await this.client.fetch(url.toString(), {
           method: "PUT",
-          headers: { "Content-Type": contentType },
+          headers: { "Content-Type": getImageMimeType(filename) },
           body: new Uint8Array(buffer),
         })
 

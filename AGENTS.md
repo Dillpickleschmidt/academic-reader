@@ -133,7 +133,7 @@ Bun workspace monorepo with three packages:
 - `POST /api/upload` - Upload file
 - `POST /api/convert/:fileId` - Start conversion job
 - `GET /api/jobs/:jobId/stream` - SSE progress stream
-- `GET /api/download/:jobId` - Download converted result
+- `GET /api/files/:fileId/download` - Download converted result
 - `/api/auth/*` - Auth (proxied to Convex)
 
 ## Directory Structure

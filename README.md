@@ -57,7 +57,7 @@ Frontend and API served from VPS via Dokploy. Cloudflare proxy provides DDoS pro
 | `POST /api/upload`            | Upload file (to S3 or temp) |
 | `POST /api/convert/:fileId`   | Start conversion job        |
 | `GET /api/jobs/:jobId/stream` | SSE progress stream         |
-| `GET /api/download/:jobId`    | Download converted HTML     |
+| `GET /api/files/:fileId/download` | Download converted HTML |
 | `GET /api/auth/*`             | Auth (proxied to Convex)    |
 
 ### Storage
