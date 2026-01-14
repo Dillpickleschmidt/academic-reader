@@ -16,6 +16,7 @@ import {
 import { ReaderSidebar } from "./sidebar/ReaderSidebar"
 import { AIChatPanel } from "./AIChatPanel"
 import { ChatPanelProvider, useChatPanel } from "@/context/ChatPanelContext"
+import { useTableOfContents } from "@/hooks/use-table-of-contents"
 
 interface Props {
   children: ReactNode
@@ -36,6 +37,7 @@ function ReaderLayoutInner({
 }: Props) {
   const [readerMode, setReaderMode] = useReaderTheme()
   const { isOpen, close } = useChatPanel()
+  const tocItems = useTableOfContents()
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -43,6 +45,7 @@ function ReaderLayoutInner({
         <ReaderSidebar
           onDownload={onDownload}
           downloadDisabled={downloadDisabled}
+          tocItems={tocItems}
         />
       )}
       <SidebarInset className="h-svh overflow-hidden">

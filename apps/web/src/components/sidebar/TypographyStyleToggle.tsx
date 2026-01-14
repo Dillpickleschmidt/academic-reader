@@ -9,12 +9,12 @@ export function TypographyStyleToggle() {
   return (
     <SidebarMenuButton
       onClick={() => setStyle(isModern ? "classic" : "modern")}
-      tooltip="Modern Typography"
+      tooltip="Typography"
       data-active={isModern}
       className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
     >
       <RemoveFormatting />
-      <span>Modern Typography</span>
+      <span>Typography</span>
     </SidebarMenuButton>
   )
 }

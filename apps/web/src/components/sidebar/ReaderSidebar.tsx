@@ -18,20 +18,6 @@ import {
 import { useChatPanel } from "@/context/ChatPanelContext"
 import { useTTS } from "@/context/TTSContext"
 
-// Mock data - will be replaced with real data later
-const tocData = {
-  title: "Table of Contents",
-  url: "#",
-  icon: BookOpen,
-  isActive: true,
-  items: [
-    { title: "Introduction", url: "#" },
-    { title: "Methods", url: "#" },
-    { title: "Results", url: "#" },
-    { title: "Discussion", url: "#" },
-  ],
-}
-
 function ChatThreadsNewButton() {
   const { open } = useChatPanel()
   return (
@@ -62,14 +48,28 @@ const threadsData = {
 interface ReaderSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onDownload?: () => void
   downloadDisabled?: boolean
+  tocItems?: { id: string; title: string }[]
 }
 
 export function ReaderSidebar({
   onDownload,
   downloadDisabled,
+  tocItems,
   ...props
 }: ReaderSidebarProps) {
   const { isEnabled, enable, disable } = useTTS()
+
+  const tocData = {
+    title: "Table of Contents",
+    url: "#",
+    icon: BookOpen,
+    isActive: true,
+    items:
+      tocItems?.map((item) => ({
+        title: item.title,
+        url: `#${item.id}`,
+      })) ?? [],
+  }
 
   const actions = [
     {
