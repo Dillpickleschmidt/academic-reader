@@ -12,11 +12,12 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenuButton,
   SidebarMenuSubButton,
   SidebarRail,
 } from "@repo/core/ui/primitives/sidebar"
 import { useChatPanel } from "@/context/ChatPanelContext"
-import { useTTS } from "@/context/TTSContext"
+import { useTTSSelector, useTTSActions } from "@/context/TTSContext"
 
 function ChatThreadsNewButton() {
   const { open } = useChatPanel()
@@ -28,6 +29,22 @@ function ChatThreadsNewButton() {
       <Plus className="size-3 -ml-1.5 text-foreground/70! group-hover/new:text-foreground!" />
       <span>New</span>
     </SidebarMenuSubButton>
+  )
+}
+
+function TTSToggleButton() {
+  const isEnabled = useTTSSelector((s) => s.isEnabled)
+  const { enable, disable } = useTTSActions()
+  return (
+    <SidebarMenuButton
+      onClick={isEnabled ? disable : enable}
+      tooltip="Text to Speech"
+      data-active={isEnabled}
+      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+    >
+      <Volume2 />
+      <span>Text to Speech</span>
+    </SidebarMenuButton>
   )
 }
 
@@ -57,8 +74,6 @@ export function ReaderSidebar({
   tocItems,
   ...props
 }: ReaderSidebarProps) {
-  const { isEnabled, enable, disable } = useTTS()
-
   const tocData = {
     title: "Table of Contents",
     url: "#",
@@ -69,10 +84,9 @@ export function ReaderSidebar({
         title: item.title,
         url: `#${item.id}`,
         onClick: () => {
-          const element = document.getElementById(item.id)
-          const container = document.querySelector(".reader-content")?.parentElement
-          if (element && container) {
-            container.scrollTo({ top: element.offsetTop, behavior: "smooth" })
+          const el = document.getElementById(item.id)
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth" })
           }
         },
       })) ?? [],
@@ -80,12 +94,7 @@ export function ReaderSidebar({
 
   const actions = [
     {
-      name: "Text to Speech",
-      icon: Volume2,
-      onClick: isEnabled ? disable : enable,
-      disabled: false,
-      isActive: isEnabled,
-      className: "data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground",
+      render: <TTSToggleButton />,
     },
     {
       render: <TypographyStyleToggle />,

@@ -15,6 +15,7 @@ import {
 } from "@repo/core/ui/primitives/resizable"
 import { ReaderSidebar } from "./sidebar/ReaderSidebar"
 import { AIChatPanel } from "./AIChatPanel"
+import { TTSPlaybackBar } from "./TTSPlaybackBar"
 import { ChatPanelProvider, useChatPanel } from "@/context/ChatPanelContext"
 import { useTableOfContents } from "@/hooks/use-table-of-contents"
 
@@ -49,7 +50,7 @@ function ReaderLayoutInner({
         />
       )}
       <SidebarInset className="h-svh overflow-hidden">
-        <div className="reader-output" data-reader-mode={readerMode}>
+        <div className="reader-output flex flex-col" data-reader-mode={readerMode}>
           {showThemeToggle && (
             <div className="reader-theme-toggle">
               {THEMES.map((t) => {
@@ -68,7 +69,7 @@ function ReaderLayoutInner({
               })}
             </div>
           )}
-          <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
             <ResizablePanel id="content-panel" minSize="40%">
               <div className="overflow-auto h-full">
                 {/* Header inside left panel only */}
@@ -101,6 +102,7 @@ function ReaderLayoutInner({
               </>
             )}
           </ResizablePanelGroup>
+          <TTSPlaybackBar />
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -1,9 +1,10 @@
+import { useMemo } from "react"
 import "../styles/html-result.css"
 import "katex/dist/katex.min.css"
 import "katex/dist/contrib/copy-tex"
 import { ReaderLayout } from "../components/ReaderLayout"
 import { useDocumentContext } from "@/context/DocumentContext"
-import { useTTS } from "@/context/TTSContext"
+import { useTTSSelector } from "@/context/TTSContext"
 import { useTTSChunkDetection } from "@/hooks/use-tts-chunk-detection"
 
 interface Props {
@@ -21,8 +22,10 @@ export function HtmlResultPage({
 }: Props) {
   const documentContext = useDocumentContext()
   const chunks = documentContext?.chunks ?? []
-  const { isEnabled } = useTTS()
+  const isEnabled = useTTSSelector((s) => s.isEnabled)
   const { handleContentClick } = useTTSChunkDetection(chunks)
+
+  const htmlContent = useMemo(() => ({ __html: content }), [content])
 
   return (
     <ReaderLayout
@@ -36,7 +39,7 @@ export function HtmlResultPage({
       <div
         onClick={isEnabled ? handleContentClick : undefined}
         style={isEnabled ? { cursor: "pointer" } : undefined}
-        dangerouslySetInnerHTML={{ __html: content }}
+        dangerouslySetInnerHTML={htmlContent}
       />
     </ReaderLayout>
   )
