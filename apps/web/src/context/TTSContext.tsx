@@ -257,6 +257,9 @@ export function TTSProvider({
       currentTime: 0,
       segmentCurrentTime: 0,
     })
+
+    // Fire-and-forget: free GPU memory
+    fetch("/api/tts/unload", { method: "POST" }).catch(() => {})
   }, [store])
 
   const loadBlockTTS = useCallback(

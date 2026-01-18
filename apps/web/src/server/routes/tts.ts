@@ -269,3 +269,19 @@ tts.get("/tts/voices", async (c) => {
 
   return c.json({ voices: voicesResult.data })
 })
+
+// Unload TTS model to free GPU memory (local mode only)
+tts.post("/tts/unload", async (c) => {
+  if (process.env.BACKEND_MODE !== "local") {
+    return c.json({ unloaded: false, reason: "not local mode" })
+  }
+
+  const ttsWorkerUrl = process.env.TTS_WORKER_URL || "http://worker-tts:8001"
+  const response = await fetch(`${ttsWorkerUrl}/unload`, { method: "POST" })
+
+  if (!response.ok) {
+    return c.json({ unloaded: false, reason: "worker error" }, 500)
+  }
+
+  return c.json(await response.json())
+})

@@ -93,6 +93,12 @@ convert.post("/convert/:fileId", async (c) => {
     return c.json({ error: `Unknown backend: ${backendType}` }, { status: 400 })
   }
 
+  // Free TTS VRAM before conversion (local mode only)
+  if (backendType === "local") {
+    const ttsWorkerUrl = process.env.TTS_WORKER_URL || "http://worker-tts:8001"
+    await fetch(`${ttsWorkerUrl}/unload`, { method: "POST" }).catch(() => {})
+  }
+
   const jobResult = await tryCatch(backend.submitJob(input))
   if (!jobResult.success) {
     event.error = {

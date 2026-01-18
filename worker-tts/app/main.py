@@ -76,3 +76,12 @@ async def warm_models():
 
     get_or_create_model()
     return {"status": "ok", "message": "Model loaded"}
+
+
+@app.post("/unload")
+async def unload():
+    """Unload TTS model to free GPU memory."""
+    from .models import unload_model
+
+    unloaded = unload_model()
+    return {"unloaded": unloaded}

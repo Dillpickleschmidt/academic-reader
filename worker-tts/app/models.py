@@ -40,3 +40,26 @@ def get_or_create_model() -> "ChatterboxTTS":
         else:
             print("[models] Using cached model", flush=True)
         return _model_cache
+
+
+def unload_model() -> bool:
+    """Unload TTS model and free GPU memory.
+
+    Thread-safe and idempotent. Returns True if model was unloaded,
+    False if already unloaded.
+    """
+    global _model_cache
+    with _model_lock:
+        if _model_cache is None:
+            print("[models] Model already unloaded", flush=True)
+            return False
+
+        print("[models] Unloading TTS model...", flush=True)
+        del _model_cache
+        _model_cache = None
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        print("[models] Model unloaded, VRAM freed", flush=True)
+        return True
