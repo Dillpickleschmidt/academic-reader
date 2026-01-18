@@ -5,7 +5,7 @@ import { api } from "@repo/convex/convex/_generated/api"
 import { useConversion } from "./hooks/use-conversion"
 import { useAppConfig } from "./hooks/use-app-config"
 import { DocumentProvider } from "./context/DocumentContext"
-import { TTSProvider } from "./context/TTSContext"
+import { AudioProvider } from "./context/AudioContext"
 import { UploadPage } from "./pages/UploadPage"
 import { resultPageImport } from "./utils/preload"
 
@@ -105,7 +105,7 @@ function App() {
           documentId={conversion.documentId}
           chunks={conversion.chunks}
         >
-          <TTSProvider documentId={conversion.documentId}>
+          <AudioProvider documentId={conversion.documentId}>
             <Suspense fallback={<PageLoader />}>
               <ResultPage
                 outputFormat={conversion.outputFormat}
@@ -115,7 +115,7 @@ function App() {
                 onReset={conversion.reset}
               />
             </Suspense>
-          </TTSProvider>
+          </AudioProvider>
         </DocumentProvider>
       )
 

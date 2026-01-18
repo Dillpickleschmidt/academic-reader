@@ -1,24 +1,23 @@
 "use client"
 
 import * as React from "react"
-import { BookOpen, Bot, Download, Plus, Volume2 } from "lucide-react"
+import { BookOpen, Bot, Download, Plus } from "lucide-react"
 
 import { NavMain } from "@/components/sidebar/nav-main"
 import { NavActions } from "@/components/sidebar/nav-actions"
 import { ColorThemeSelector } from "@/components/sidebar/ColorThemeSelector"
 import { TypographyStyleToggle } from "@/components/sidebar/TypographyStyleToggle"
+import { AudioSettingsPopover } from "@/components/sidebar/audio-settings"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenuButton,
   SidebarMenuSubButton,
   SidebarRail,
   useSidebar,
 } from "@repo/core/ui/primitives/sidebar"
 import { useChatPanel } from "@/context/ChatPanelContext"
-import { useTTSSelector, useTTSActions } from "@/context/TTSContext"
 
 function ChatThreadsNewButton() {
   const { startNewThread } = useChatPanel()
@@ -32,23 +31,6 @@ function ChatThreadsNewButton() {
     </SidebarMenuSubButton>
   )
 }
-
-function TTSToggleButton() {
-  const isEnabled = useTTSSelector((s) => s.isEnabled)
-  const { enable, disable } = useTTSActions()
-  return (
-    <SidebarMenuButton
-      onClick={isEnabled ? disable : enable}
-      tooltip="Text to Speech"
-      data-active={isEnabled}
-      className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-    >
-      <Volume2 />
-      <span>Text to Speech</span>
-    </SidebarMenuButton>
-  )
-}
-
 
 interface ReaderSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onDownload?: () => void
@@ -106,7 +88,7 @@ export function ReaderSidebar({
 
   const actions = [
     {
-      render: <TTSToggleButton />,
+      render: <AudioSettingsPopover />,
     },
     {
       render: <TypographyStyleToggle />,

@@ -4,7 +4,7 @@ import "katex/dist/katex.min.css"
 import "katex/dist/contrib/copy-tex"
 import { ReaderLayout } from "../components/ReaderLayout"
 import { useDocumentContext } from "@/context/DocumentContext"
-import { useTTSSelector } from "@/context/TTSContext"
+import { useAudioSelector } from "@/context/AudioContext"
 import { useTTSChunkDetection } from "@/hooks/use-tts-chunk-detection"
 
 interface Props {
@@ -22,7 +22,7 @@ export function HtmlResultPage({
 }: Props) {
   const documentContext = useDocumentContext()
   const chunks = documentContext?.chunks ?? []
-  const isEnabled = useTTSSelector((s) => s.isEnabled)
+  const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
   const { handleContentClick } = useTTSChunkDetection(chunks)
 
   const htmlContent = useMemo(() => ({ __html: content }), [content])

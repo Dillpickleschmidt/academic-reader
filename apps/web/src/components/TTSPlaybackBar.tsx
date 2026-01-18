@@ -6,12 +6,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/core/ui/primitives/select"
-import { useTTSSelector, useTTSActions } from "@/context/TTSContext"
-
-const SPEAKERS = [
-  { value: "male_1", label: "Male 1" },
-  { value: "female_1", label: "Female 1" },
-] as const
+import { useAudioSelector, useAudioActions } from "@/context/AudioContext"
+import { VOICES } from "@/audio/constants"
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
@@ -20,17 +16,17 @@ function formatTime(seconds: number): string {
 }
 
 export function TTSPlaybackBar() {
-  const isEnabled = useTTSSelector((s) => s.isEnabled)
-  const isPlaying = useTTSSelector((s) => s.isPlaying)
-  const isSynthesizing = useTTSSelector((s) => s.isSynthesizing)
-  const isLoading = useTTSSelector((s) => s.isLoading)
-  const currentVoice = useTTSSelector((s) => s.currentVoice)
-  const segments = useTTSSelector((s) => s.segments)
-  const currentSegmentIndex = useTTSSelector((s) => s.currentSegmentIndex)
-  const currentTime = useTTSSelector((s) => s.currentTime)
-  const totalDuration = useTTSSelector((s) => s.totalDuration)
+  const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
+  const isPlaying = useAudioSelector((s) => s.playback.isPlaying)
+  const isSynthesizing = useAudioSelector((s) => s.playback.isSynthesizing)
+  const isLoading = useAudioSelector((s) => s.playback.isLoading)
+  const currentVoice = useAudioSelector((s) => s.narrator.voice)
+  const segments = useAudioSelector((s) => s.playback.segments)
+  const currentSegmentIndex = useAudioSelector((s) => s.playback.currentSegmentIndex)
+  const currentTime = useAudioSelector((s) => s.playback.currentTime)
+  const totalDuration = useAudioSelector((s) => s.playback.totalDuration)
 
-  const { togglePlayPause, skip, setVoice } = useTTSActions()
+  const { togglePlayPause, skip, setVoice } = useAudioActions()
 
   if (!isEnabled) return null
 
@@ -152,13 +148,13 @@ export function TTSPlaybackBar() {
           >
             <SelectTrigger className="h-8 w-27.5 border-none bg-transparent shadow-none text-(--reader-text) hover:bg-(--reader-border) disabled:opacity-50">
               <SelectValue>
-                {SPEAKERS.find((s) => s.value === currentVoice)?.label}
+                {VOICES.find((v) => v.value === currentVoice)?.label}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {SPEAKERS.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
+              {VOICES.map((v) => (
+                <SelectItem key={v.value} value={v.value}>
+                  {v.label}
                 </SelectItem>
               ))}
             </SelectContent>

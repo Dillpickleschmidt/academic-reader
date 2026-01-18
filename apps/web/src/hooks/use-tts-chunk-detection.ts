@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react"
 import type { ChunkBlock } from "@repo/core/types/api"
-import { useTTSSelector, useTTSActions } from "@/context/TTSContext"
+import { useAudioSelector, useAudioActions } from "@/context/AudioContext"
 
 // Block types to skip for TTS (from Marker BlockTypes enum)
 // These contain non-readable content (images, tables, page furniture)
@@ -23,8 +23,8 @@ const SKIP_BLOCK_TYPES = new Set([
  * and triggering TTS for that chunk's content.
  */
 export function useTTSChunkDetection(chunks: ChunkBlock[]) {
-  const isEnabled = useTTSSelector((s) => s.isEnabled)
-  const { loadBlockTTS } = useTTSActions()
+  const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
+  const { loadBlockTTS } = useAudioActions()
 
   // Build lookup map: blockId -> chunk
   const chunkMap = useMemo(() => {
