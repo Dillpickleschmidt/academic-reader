@@ -16,7 +16,10 @@ export function AmbienceTab() {
   const sounds = useAudioSelector((s) => s.ambience.sounds)
   const { toggleAmbientSound, setAmbientVolume } = useAudioActions()
 
-  const handleVolumeChange = (soundId: AmbientSoundId, value: number | readonly number[]) => {
+  const handleVolumeChange = (
+    soundId: AmbientSoundId,
+    value: number | readonly number[],
+  ) => {
     const v = Array.isArray(value) ? value[0] : value
     setAmbientVolume(soundId, v)
   }
@@ -29,7 +32,7 @@ export function AmbienceTab() {
     <div className="flex flex-col gap-3">
       <Label className="text-xs text-muted-foreground">Ambient Sounds</Label>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
         {sounds.map((sound) => {
           const isAvailable = !!sound.src
           return (
@@ -49,13 +52,15 @@ export function AmbienceTab() {
                 <ContextMenuTrigger className="flex flex-1 items-center gap-3">
                   <label
                     htmlFor={`ambience-${sound.id}`}
-                    className={`min-w-[100px] text-sm ${isAvailable ? "cursor-pointer" : "cursor-not-allowed text-muted-foreground"}`}
+                    className={`min-w-25 text-sm ${isAvailable ? "cursor-pointer" : "cursor-not-allowed text-muted-foreground"}`}
                   >
                     {sound.name}
                   </label>
                   <Slider
                     value={[sound.volume]}
-                    onValueChange={(value) => handleVolumeChange(sound.id, value)}
+                    onValueChange={(value) =>
+                      handleVolumeChange(sound.id, value)
+                    }
                     min={0}
                     max={1}
                     step={0.01}

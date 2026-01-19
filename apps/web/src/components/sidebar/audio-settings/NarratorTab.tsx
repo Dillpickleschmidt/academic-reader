@@ -85,7 +85,7 @@ export function NarratorTab() {
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-1">
             <Label className="text-xs text-muted-foreground">Speed</Label>
-            <span className="text-xs text-muted-foreground tabular-nums">
+            <span className="text-xs text-foreground/70 tabular-nums">
               {speed.toFixed(1)}x
             </span>
           </div>
@@ -106,7 +106,12 @@ export function NarratorTab() {
 
         {/* Volume slider */}
         <div className="flex flex-col gap-2">
-          <Label className="text-xs text-muted-foreground">Volume</Label>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs text-muted-foreground">Volume</Label>
+            <span className="text-xs text-foreground/70 tabular-nums">
+              {Math.round(volume * 100)}%
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             <VolumeX className="size-4 text-muted-foreground" />
             <Slider

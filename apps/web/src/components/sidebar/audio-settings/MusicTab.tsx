@@ -44,6 +44,7 @@ export function MusicTab() {
   const [previewingId, setPreviewingId] = useState<string | null>(null)
   const [popoverOpen, setPopoverOpen] = useState(false)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
+  const musicWasPlayingRef = useRef(false)
 
   const {
     addTrack,
@@ -52,6 +53,8 @@ export function MusicTab() {
     setMusicVolume,
     setMusicShuffle,
     setMusicLoop,
+    playMusic,
+    pauseMusic,
     toggleMusicPlayPause,
     nextTrack,
     previousTrack,
@@ -82,7 +85,16 @@ export function MusicTab() {
     if (previewingId === trackId) {
       audio.pause()
       setPreviewingId(null)
+      if (musicWasPlayingRef.current) {
+        playMusic()
+        musicWasPlayingRef.current = false
+      }
     } else {
+      // Pause music during preview
+      if (isPlaying) {
+        musicWasPlayingRef.current = true
+        pauseMusic()
+      }
       const filename = src.split("/").pop()
       audio.src = `/audio/music/previews/${filename}`
       audio.play().catch(() => {})
@@ -93,6 +105,10 @@ export function MusicTab() {
   const stopPreview = () => {
     previewAudioRef.current?.pause()
     setPreviewingId(null)
+    if (musicWasPlayingRef.current) {
+      playMusic()
+      musicWasPlayingRef.current = false
+    }
   }
 
   // Get tracks not already in playlist (only those with audio files)
@@ -163,7 +179,7 @@ export function MusicTab() {
             {playlist.map((track, index) => (
               <div
                 key={track.id}
-                className={`flex items-center gap-1 rounded-md px-2 py-1.5 ${
+                className={`flex items-center gap-1 rounded-sm px-2 py-1.5 ${
                   index === currentTrackIndex && isPlaying
                     ? "bg-accent"
                     : "bg-muted/50"
@@ -216,7 +232,7 @@ export function MusicTab() {
               render={
                 <Button
                   variant="outline"
-                  className="w-full justify-start gap-2"
+                  className="w-full justify-start gap-2 rounded-sm"
                 />
               }
             >
@@ -260,13 +276,18 @@ export function MusicTab() {
             </PopoverContent>
           </Popover>
         )}
-        <audio ref={previewAudioRef} onEnded={() => setPreviewingId(null)} />
+        <audio ref={previewAudioRef} onEnded={stopPreview} />
       </div>
 
       {/* Volume */}
       <ContextMenu>
         <ContextMenuTrigger className="flex flex-col gap-2">
-          <Label className="text-xs text-muted-foreground">Volume</Label>
+          <div className="flex items-center gap-1">
+            <Label className="text-xs text-muted-foreground">Volume</Label>
+            <span className="text-xs text-foreground/70 tabular-nums">
+              {Math.round(volume * 100)}%
+            </span>
+          </div>
           <div className="flex items-center gap-3">
             <VolumeX className="size-4 text-muted-foreground" />
             <Slider
