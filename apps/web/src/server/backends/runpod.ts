@@ -84,7 +84,6 @@ class RunpodBackend implements ConversionBackend {
         metadata: Record<string, unknown>
         formats?: {
           html: string
-          html_raw?: string
           markdown: string
           json: unknown
           chunks?: ChunkOutput
@@ -97,24 +96,18 @@ class RunpodBackend implements ConversionBackend {
     const isComplete = data.status === "COMPLETED"
     const output = data.output
 
-    // Build htmlContent for progressive loading (raw HTML without embedded images)
-    let htmlContent: string | undefined
-    if (isComplete && output?.formats?.html_raw) {
-      htmlContent = output.formats.html_raw
-    }
-
     return {
       jobId: data.id,
       status: this.mapStatus(data.status),
-      htmlContent,
+      htmlContent: isComplete ? output?.formats?.html : undefined,
       result:
         isComplete && output
           ? {
-              content: output.formats?.html_raw || output.content,
+              content: output.content,
               metadata: output.metadata,
               formats: output.formats
                 ? {
-                    html: output.formats.html_raw || output.formats.html,
+                    html: output.formats.html,
                     markdown: output.formats.markdown,
                     json: output.formats.json,
                     chunks: output.formats.chunks,

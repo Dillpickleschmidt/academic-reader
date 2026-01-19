@@ -5,14 +5,47 @@
 const MAX_BUFFER_SIZE = 1024 * 1024 // 1MB
 
 /**
+ * Format data as an SSE event.
+ */
+function formatSSE(event: string, data: string): Uint8Array {
+  return new TextEncoder().encode(`event: ${event}\ndata: ${data}\n\n`)
+}
+
+/**
+ * Parse an SSE block into event name and data.
+ */
+function parseSSEBlock(block: string): { event: string; data: string } {
+  const lines = block.split("\n")
+  let event = "message"
+  const dataLines: string[] = []
+
+  for (const line of lines) {
+    if (line.startsWith("event:")) {
+      event = line.slice(6).trim()
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  }
+
+  return { event, data: dataLines.join("\n") }
+}
+
+/**
  * Transform SSE events in a stream.
- * Parses SSE format, applies transform to event data, re-emits.
+ *
+ * @param input - Input SSE stream
+ * @param transform - Sync transform for events. Return null to skip emitting.
+ * @param onCompleted - Optional async handler for "completed" event.
+ *                      If provided, the completed event is buffered and processed
+ *                      in flush() to allow async operations like image upload.
  */
 export function transformSSEStream(
   input: ReadableStream<Uint8Array>,
-  transform: (event: string, data: string) => string,
+  transform: (event: string, data: string) => string | null,
+  onCompleted?: (data: string) => Promise<string | null>,
 ): ReadableStream<Uint8Array> {
   let buffer = ""
+  let pendingCompleted: string | null = null
 
   return input.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
@@ -31,47 +64,46 @@ export function transformSSEStream(
 
         for (const block of blocks) {
           if (!block.trim()) continue
-          const transformed = processSSEBlock(block, transform)
-          if (transformed) {
-            controller.enqueue(new TextEncoder().encode(transformed + "\n\n"))
+
+          const { event, data } = parseSSEBlock(block)
+
+          // Buffer completed event for async processing in flush
+          if (event === "completed" && onCompleted) {
+            pendingCompleted = data
+            continue // Don't emit yet
+          }
+
+          // Other events: transform and emit immediately
+          const transformed = transform(event, data)
+          if (transformed !== null) {
+            controller.enqueue(formatSSE(event, transformed))
           }
         }
       },
-      flush(controller) {
+
+      async flush(controller) {
+        // Handle any remaining buffer content
         if (buffer.trim()) {
-          const transformed = processSSEBlock(buffer, transform)
-          if (transformed) {
-            controller.enqueue(new TextEncoder().encode(transformed))
+          const { event, data } = parseSSEBlock(buffer)
+
+          if (event === "completed" && onCompleted) {
+            pendingCompleted = data
+          } else {
+            const transformed = transform(event, data)
+            if (transformed !== null) {
+              controller.enqueue(formatSSE(event, transformed))
+            }
+          }
+        }
+
+        // Process buffered completed event with async handler
+        if (pendingCompleted !== null && onCompleted) {
+          const processed = await onCompleted(pendingCompleted)
+          if (processed !== null) {
+            controller.enqueue(formatSSE("completed", processed))
           }
         }
       },
     }),
   )
-}
-
-/**
- * Process a single SSE block, applying transform to data.
- * Handles multi-line data per SSE spec.
- */
-function processSSEBlock(
-  block: string,
-  transform: (event: string, data: string) => string,
-): string {
-  const lines = block.split("\n")
-  let event = "message"
-  const dataLines: string[] = []
-
-  for (const line of lines) {
-    if (line.startsWith("event:")) {
-      event = line.slice(6).trim()
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trimStart())
-    }
-  }
-
-  if (dataLines.length === 0) return block
-
-  const data = dataLines.join("\n")
-  const transformedData = transform(event, data)
-  return `event: ${event}\ndata: ${transformedData}`
 }

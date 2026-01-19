@@ -83,7 +83,6 @@ export class LocalBackend implements ConversionBackend {
         metadata: Record<string, unknown>
         formats?: {
           html: string
-          html_raw?: string
           markdown: string
           json: unknown
           chunks?: ChunkOutput
@@ -107,15 +106,15 @@ export class LocalBackend implements ConversionBackend {
     return {
       jobId: data.job_id,
       status,
-      htmlContent: data.html_content || result?.formats?.html_raw,
+      htmlContent: data.html_content || result?.formats?.html,
       result:
         isComplete && result
           ? {
-              content: result.formats?.html_raw || result.content,
+              content: result.content,
               metadata: result.metadata,
               formats: result.formats
                 ? {
-                    html: result.formats.html_raw || result.formats.html,
+                    html: result.formats.html,
                     markdown: result.formats.markdown,
                     json: result.formats.json,
                     chunks: result.formats.chunks,

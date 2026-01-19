@@ -203,9 +203,9 @@ export function useConversion() {
           setPage("result")
         },
         (result) => {
-          // Only set content if html_ready didn't fire
+          // Always update content with final result (has rewritten image URLs)
+          setContent(result.content)
           if (!htmlReadyFiredRef.current) {
-            setContent(result.content)
             setPage("result")
           }
 

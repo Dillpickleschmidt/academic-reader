@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .html_processing import embed_images_as_base64, images_to_base64, inject_image_dimensions
+from .html_processing import images_to_base64, inject_image_dimensions
 from .models import get_or_create_models
 
 
@@ -76,17 +76,17 @@ def _render_all_formats(document: Any) -> dict:
     }
 
 
-def _process_html(html: str, images: dict, embed_images: bool = True) -> tuple[str, dict | None]:
+def _process_html(html: str, images: dict, embed_images: bool = False) -> tuple[str, dict | None]:
     """Process HTML content with image handling.
 
+    Injects image dimensions for layout stability.
+    Server handles image upload and URL rewriting.
+
     Returns:
-        Tuple of (content, images_dict or None)
-        images_dict is returned only when embed_images=False
+        Tuple of (html_with_dimensions, images_dict or None)
     """
     if images:
         html = inject_image_dimensions(html, images)
-        if embed_images:
-            return embed_images_as_base64(html, images), None
         return html, images
     return html, None
 
@@ -125,26 +125,24 @@ def run_conversion_sync(
     """Synchronous conversion without job tracking. Used by serverless handler."""
     all_formats = _build_and_render_all(file_path, use_llm, force_ocr, page_range)
 
-    # Process HTML once (injects dimensions), then create embedded variant
-    html_raw, images = _process_html(all_formats["html"], all_formats["images"], embed_images=False)
-    html_embedded = embed_images_as_base64(html_raw, images) if images else html_raw
+    # Process HTML (inject dimensions) - server handles image upload and URL rewriting
+    html_content, images = _process_html(all_formats["html"], all_formats["images"])
 
-    # Return requested format as content, include all formats
+    # Return requested format as content
     if output_format == "html":
-        content = html_embedded
+        content = html_content
     elif output_format == "json":
         content = all_formats["json"]
     elif output_format == "markdown":
         content = all_formats["markdown"]
     else:
-        content = html_embedded
+        content = html_content
 
     return {
         "content": content,
         "metadata": all_formats["metadata"],
         "formats": {
-            "html": html_embedded,
-            "html_raw": html_raw,  # For progressive loading (no embedded images)
+            "html": html_content,
             "markdown": all_formats["markdown"],
             "json": all_formats["json"],
             "chunks": all_formats["chunks"],

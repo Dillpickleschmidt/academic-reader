@@ -46,31 +46,26 @@ def run_conversion_process(
 
         # Import here to ensure tqdm patch is installed first
         from .conversion import _build_and_render_all, _process_html
-        from .html_processing import embed_images_as_base64, images_to_base64
+        from .html_processing import images_to_base64
 
         all_formats = _build_and_render_all(file_path, use_llm, force_ocr, page_range)
 
-        # Phase 1: HTML without embedded images (for quick preview)
+        # Process HTML (inject image dimensions) - no base64 embedding
+        # Server will upload images to bucket and rewrite URLs
         html_content, images = _process_html(
             all_formats["html"], all_formats["images"], embed_images=False
         )
         _update_shared_job(jobs_dict, job_id, status="html_ready", html_content=html_content)
 
-        # Phase 2: Embed images
-        if images:
-            html_with_images = embed_images_as_base64(html_content, images)
-        else:
-            html_with_images = html_content
-
         # Return requested format as content
         if output_format == "html":
-            content = html_with_images
+            content = html_content
         elif output_format == "json":
             content = all_formats["json"]
         elif output_format == "markdown":
             content = all_formats["markdown"]
         else:
-            content = html_with_images
+            content = html_content
 
         _update_shared_job(
             jobs_dict,
@@ -80,8 +75,7 @@ def run_conversion_process(
                 "content": content,
                 "metadata": all_formats["metadata"],
                 "formats": {
-                    "html": html_with_images,
-                    "html_raw": html_content,
+                    "html": html_content,
                     "markdown": all_formats["markdown"],
                     "json": all_formats["json"],
                     "chunks": all_formats["chunks"],

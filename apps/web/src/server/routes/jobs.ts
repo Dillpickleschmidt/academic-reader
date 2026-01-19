@@ -54,6 +54,7 @@ interface JobResultInput {
   content?: string
   metadata?: { pages?: number }
   formats?: JobResultFormats
+  images?: Record<string, string>
 }
 
 interface FileInfo {
@@ -97,6 +98,92 @@ function cacheJobResult(
   return chunks
 }
 
+/** HTML transforms applied to all content */
+const HTML_TRANSFORMS = [
+  removeImgDescriptions,
+  wrapCitations,
+  processParagraphs,
+  convertMathToHtml,
+]
+
+interface ProcessedJobResult {
+  content: string
+  imageUrls?: Record<string, string>
+}
+
+/**
+ * Process a completed job: upload images, rewrite URLs, save to S3, cache for persistence.
+ * Shared by both streaming and polling paths.
+ */
+async function processCompletedJob(
+  jobId: string,
+  result: JobResultInput,
+  fileInfo: FileInfo | undefined,
+  storage: Storage,
+): Promise<ProcessedJobResult> {
+  // Upload images and get public URLs
+  let imageUrls: Record<string, string> | undefined
+  if (
+    result.images &&
+    Object.keys(result.images).length > 0 &&
+    fileInfo?.documentPath
+  ) {
+    const uploadResult = await tryCatch(
+      storage.uploadImages(fileInfo.documentPath, result.images),
+    )
+    if (uploadResult.success) {
+      imageUrls = uploadResult.data
+      console.log(
+        `[jobs] Uploaded ${Object.keys(imageUrls).length} images to storage`,
+      )
+    } else {
+      console.error(`[jobs] Failed to upload images: ${uploadResult.error}`)
+    }
+  }
+
+  // Rewrite image sources in display content
+  let processedContent = result.content || ""
+  if (imageUrls && processedContent) {
+    processedContent = rewriteImageSources(processedContent, imageUrls)
+  }
+
+  // Apply HTML enhancements
+  if (processedContent) {
+    processedContent = processHtml(processedContent, HTML_TRANSFORMS)
+  }
+
+  // Rewrite image sources in formats.html for storage
+  if (imageUrls && result.formats?.html) {
+    result.formats.html = rewriteImageSources(result.formats.html, imageUrls)
+  }
+
+  // Save to S3
+  if (result.formats && fileInfo?.documentPath) {
+    const saveResult = await tryCatch(
+      Promise.all([
+        storage.saveFile(
+          `${fileInfo.documentPath}/content.html`,
+          result.formats.html || "",
+        ),
+        storage.saveFile(
+          `${fileInfo.documentPath}/content.md`,
+          result.formats.markdown || "",
+        ),
+      ]),
+    )
+    if (!saveResult.success) {
+      console.error(`[jobs] Failed to save results: ${saveResult.error}`)
+    }
+  }
+
+  // Cache for persistence
+  if (fileInfo) {
+    cacheJobResult(jobId, { ...result, content: processedContent }, fileInfo)
+  }
+
+  return { content: processedContent, imageUrls }
+}
+
 export const jobs = new Hono<{ Variables: Variables }>()
 
 const SSE_HEADERS = {
@@ -127,13 +214,11 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
   }
   const backend = backendResult.data
 
-  // For local backend, proxy SSE stream with HTML enhancement
+  // For local backend, proxy SSE stream with HTML enhancement and image handling
   if (backend.supportsStreaming() && backend instanceof LocalBackend) {
     const streamUrl = backend.getStreamUrl!(jobId)
     const fileInfo = jobFileMap.get(jobId)
-
-    // Capture formats for S3 save after stream completes
-    let formatsToSave: { html: string; markdown: string } | null = null
+    const streamStart = performance.now()
 
     const responseResult = await tryCatch(fetch(streamUrl))
     if (!responseResult.success) {
@@ -156,13 +241,15 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
       return c.json({ error: "Failed to connect to stream" }, 500)
     }
 
-    // Transform SSE events to enhance HTML content and cache results
+    // Transform SSE events with async image handling for completed event
     const transformedStream = transformSSEStream(
       responseResult.data.body,
+      // Sync transform for non-completed events (progress, html_ready)
       (sseEvent, data) => {
-        if (sseEvent === "html_ready" || sseEvent === "completed") {
+        if (sseEvent === "html_ready") {
           try {
             const parsed = JSON.parse(data)
+            // Process HTML for early preview (images will show skeleton)
             if (parsed.content) {
               parsed.content = processHtml(parsed.content, [
                 removeImgDescriptions,
@@ -171,23 +258,6 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
                 convertMathToHtml,
               ])
             }
-
-            // Cache result and add job metadata for persistence
-            if (sseEvent === "completed" && fileInfo) {
-              cacheJobResult(jobId, parsed, fileInfo)
-              parsed.jobId = jobId
-              parsed.fileId = fileInfo.fileId
-              jobFileMap.delete(jobId)
-
-              // Store for S3 save in finally() since transform callback is sync
-              if (parsed.formats?.html && parsed.formats?.markdown) {
-                formatsToSave = {
-                  html: parsed.formats.html,
-                  markdown: parsed.formats.markdown,
-                }
-              }
-            }
-
             return JSON.stringify(parsed)
           } catch {
             return data
@@ -195,39 +265,40 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
         }
         return data
       },
+      // Async handler for completed event - upload images and rewrite URLs
+      async (data) => {
+        try {
+          const parsed = JSON.parse(data)
+
+          const { content, imageUrls } = await processCompletedJob(
+            jobId,
+            parsed,
+            fileInfo,
+            storage,
+          )
+
+          // Update with processed content and metadata for frontend
+          parsed.content = content
+          parsed.jobId = jobId
+          parsed.fileId = fileInfo?.fileId
+          if (imageUrls) parsed.images = imageUrls
+
+          jobFileMap.delete(jobId)
+
+          emitStreamingEvent(event, {
+            durationMs: Math.round(performance.now() - streamStart),
+            status: 200,
+          })
+
+          return JSON.stringify(parsed)
+        } catch (err) {
+          console.error(`[jobs] Error processing completed event:`, err)
+          return data
+        }
+      },
     )
 
-    // Tee the stream: one for response, one for tracking completion
-    const streamStart = performance.now()
-    const [streamForResponse, streamForTracking] = transformedStream.tee()
-
-    streamForTracking.pipeTo(new WritableStream()).finally(async () => {
-      // Save HTML/markdown to S3 after stream completes
-      if (formatsToSave && fileInfo?.documentPath) {
-        const saveResult = await tryCatch(
-          Promise.all([
-            storage.saveFile(
-              `${fileInfo.documentPath}/content.html`,
-              formatsToSave.html,
-            ),
-            storage.saveFile(
-              `${fileInfo.documentPath}/content.md`,
-              formatsToSave.markdown,
-            ),
-          ]),
-        )
-        if (!saveResult.success) {
-          console.error(`[jobs] Failed to save results: ${saveResult.error}`)
-        }
-      }
-
-      emitStreamingEvent(event, {
-        durationMs: Math.round(performance.now() - streamStart),
-        status: 200,
-      })
-    })
-
-    return new Response(streamForResponse, { headers: SSE_HEADERS })
+    return new Response(transformedStream, { headers: SSE_HEADERS })
   }
 
   // For cloud backends, poll and emit SSE events
@@ -294,85 +365,29 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
           case "completed": {
             const fileInfo = jobFileMap.get(jobId)
 
-            // Upload images to R2 and get public URLs
-            let imageUrls: Record<string, string> | undefined
-            if (
-              job.result?.images &&
-              Object.keys(job.result.images).length > 0 &&
-              fileInfo?.documentPath
-            ) {
-              const uploadResult = await tryCatch(
-                storage.uploadImages(fileInfo.documentPath, job.result.images),
-              )
-              if (uploadResult.success) {
-                imageUrls = uploadResult.data
-                console.log(
-                  `[jobs] Uploaded ${Object.keys(imageUrls).length} images to R2`,
-                )
-              } else {
-                console.error(
-                  `[jobs] Failed to upload images: ${uploadResult.error}`,
-                )
-              }
+            // Use result content, falling back to htmlContent
+            const resultToProcess = {
+              ...job.result,
+              content: job.result?.content || job.htmlContent,
             }
 
-            // Process display content (htmlContent and result.content share the same source)
-            const rawContent = job.result?.content || job.htmlContent
-            if (rawContent) {
-              let processedContent = imageUrls
-                ? rewriteImageSources(rawContent, imageUrls)
-                : rawContent
-              processedContent = processHtml(processedContent, [
-                removeImgDescriptions,
-                wrapCitations,
-                processParagraphs,
-                convertMathToHtml,
-              ])
-              if (job.result?.content) job.result.content = processedContent
-              if (job.htmlContent) job.htmlContent = processedContent
-            }
+            const { content, imageUrls } = await processCompletedJob(
+              jobId,
+              resultToProcess,
+              fileInfo,
+              storage,
+            )
 
-            // formats.html is stored raw in S3 (reader enhancements applied on load)
-            if (imageUrls && job.result?.formats?.html) {
-              job.result.formats.html = rewriteImageSources(
-                job.result.formats.html,
-                imageUrls,
-              )
-            }
-
-            // Save results to S3 and cache for persistence
-            if (job.result?.formats && fileInfo?.documentPath) {
-              const saveResult = await tryCatch(
-                Promise.all([
-                  storage.saveFile(
-                    `${fileInfo.documentPath}/content.html`,
-                    job.result.formats.html,
-                  ),
-                  storage.saveFile(
-                    `${fileInfo.documentPath}/content.md`,
-                    job.result.formats.markdown,
-                  ),
-                ]),
-              )
-              if (!saveResult.success) {
-                console.error(
-                  `[jobs] Failed to save results: ${saveResult.error}`,
-                )
-              }
-
-              cacheJobResult(jobId, job.result, fileInfo)
-            }
-
-            // For backends that don't support html_ready (like datalab), use result content
-            const earlyContent = job.htmlContent || job.result?.content
-            if (!htmlReadySent && earlyContent) {
-              sendEvent("html_ready", { content: earlyContent })
+            // For backends that don't support html_ready (like datalab), send early preview
+            if (!htmlReadySent && content) {
+              sendEvent("html_ready", { content })
               htmlReadySent = true
             }
 
             // Send completed event with fileId for downloads
             sendEvent("completed", {
               ...job.result,
+              content,
               ...(imageUrls && { images: imageUrls }),
               jobId,
               fileId: fileInfo?.fileId,
