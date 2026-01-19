@@ -21,17 +21,16 @@ export const AMBIENT_SOUNDS = [
   { id: "thunderstorm", name: "Thunderstorm", src: "/audio/ambience/cozy_thunderstorm.mp3" },
 ] as const
 
+// prettier-ignore
 export const MUSIC_TRACKS = [
-  {
-    id: "dawn-of-time",
-    name: "Dawn of Time",
-    src: "/audio/music/dawn_of_time.mp3",
-    previewStart: 31.5,
-  },
-  { id: "lofi", name: "Lo-fi beats", src: null, previewStart: 0 },
-  { id: "classical", name: "Classical piano", src: null, previewStart: 0 },
-  { id: "jazz", name: "Jazz cafe", src: null, previewStart: 0 },
-  { id: "synthwave", name: "Synthwave", src: null, previewStart: 0 },
+  { id: "dawn-of-time", name: "Dawn of Time", src: "/audio/music/dawn_of_time.mp3", previewStart: 31.5 },
+  { id: "distant-echo", name: "Distant Echo", src: "/audio/music/Distant Echo - Jakob Ahlbom.mp3", previewStart: 78 },
+  { id: "flora-and-fauna", name: "Flora and Fauna", src: "/audio/music/Flora and Fauna - Aerian.mp3", previewStart: 78 },
+  { id: "into-the-forest", name: "Into the Forest", src: "/audio/music/Into the Forest - Jakob Ahlbom.mp3", previewStart: 108 },
+  { id: "rimfrost", name: "Rimfrost", src: "/audio/music/Rimfrost - Strom.mp3", previewStart: 26 },
+  { id: "sen", name: "Sen", src: "/audio/music/Sen - Trevor Kowalski.mp3", previewStart: 31 },
+  { id: "something-good", name: "Something Good Will Come Out of This", src: "/audio/music/Something Good Will Come Out of This - Hanna Lindgren.mp3", previewStart: 35 },
+  { id: "tides", name: "Tides", src: "/audio/music/Tides - Jakob Ahlbom.mp3", previewStart: 34 },
 ] as const
 
 export const DEFAULT_PRESETS: readonly { id: string; name: string }[] = []

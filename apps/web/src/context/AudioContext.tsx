@@ -105,37 +105,44 @@ class CrossfadeLooper {
 
     // Fire early to pre-buffer the next audio
     const timeUntilPreStart =
-      (fromAudio.duration - CROSSFADE_TIME - PRE_START_TIME - fromAudio.currentTime) * 1000
+      (fromAudio.duration -
+        CROSSFADE_TIME -
+        PRE_START_TIME -
+        fromAudio.currentTime) *
+      1000
 
     if (timeUntilPreStart <= 0) return
 
-    this.crossfadeTimeout = setTimeout(() => {
-      if (this.disposed || !this.isPlaying) return
+    this.crossfadeTimeout = setTimeout(
+      () => {
+        if (this.disposed || !this.isPlaying) return
 
-      const toAudio = from === "a" ? this.audioB : this.audioA
-      const fromGain = from === "a" ? this.gainA : this.gainB
-      const toGain = from === "a" ? this.gainB : this.gainA
+        const toAudio = from === "a" ? this.audioB : this.audioA
+        const fromGain = from === "a" ? this.gainA : this.gainB
+        const toGain = from === "a" ? this.gainB : this.gainA
 
-      // Pre-start next audio at gain 0 to avoid startup latency
-      toGain.gain.setValueAtTime(0, this.ctx.currentTime)
-      toAudio.currentTime = 0
-      toAudio.play().catch(() => {})
+        // Pre-start next audio at gain 0 to avoid startup latency
+        toGain.gain.setValueAtTime(0, this.ctx.currentTime)
+        toAudio.currentTime = 0
+        toAudio.play().catch(() => {})
 
-      // Schedule equal-power crossfade after pre-start buffer
-      const crossfadeStart = this.ctx.currentTime + PRE_START_TIME
-      fromGain.gain.setValueCurveAtTime(
-        CrossfadeLooper.fadeOutCurve.map((v) => v * this.volume),
-        crossfadeStart,
-        CROSSFADE_TIME,
-      )
-      toGain.gain.setValueCurveAtTime(
-        CrossfadeLooper.fadeInCurve.map((v) => v * this.volume),
-        crossfadeStart,
-        CROSSFADE_TIME,
-      )
+        // Schedule equal-power crossfade after pre-start buffer
+        const crossfadeStart = this.ctx.currentTime + PRE_START_TIME
+        fromGain.gain.setValueCurveAtTime(
+          CrossfadeLooper.fadeOutCurve.map((v) => v * this.volume),
+          crossfadeStart,
+          CROSSFADE_TIME,
+        )
+        toGain.gain.setValueCurveAtTime(
+          CrossfadeLooper.fadeInCurve.map((v) => v * this.volume),
+          crossfadeStart,
+          CROSSFADE_TIME,
+        )
 
-      this.active = from === "a" ? "b" : "a"
-    }, Math.max(0, timeUntilPreStart))
+        this.active = from === "a" ? "b" : "a"
+      },
+      Math.max(0, timeUntilPreStart),
+    )
   }
 
   start() {
@@ -302,6 +309,8 @@ export function AudioProvider({
   const audioContextRef = useRef<AudioContext | null>(null)
   // CrossfadeLooper instances per ambient sound
   const ambienceAudioRefs = useRef<Map<string, CrossfadeLooper>>(new Map())
+  // Track current music track ID to avoid unnecessary src changes
+  const currentMusicTrackIdRef = useRef<string | null>(null)
 
   // Track if we're waiting for next segment to be ready
   const waitingForNextRef = useRef(false)
@@ -1081,10 +1090,10 @@ export function AudioProvider({
       const currentTrack = state.music.playlist[state.music.currentTrackIndex]
 
       if (state.music.isPlaying && currentTrack?.src) {
-        // Check if we need to change the source
-        const expectedSrc = currentTrack.src
-        if (!audio.src.endsWith(expectedSrc)) {
-          audio.src = expectedSrc
+        // Only change source if track actually changed
+        if (currentMusicTrackIdRef.current !== currentTrack.id) {
+          currentMusicTrackIdRef.current = currentTrack.id
+          audio.src = currentTrack.src
         }
         audio.volume = state.music.volume * state.master.volume
         if (audio.paused) {

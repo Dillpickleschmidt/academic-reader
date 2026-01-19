@@ -1,12 +1,23 @@
-import { ChevronUp, ChevronDown, X, Volume2, VolumeX, Plus, Play, Pause, SkipBack, SkipForward } from "lucide-react"
+import { useRef, useState } from "react"
+import {
+  ChevronUp,
+  ChevronDown,
+  X,
+  Volume2,
+  VolumeX,
+  Plus,
+  Play,
+  Pause,
+  Square,
+  SkipBack,
+  SkipForward,
+} from "lucide-react"
 import { Button } from "@repo/core/ui/primitives/button"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/core/ui/primitives/select"
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@repo/core/ui/primitives/popover"
 import {
   ContextMenu,
   ContextMenuContent,
@@ -29,6 +40,10 @@ export function MusicTab() {
   const volume = useAudioSelector((s) => s.music.volume)
   const shuffle = useAudioSelector((s) => s.music.shuffle)
   const loop = useAudioSelector((s) => s.music.loop)
+
+  const [previewingId, setPreviewingId] = useState<string | null>(null)
+  const [popoverOpen, setPopoverOpen] = useState(false)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const {
     addTrack,
@@ -58,6 +73,26 @@ export function MusicTab() {
   const handleVolumeChange = (value: number | readonly number[]) => {
     const v = Array.isArray(value) ? value[0] : value
     setMusicVolume(v)
+  }
+
+  const togglePreview = (trackId: string, src: string) => {
+    const audio = previewAudioRef.current
+    if (!audio) return
+
+    if (previewingId === trackId) {
+      audio.pause()
+      setPreviewingId(null)
+    } else {
+      const filename = src.split("/").pop()
+      audio.src = `/audio/music/previews/${filename}`
+      audio.play().catch(() => {})
+      setPreviewingId(trackId)
+    }
+  }
+
+  const stopPreview = () => {
+    previewAudioRef.current?.pause()
+    setPreviewingId(null)
   }
 
   // Get tracks not already in playlist (only those with audio files)
@@ -108,7 +143,8 @@ export function MusicTab() {
           </div>
           {currentTrack && (
             <p className="text-xs text-muted-foreground text-center truncate">
-              {isPlaying ? "Now playing: " : ""}{currentTrack.name}
+              {isPlaying ? "Now playing: " : ""}
+              {currentTrack.name}
             </p>
           )}
         </div>
@@ -169,22 +205,62 @@ export function MusicTab() {
 
         {/* Add track */}
         {availableTracks.length > 0 && (
-          <Select onValueChange={handleAddTrack} value="">
-            <SelectTrigger className="w-full">
-              <SelectValue>
-                <Plus className="size-3" />
-                <span>Add track</span>
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
+          <Popover
+            open={popoverOpen}
+            onOpenChange={(open) => {
+              setPopoverOpen(open)
+              if (!open) stopPreview()
+            }}
+          >
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                />
+              }
+            >
+              <Plus className="size-4" />
+              <span>Add track</span>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-82 p-1 gap-1.5">
               {availableTracks.map((track) => (
-                <SelectItem key={track.id} value={track.id}>
-                  {track.name}
-                </SelectItem>
+                <div
+                  key={track.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer"
+                  onClick={() => {
+                    handleAddTrack(track.id)
+                    setPopoverOpen(false)
+                    stopPreview()
+                  }}
+                >
+                  <span className="flex-1 text-sm truncate">{track.name}</span>
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-6 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        togglePreview(track.id, track.src!)
+                      }}
+                    >
+                      {previewingId === track.id ? (
+                        <Square className="size-3" />
+                      ) : (
+                        <Play className="size-3" />
+                      )}
+                    </Button>
+                    <div className="size-6 flex items-center justify-center rounded-[min(var(--radius-md),10px)] hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 text-muted-foreground">
+                      <Plus className="size-3.5" />
+                    </div>
+                  </div>
+                </div>
               ))}
-            </SelectContent>
-          </Select>
+            </PopoverContent>
+          </Popover>
         )}
+        <audio ref={previewAudioRef} onEnded={() => setPreviewingId(null)} />
       </div>
 
       {/* Volume */}
