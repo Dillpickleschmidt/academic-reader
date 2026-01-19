@@ -4,21 +4,31 @@ export const VOICES = [
 ] as const
 
 export const AMBIENT_SOUNDS = [
-  { id: "brown-noise", name: "Brown Noise" },
-  { id: "creek", name: "Creek" },
-  { id: "rain", name: "Rain" },
-  { id: "fireplace", name: "Fireplace" },
-  { id: "forest", name: "Forest" },
-  { id: "ocean", name: "Ocean" },
-  { id: "thunder", name: "Thunder" },
-  { id: "coffee-shop", name: "Coffee Shop" },
+  {
+    id: "brown-noise",
+    name: "Brown Noise",
+    src: "/audio/ambience/deep_brown_noise.mp3",
+  },
+  { id: "creek", name: "Creek", src: "/audio/ambience/creek.mp3" },
+  { id: "underwater", name: "Underwater", src: "/audio/ambience/underwater.mp3" },
+  { id: "rain", name: "Rain", src: null },
+  { id: "fireplace-1", name: "Fireplace 1", src: "/audio/ambience/fireplace_1.mp3" },
+  { id: "fireplace-2", name: "Fireplace 2", src: "/audio/ambience/fireplace_2.mp3" },
+  { id: "forest", name: "Forest", src: null },
+  { id: "ocean", name: "Ocean", src: null },
+  { id: "thunder", name: "Thunder", src: null },
 ] as const
 
 export const MUSIC_TRACKS = [
-  { id: "lofi", name: "Lo-fi beats" },
-  { id: "classical", name: "Classical piano" },
-  { id: "jazz", name: "Jazz cafe" },
-  { id: "synthwave", name: "Synthwave" },
+  {
+    id: "dawn-of-time",
+    name: "Dawn of Time",
+    src: "/audio/music/dawn_of_time.mp3",
+  },
+  { id: "lofi", name: "Lo-fi beats", src: null },
+  { id: "classical", name: "Classical piano", src: null },
+  { id: "jazz", name: "Jazz cafe", src: null },
+  { id: "synthwave", name: "Synthwave", src: null },
 ] as const
 
 export const DEFAULT_PRESETS: readonly { id: string; name: string }[] = []

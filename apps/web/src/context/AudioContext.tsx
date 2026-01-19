@@ -3,8 +3,8 @@ import {
   useContext,
   useRef,
   useCallback,
-  useSyncExternalStore,
   useEffect,
+  useState,
   type ReactNode,
 } from "react"
 import { toast } from "sonner"
@@ -18,9 +18,168 @@ import type {
 } from "@/audio/types"
 import { AMBIENT_SOUNDS } from "@/audio/constants"
 
+// ============================================================================
+// CrossfadeLooper: Encapsulates seamless audio looping with crossfade
+// ============================================================================
+
+class CrossfadeLooper {
+  private readonly ctx: AudioContext
+  private readonly audioA: HTMLAudioElement
+  private readonly audioB: HTMLAudioElement
+  private readonly gainA: GainNode
+  private readonly gainB: GainNode
+  private active: "a" | "b" = "a"
+  private crossfadeTimeout: ReturnType<typeof setTimeout> | null = null
+  private volume = 1
+  private isPlaying = false
+  private disposed = false
+
+  private static readonly CROSSFADE_TIME = 0.5
+  private static readonly PRE_START_TIME = 0.05 // Start audio early to avoid latency
+
+  // Equal-power crossfade curves (constant perceived loudness)
+  private static readonly fadeOutCurve = Float32Array.from(
+    { length: 128 },
+    (_, i) => Math.cos((i / 127) * (Math.PI / 2)),
+  )
+  private static readonly fadeInCurve = Float32Array.from(
+    { length: 128 },
+    (_, i) => Math.sin((i / 127) * (Math.PI / 2)),
+  )
+
+  constructor(ctx: AudioContext, src: string, initialVolume: number) {
+    this.ctx = ctx
+    this.volume = initialVolume
+
+    // Helper to create audio element with connected gain node
+    const createAudioWithGain = () => {
+      const audio = new Audio(src)
+      audio.loop = false
+      audio.volume = 1 // GainNode controls actual volume
+      const gain = ctx.createGain()
+      ctx.createMediaElementSource(audio).connect(gain).connect(ctx.destination)
+      return { audio, gain }
+    }
+
+    const { audio: a, gain: gainA } = createAudioWithGain()
+    const { audio: b, gain: gainB } = createAudioWithGain()
+
+    this.audioA = a
+    this.audioB = b
+    this.gainA = gainA
+    this.gainB = gainB
+
+    // Initial state: A ready to play at full volume, B silent
+    this.gainA.gain.value = initialVolume
+    this.gainB.gain.value = 0
+
+    // Set up event listeners
+    this.audioA.addEventListener("playing", this.handlePlayingA)
+    this.audioB.addEventListener("playing", this.handlePlayingB)
+  }
+
+  private handlePlayingA = () => {
+    if (this.active === "a" && this.audioA.duration) {
+      this.scheduleCrossfade("a")
+    }
+  }
+
+  private handlePlayingB = () => {
+    if (this.active === "b" && this.audioB.duration) {
+      this.scheduleCrossfade("b")
+    }
+  }
+
+  private clearCrossfadeTimeout() {
+    if (this.crossfadeTimeout) {
+      clearTimeout(this.crossfadeTimeout)
+      this.crossfadeTimeout = null
+    }
+  }
+
+  private scheduleCrossfade(from: "a" | "b") {
+    this.clearCrossfadeTimeout()
+
+    const fromAudio = from === "a" ? this.audioA : this.audioB
+    const { CROSSFADE_TIME, PRE_START_TIME } = CrossfadeLooper
+
+    // Fire early to pre-buffer the next audio
+    const timeUntilPreStart =
+      (fromAudio.duration - CROSSFADE_TIME - PRE_START_TIME - fromAudio.currentTime) * 1000
+
+    if (timeUntilPreStart <= 0) return
+
+    this.crossfadeTimeout = setTimeout(() => {
+      if (this.disposed || !this.isPlaying) return
+
+      const toAudio = from === "a" ? this.audioB : this.audioA
+      const fromGain = from === "a" ? this.gainA : this.gainB
+      const toGain = from === "a" ? this.gainB : this.gainA
+
+      // Pre-start next audio at gain 0 to avoid startup latency
+      toGain.gain.setValueAtTime(0, this.ctx.currentTime)
+      toAudio.currentTime = 0
+      toAudio.play().catch(() => {})
+
+      // Schedule equal-power crossfade after pre-start buffer
+      const crossfadeStart = this.ctx.currentTime + PRE_START_TIME
+      fromGain.gain.setValueCurveAtTime(
+        CrossfadeLooper.fadeOutCurve.map((v) => v * this.volume),
+        crossfadeStart,
+        CROSSFADE_TIME,
+      )
+      toGain.gain.setValueCurveAtTime(
+        CrossfadeLooper.fadeInCurve.map((v) => v * this.volume),
+        crossfadeStart,
+        CROSSFADE_TIME,
+      )
+
+      this.active = from === "a" ? "b" : "a"
+    }, Math.max(0, timeUntilPreStart))
+  }
+
+  start() {
+    if (this.disposed || this.isPlaying) return
+    this.isPlaying = true
+
+    const activeAudio = this.active === "a" ? this.audioA : this.audioB
+    const activeGain = this.active === "a" ? this.gainA : this.gainB
+    activeGain.gain.value = this.volume
+    activeAudio.play().catch((err) => console.warn("Autoplay blocked:", err))
+  }
+
+  stop() {
+    if (!this.isPlaying) return
+    this.isPlaying = false
+    this.clearCrossfadeTimeout()
+    this.audioA.pause()
+    this.audioB.pause()
+  }
+
+  setVolume(vol: number) {
+    this.volume = vol
+    // Only update the active gain node
+    const activeGain = this.active === "a" ? this.gainA : this.gainB
+    activeGain.gain.value = vol
+  }
+
+  dispose() {
+    if (this.disposed) return
+    this.disposed = true
+    this.stop()
+
+    this.audioA.removeEventListener("playing", this.handlePlayingA)
+    this.audioB.removeEventListener("playing", this.handlePlayingB)
+    this.audioA.src = ""
+    this.audioB.src = ""
+  }
+}
+
 type AudioStore = {
   getState: () => AudioState
-  setState: (partial: Partial<AudioState> | ((state: AudioState) => Partial<AudioState>)) => void
+  setState: (
+    partial: Partial<AudioState> | ((state: AudioState) => Partial<AudioState>),
+  ) => void
   subscribe: (listener: () => void) => () => void
 }
 
@@ -64,6 +223,11 @@ type AudioActions = {
   setMusicVolume: (volume: number) => void
   setMusicShuffle: (shuffle: boolean) => void
   setMusicLoop: (loop: boolean) => void
+  playMusic: () => void
+  pauseMusic: () => void
+  toggleMusicPlayPause: () => void
+  nextTrack: () => void
+  previousTrack: () => void
 
   // Ambience actions
   toggleAmbientSound: (soundId: AmbientSoundId, enabled: boolean) => void
@@ -102,6 +266,8 @@ function createInitialState(): AudioState {
     },
     music: {
       playlist: [],
+      currentTrackIndex: 0,
+      isPlaying: false,
       volume: 0.5,
       shuffle: false,
       loop: true,
@@ -110,6 +276,7 @@ function createInitialState(): AudioState {
       sounds: AMBIENT_SOUNDS.map((sound) => ({
         id: sound.id,
         name: sound.name,
+        src: sound.src,
         enabled: false,
         volume: 0.5,
       })),
@@ -130,15 +297,43 @@ export function AudioProvider({
 }) {
   const storeRef = useRef<AudioStore>(null!)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null)
+  // Web Audio API context for smooth crossfades
+  const audioContextRef = useRef<AudioContext | null>(null)
+  // CrossfadeLooper instances per ambient sound
+  const ambienceAudioRefs = useRef<Map<string, CrossfadeLooper>>(new Map())
+
   // Track if we're waiting for next segment to be ready
   const waitingForNextRef = useRef(false)
   // Track ongoing fetches to avoid duplicates
   const fetchingSegmentsRef = useRef(new Set<number>())
+  // Prevent duplicate initializations
+  const pendingAmbienceInits = useRef(new Set<string>())
 
   if (!storeRef.current) {
     storeRef.current = createStore(createInitialState())
   }
   const store = storeRef.current
+
+  // Helper to safely play audio with autoplay policy handling
+  const safePlay = useCallback((audio: HTMLAudioElement) => {
+    audio.play().catch((err) => {
+      console.warn("Autoplay blocked:", err)
+    })
+  }, [])
+
+  // Get or create AudioContext (lazily initialized)
+  const getAudioContext = useCallback(async (): Promise<AudioContext> => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new window.AudioContext()
+    }
+    const ctx = audioContextRef.current
+    // Resume if suspended (browsers require user interaction)
+    if (ctx.state === "suspended") {
+      await ctx.resume()
+    }
+    return ctx
+  }, [])
 
   // Fetch audio for a specific segment
   const fetchSegmentAudio = useCallback(
@@ -162,7 +357,11 @@ export function AudioProvider({
       const updatedSegments = [...state.playback.segments]
       updatedSegments[segmentIndex] = { ...segment, status: "loading" }
       store.setState({
-        playback: { ...state.playback, segments: updatedSegments, isSynthesizing: true },
+        playback: {
+          ...state.playback,
+          segments: updatedSegments,
+          isSynthesizing: true,
+        },
       })
 
       try {
@@ -257,7 +456,7 @@ export function AudioProvider({
           playback: { ...state.playback, currentSegmentIndex: segmentIndex },
         })
         audioRef.current.src = segment.audioUrl
-        audioRef.current.play()
+        safePlay(audioRef.current)
         store.setState({
           playback: { ...store.getState().playback, isPlaying: true },
         })
@@ -275,7 +474,7 @@ export function AudioProvider({
         await fetchSegmentAudio(segmentIndex)
       }
     },
-    [store, fetchSegmentAudio],
+    [store, fetchSegmentAudio, safePlay],
   )
 
   // === Narrator Actions ===
@@ -354,25 +553,28 @@ export function AudioProvider({
 
       // Re-synthesize current segment with new voice
       if (resetSegments.length > 0) {
-        fetchSegmentAudio(state.playback.currentSegmentIndex).then((success) => {
-          if (success) {
-            const freshState = store.getState()
-            const segment = freshState.playback.segments[state.playback.currentSegmentIndex]
-            if (segment?.audioUrl && audioRef.current) {
-              audioRef.current.src = segment.audioUrl
-              // Only resume if it was playing before voice change
-              if (wasPlaying) {
-                audioRef.current.play()
-                store.setState({
-                  playback: { ...store.getState().playback, isPlaying: true },
-                })
+        fetchSegmentAudio(state.playback.currentSegmentIndex).then(
+          (success) => {
+            if (success) {
+              const freshState = store.getState()
+              const segment =
+                freshState.playback.segments[state.playback.currentSegmentIndex]
+              if (segment?.audioUrl && audioRef.current) {
+                audioRef.current.src = segment.audioUrl
+                // Only resume if it was playing before voice change
+                if (wasPlaying) {
+                  safePlay(audioRef.current)
+                  store.setState({
+                    playback: { ...store.getState().playback, isPlaying: true },
+                  })
+                }
               }
             }
-          }
-        })
+          },
+        )
       }
     },
-    [store, fetchSegmentAudio],
+    [store, fetchSegmentAudio, safePlay],
   )
 
   const setNarratorSpeed = useCallback(
@@ -474,7 +676,11 @@ export function AudioProvider({
         )
 
         store.setState({
-          playback: { ...store.getState().playback, segments, isLoading: false },
+          playback: {
+            ...store.getState().playback,
+            segments,
+            isLoading: false,
+          },
         })
         toast.dismiss(toastId)
 
@@ -493,7 +699,7 @@ export function AudioProvider({
 
           if (firstSegment?.audioUrl && audioRef.current) {
             audioRef.current.src = firstSegment.audioUrl
-            audioRef.current.play()
+            safePlay(audioRef.current)
             store.setState({
               playback: {
                 ...store.getState().playback,
@@ -525,19 +731,19 @@ export function AudioProvider({
         toast.error(errorMsg, { id: toastId })
       }
     },
-    [store, documentId, fetchSegmentAudio],
+    [store, documentId, fetchSegmentAudio, safePlay],
   )
 
   const play = useCallback(() => {
     const state = store.getState()
     const segment = state.playback.segments[state.playback.currentSegmentIndex]
     if (audioRef.current && segment?.audioUrl) {
-      audioRef.current.play()
+      safePlay(audioRef.current)
       store.setState({
         playback: { ...state.playback, isPlaying: true },
       })
     }
-  }, [store])
+  }, [store, safePlay])
 
   const pause = useCallback(() => {
     if (audioRef.current) {
@@ -563,12 +769,16 @@ export function AudioProvider({
 
       // Calculate target time across all segments
       let targetTime = state.playback.currentTime + seconds
-      targetTime = Math.max(0, Math.min(state.playback.totalDuration, targetTime))
+      targetTime = Math.max(
+        0,
+        Math.min(state.playback.totalDuration, targetTime),
+      )
 
       // Find which segment this time falls into
       let accumulatedTime = 0
       for (let i = 0; i < state.playback.segments.length; i++) {
-        const segmentDuration = (state.playback.segments[i].durationMs || 0) / 1000
+        const segmentDuration =
+          (state.playback.segments[i].durationMs || 0) / 1000
         if (targetTime <= accumulatedTime + segmentDuration) {
           // Target is in this segment
           const segmentTime = targetTime - accumulatedTime
@@ -585,7 +795,7 @@ export function AudioProvider({
               audioRef.current.src = segment.audioUrl
               audioRef.current.currentTime = segmentTime
               if (state.playback.isPlaying) {
-                audioRef.current.play()
+                safePlay(audioRef.current)
               }
             }
           }
@@ -594,7 +804,7 @@ export function AudioProvider({
         accumulatedTime += segmentDuration
       }
     },
-    [store],
+    [store, safePlay],
   )
 
   const goToSegment = useCallback(
@@ -611,10 +821,18 @@ export function AudioProvider({
     (track: MusicTrack) => {
       const state = store.getState()
       if (state.music.playlist.some((t) => t.id === track.id)) return
+
+      const wasEmpty = state.music.playlist.length === 0
+      const newPlaylist = [...state.music.playlist, track]
+
       store.setState({
         music: {
           ...state.music,
-          playlist: [...state.music.playlist, track],
+          playlist: newPlaylist,
+          // Auto-play if this is the first track with a valid src
+          isPlaying:
+            wasEmpty && track.src !== null ? true : state.music.isPlaying,
+          currentTrackIndex: wasEmpty ? 0 : state.music.currentTrackIndex,
         },
       })
     },
@@ -624,10 +842,36 @@ export function AudioProvider({
   const removeTrack = useCallback(
     (trackId: string) => {
       const state = store.getState()
+      const currentTrack = state.music.playlist[state.music.currentTrackIndex]
+      const newPlaylist = state.music.playlist.filter((t) => t.id !== trackId)
+
+      let newCurrentTrackIndex = state.music.currentTrackIndex
+      let newIsPlaying = state.music.isPlaying
+
+      if (trackId === currentTrack?.id) {
+        // Removed the currently playing track
+        if (newPlaylist.length === 0) {
+          newCurrentTrackIndex = 0
+          newIsPlaying = false
+        } else {
+          // Stay at same index (plays next track) or clamp to end
+          newCurrentTrackIndex = Math.min(
+            state.music.currentTrackIndex,
+            newPlaylist.length - 1,
+          )
+        }
+      } else if (currentTrack) {
+        // Find new index of current track
+        const newIndex = newPlaylist.findIndex((t) => t.id === currentTrack.id)
+        newCurrentTrackIndex = newIndex === -1 ? 0 : newIndex
+      }
+
       store.setState({
         music: {
           ...state.music,
-          playlist: state.music.playlist.filter((t) => t.id !== trackId),
+          playlist: newPlaylist,
+          currentTrackIndex: newCurrentTrackIndex,
+          isPlaying: newIsPlaying,
         },
       })
     },
@@ -645,12 +889,25 @@ export function AudioProvider({
       )
         return
 
+      const currentTrackId =
+        state.music.playlist[state.music.currentTrackIndex]?.id
+
       const newPlaylist = [...state.music.playlist]
       const [track] = newPlaylist.splice(fromIndex, 1)
       newPlaylist.splice(toIndex, 0, track)
 
+      // Find new index of current track
+      const newCurrentTrackIndex = currentTrackId
+        ? newPlaylist.findIndex((t) => t.id === currentTrackId)
+        : 0
+
       store.setState({
-        music: { ...state.music, playlist: newPlaylist },
+        music: {
+          ...state.music,
+          playlist: newPlaylist,
+          currentTrackIndex:
+            newCurrentTrackIndex === -1 ? 0 : newCurrentTrackIndex,
+        },
       })
     },
     [store],
@@ -662,6 +919,10 @@ export function AudioProvider({
       store.setState({
         music: { ...state.music, volume },
       })
+      // Apply volume to music audio element
+      if (musicAudioRef.current) {
+        musicAudioRef.current.volume = volume * state.master.volume
+      }
     },
     [store],
   )
@@ -686,10 +947,63 @@ export function AudioProvider({
     [store],
   )
 
+  const playMusic = useCallback(() => {
+    const state = store.getState()
+    if (state.music.playlist.length === 0) return
+    store.setState({
+      music: { ...state.music, isPlaying: true },
+    })
+  }, [store])
+
+  const pauseMusic = useCallback(() => {
+    const state = store.getState()
+    store.setState({
+      music: { ...state.music, isPlaying: false },
+    })
+  }, [store])
+
+  const toggleMusicPlayPause = useCallback(() => {
+    const state = store.getState()
+    if (state.music.isPlaying) {
+      pauseMusic()
+    } else {
+      playMusic()
+    }
+  }, [store, playMusic, pauseMusic])
+
+  const nextTrack = useCallback(() => {
+    const state = store.getState()
+    if (state.music.playlist.length === 0) return
+
+    const nextIndex =
+      (state.music.currentTrackIndex + 1) % state.music.playlist.length
+    store.setState({
+      music: { ...state.music, currentTrackIndex: nextIndex },
+    })
+  }, [store])
+
+  const previousTrack = useCallback(() => {
+    const state = store.getState()
+    if (state.music.playlist.length === 0) return
+
+    const prevIndex =
+      state.music.currentTrackIndex === 0
+        ? state.music.playlist.length - 1
+        : state.music.currentTrackIndex - 1
+    store.setState({
+      music: { ...state.music, currentTrackIndex: prevIndex },
+    })
+  }, [store])
+
   // === Ambience Actions ===
   const toggleAmbientSound = useCallback(
     (soundId: AmbientSoundId, enabled: boolean) => {
       const state = store.getState()
+      const sound = state.ambience.sounds.find((s) => s.id === soundId)
+
+      // Prevent enabling sounds without src
+      if (enabled && !sound?.src) return
+
       store.setState({
         ambience: {
           sounds: state.ambience.sounds.map((s) =>
@@ -711,6 +1025,11 @@ export function AudioProvider({
           ),
         },
       })
+      // Apply volume to CrossfadeLooper
+      const looper = ambienceAudioRefs.current.get(soundId)
+      if (looper) {
+        looper.setVolume(volume * state.master.volume)
+      }
     },
     [store],
   )
@@ -722,9 +1041,19 @@ export function AudioProvider({
       store.setState({
         master: { ...state.master, volume },
       })
-      // Apply master volume to audio element
+      // Apply master volume to all audio elements
       if (audioRef.current) {
         audioRef.current.volume = state.narrator.volume * volume
+      }
+      if (musicAudioRef.current) {
+        musicAudioRef.current.volume = state.music.volume * volume
+      }
+      // Apply to all CrossfadeLoopers
+      for (const [soundId, looper] of ambienceAudioRefs.current) {
+        const sound = state.ambience.sounds.find((s) => s.id === soundId)
+        if (sound) {
+          looper.setVolume(sound.volume * volume)
+        }
       }
     },
     [store],
@@ -740,7 +1069,116 @@ export function AudioProvider({
     [store],
   )
 
-  // Set up audio event listeners
+  // === Effects for Audio Sync ===
+
+  // Effect: Sync music playback with state
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => {
+      const state = store.getState()
+      const audio = musicAudioRef.current
+      if (!audio) return
+
+      const currentTrack = state.music.playlist[state.music.currentTrackIndex]
+
+      if (state.music.isPlaying && currentTrack?.src) {
+        // Check if we need to change the source
+        const expectedSrc = currentTrack.src
+        if (!audio.src.endsWith(expectedSrc)) {
+          audio.src = expectedSrc
+        }
+        audio.volume = state.music.volume * state.master.volume
+        if (audio.paused) {
+          safePlay(audio)
+        }
+      } else {
+        if (!audio.paused) {
+          audio.pause()
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [store, safePlay])
+
+  // Effect: Handle music track ended
+  useEffect(() => {
+    const audio = musicAudioRef.current
+    if (!audio) return
+
+    const handleEnded = () => {
+      const state = store.getState()
+      const nextIndex = state.music.currentTrackIndex + 1
+
+      if (nextIndex < state.music.playlist.length) {
+        // Play next track
+        store.setState({
+          music: { ...state.music, currentTrackIndex: nextIndex },
+        })
+      } else if (state.music.loop) {
+        // Loop back to beginning
+        store.setState({
+          music: { ...state.music, currentTrackIndex: 0 },
+        })
+      } else {
+        // Stop at end
+        store.setState({
+          music: { ...state.music, isPlaying: false },
+        })
+      }
+    }
+
+    audio.addEventListener("ended", handleEnded)
+    return () => audio.removeEventListener("ended", handleEnded)
+  }, [store])
+
+  // Effect: Sync ambience playback
+  useEffect(() => {
+    const unsubscribe = store.subscribe(() => {
+      const state = store.getState()
+
+      for (const sound of state.ambience.sounds) {
+        const looper = ambienceAudioRefs.current.get(sound.id)
+
+        if (sound.enabled && sound.src) {
+          if (!looper && !pendingAmbienceInits.current.has(sound.id)) {
+            // Create new CrossfadeLooper
+            pendingAmbienceInits.current.add(sound.id)
+            const src = sound.src // Capture for closure
+            getAudioContext().then((ctx) => {
+              const vol = sound.volume * state.master.volume
+              const newLooper = new CrossfadeLooper(ctx, src, vol)
+              ambienceAudioRefs.current.set(sound.id, newLooper)
+              newLooper.start()
+              pendingAmbienceInits.current.delete(sound.id)
+            })
+          } else if (looper) {
+            looper.start() // No-op if already playing
+          }
+        } else if (looper) {
+          looper.stop()
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [store, getAudioContext])
+
+  // Effect: Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      for (const looper of ambienceAudioRefs.current.values()) {
+        looper.dispose()
+      }
+      ambienceAudioRefs.current.clear()
+      // Close AudioContext if it exists
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+        audioContextRef.current = null
+      }
+    }
+  }, [])
+
+  // Set up TTS audio event listeners
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -757,7 +1195,7 @@ export function AudioProvider({
             playback: { ...state.playback, currentSegmentIndex: nextIndex },
           })
           audio.src = nextSegment.audioUrl
-          audio.play()
+          safePlay(audio)
 
           // Pre-fetch the segment after next
           if (nextIndex + 1 < state.playback.segments.length) {
@@ -778,7 +1216,11 @@ export function AudioProvider({
       } else {
         // All segments finished
         store.setState({
-          playback: { ...state.playback, isPlaying: false, segmentCurrentTime: 0 },
+          playback: {
+            ...state.playback,
+            isPlaying: false,
+            segmentCurrentTime: 0,
+          },
         })
       }
     }
@@ -822,7 +1264,7 @@ export function AudioProvider({
       audio.removeEventListener("play", handlePlay)
       audio.removeEventListener("pause", handlePause)
     }
-  }, [store, fetchSegmentAudio])
+  }, [store, fetchSegmentAudio, safePlay])
 
   // Watch for segment becoming ready when we're waiting
   useEffect(() => {
@@ -830,25 +1272,29 @@ export function AudioProvider({
       if (!waitingForNextRef.current) return
 
       const state = store.getState()
-      const segment = state.playback.segments[state.playback.currentSegmentIndex]
+      const segment =
+        state.playback.segments[state.playback.currentSegmentIndex]
 
       if (segment?.status === "ready" && segment.audioUrl && audioRef.current) {
         waitingForNextRef.current = false
         audioRef.current.src = segment.audioUrl
-        audioRef.current.play()
+        safePlay(audioRef.current)
         store.setState({
           playback: { ...state.playback, isPlaying: true },
         })
 
         // Pre-fetch next segment
-        if (state.playback.currentSegmentIndex + 1 < state.playback.segments.length) {
+        if (
+          state.playback.currentSegmentIndex + 1 <
+          state.playback.segments.length
+        ) {
           fetchSegmentAudio(state.playback.currentSegmentIndex + 1)
         }
       }
     })
 
     return unsubscribe
-  }, [store, fetchSegmentAudio])
+  }, [store, fetchSegmentAudio, safePlay])
 
   const valueRef = useRef<{
     store: AudioStore
@@ -859,29 +1305,7 @@ export function AudioProvider({
   if (!valueRef.current) {
     valueRef.current = {
       store,
-      actions: {
-        enableNarrator,
-        disableNarrator,
-        setVoice,
-        setNarratorSpeed,
-        setNarratorVolume,
-        loadBlockTTS,
-        play,
-        pause,
-        togglePlayPause,
-        skip,
-        goToSegment,
-        addTrack,
-        removeTrack,
-        reorderTracks,
-        setMusicVolume,
-        setMusicShuffle,
-        setMusicLoop,
-        toggleAmbientSound,
-        setAmbientVolume,
-        setMasterVolume,
-        setActivePreset,
-      },
+      actions: {} as AudioActions, // Populated below
       audioRef,
     }
   }
@@ -905,6 +1329,11 @@ export function AudioProvider({
     setMusicVolume,
     setMusicShuffle,
     setMusicLoop,
+    playMusic,
+    pauseMusic,
+    toggleMusicPlayPause,
+    nextTrack,
+    previousTrack,
     toggleAmbientSound,
     setAmbientVolume,
     setMasterVolume,
@@ -913,8 +1342,9 @@ export function AudioProvider({
 
   return (
     <AudioContext.Provider value={valueRef.current}>
-      {/* Hidden audio element */}
+      {/* Hidden audio elements */}
       <audio ref={audioRef} />
+      <audio ref={musicAudioRef} />
       {children}
     </AudioContext.Provider>
   )
@@ -928,7 +1358,22 @@ function useAudioContext() {
 
 export function useAudioSelector<T>(selector: (state: AudioState) => T): T {
   const { store } = useAudioContext()
-  return useSyncExternalStore(store.subscribe, () => selector(store.getState()))
+  const [state, setState] = useState(() => selector(store.getState()))
+  const selectorRef = useRef(selector)
+  selectorRef.current = selector
+
+  useEffect(() => {
+    // Only update if the selected value actually changed
+    const checkForUpdates = () => {
+      const newValue = selectorRef.current(store.getState())
+      setState((prev) => (Object.is(prev, newValue) ? prev : newValue))
+    }
+    // Check immediately in case state changed between render and effect
+    checkForUpdates()
+    return store.subscribe(checkForUpdates)
+  }, [store])
+
+  return state
 }
 
 export function useAudioActions(): AudioActions {

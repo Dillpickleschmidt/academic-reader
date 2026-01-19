@@ -9,10 +9,13 @@ export type MusicTrackId = (typeof MUSIC_TRACKS)[number]["id"]
 export type MusicTrack = {
   id: string
   name: string
+  src: string | null
 }
 
 export type MusicState = {
   playlist: MusicTrack[]
+  currentTrackIndex: number
+  isPlaying: boolean
   volume: number
   shuffle: boolean
   loop: boolean
@@ -24,6 +27,7 @@ export type AmbientSoundId = (typeof AMBIENT_SOUNDS)[number]["id"]
 export type AmbientSoundState = {
   id: AmbientSoundId
   name: string
+  src: string | null
   enabled: boolean
   volume: number
 }
@@ -69,10 +73,10 @@ export type AudioState = {
     segmentCurrentTime: number
   }
 
-  // Music settings (UI only for now)
+  // Music settings
   music: MusicState
 
-  // Ambience settings (UI only for now)
+  // Ambience settings
   ambience: {
     sounds: AmbientSoundState[]
   }
