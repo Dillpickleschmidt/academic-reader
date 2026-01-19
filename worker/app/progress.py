@@ -1,7 +1,7 @@
 """Progress tracking for tqdm → frontend.
 
-Local (dev):    mp.Queue tqdm patch → SSE → frontend
-Cloud (RunPod): webhook tqdm patch → HTTP → KV → SSE → frontend
+Local:  mp.Queue tqdm patch → SSE stream → frontend
+RunPod: No progress tracking (webhook support exists but not wired up)
 """
 
 import multiprocessing as mp
