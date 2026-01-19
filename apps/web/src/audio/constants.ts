@@ -8,17 +8,18 @@ export const AMBIENT_SOUNDS = [
   {
     id: "brown-noise",
     name: "Brown Noise",
-    src: "/audio/ambience/deep_brown_noise.mp3",
+    src: "/audio/ambience/brown_noise.mp3",
   },
   { id: "creek", name: "Creek", src: "/audio/ambience/creek.mp3" },
   { id: "underwater", name: "Underwater", src: "/audio/ambience/underwater.mp3" },
-  { id: "rain", name: "Rain", src: null },
+  { id: "rain-1", name: "Rain 1", src: "/audio/ambience/rain_1.mp3" },
+  { id: "rain-2", name: "Rain 2", src: "/audio/ambience/rain_2.mp3" },
   { id: "fireplace-1", name: "Fireplace 1", src: "/audio/ambience/fireplace_1.mp3" },
   { id: "fireplace-2", name: "Fireplace 2", src: "/audio/ambience/fireplace_2.mp3" },
   { id: "forest", name: "Forest", src: null },
-  { id: "ocean", name: "Ocean", src: null },
+  { id: "ocean", name: "Ocean", src: "/audio/ambience/ocean_waves.mp3" },
   { id: "thunder", name: "Thunder", src: "/audio/ambience/dry_thunder.mp3" },
-  { id: "thunderstorm", name: "Thunderstorm", src: "/audio/ambience/cozy_thunderstorm.mp3" },
+  { id: "thunderstorm", name: "Thunderstorm", src: "/audio/ambience/thunderstorm.mp3" },
 ] as const
 
 // prettier-ignore
