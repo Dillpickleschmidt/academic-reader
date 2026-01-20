@@ -9,7 +9,6 @@ import { requireAuth } from "../middleware/auth"
 import { persistDocument } from "../services/document-persistence"
 import { createAuthenticatedConvexClient } from "../services/convex"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
-import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 
 const requestSchema = z.object({
   jobId: z.string(),
@@ -30,7 +29,6 @@ export const persist = new Hono<{ Variables: Variables }>()
  */
 persist.post("/documents/persist", requireAuth, async (c) => {
   const event = c.get("event")
-  const startTime = performance.now()
 
   // Parse request body
   const bodyResult = await tryCatch(c.req.json())
@@ -40,7 +38,6 @@ persist.post("/documents/persist", requireAuth, async (c) => {
       message: getErrorMessage(bodyResult.error),
       code: "JSON_PARSE_ERROR",
     }
-    emitStreamingEvent(event, { status: 400 })
     return c.json({ error: "Invalid request body" }, 400)
   }
 
@@ -51,7 +48,6 @@ persist.post("/documents/persist", requireAuth, async (c) => {
       message: parseResult.error.message,
       code: "VALIDATION_ERROR",
     }
-    emitStreamingEvent(event, { status: 400 })
     return c.json({ error: "Invalid request format" }, 400)
   }
 
@@ -66,7 +62,6 @@ persist.post("/documents/persist", requireAuth, async (c) => {
       message: "Result not found or expired",
       code: "RESULT_NOT_FOUND",
     }
-    emitStreamingEvent(event, { status: 404 })
     return c.json({ error: "Result not found or expired. Please convert again." }, 404)
   }
 
@@ -74,7 +69,6 @@ persist.post("/documents/persist", requireAuth, async (c) => {
   const convex = await createAuthenticatedConvexClient(c.req.raw.headers)
   if (!convex) {
     event.error = { category: "auth", message: "Failed to authenticate with Convex", code: "CONVEX_AUTH_ERROR" }
-    emitStreamingEvent(event, { status: 401 })
     return c.json({ error: "Authentication failed" }, 401)
   }
 
@@ -94,7 +88,6 @@ persist.post("/documents/persist", requireAuth, async (c) => {
       message: getErrorMessage(persistResult.error),
       code: "PERSIST_ERROR",
     }
-    emitStreamingEvent(event, { status: 500 })
     return c.json({ error: "Failed to persist document" }, 500)
   }
 
@@ -104,10 +97,6 @@ persist.post("/documents/persist", requireAuth, async (c) => {
   resultCache.delete(jobId)
 
   event.documentId = documentId
-  emitStreamingEvent(event, {
-    status: 200,
-    durationMs: Math.round(performance.now() - startTime),
-  })
 
   return c.json({ documentId })
 })
