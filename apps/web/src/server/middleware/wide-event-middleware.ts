@@ -55,6 +55,14 @@ export const wideEvent = createMiddleware(async (c, next) => {
 
   try {
     await next()
+  } catch (e) {
+    // Capture uncaught errors for logging
+    event.error = {
+      category: "internal",
+      message: e instanceof Error ? e.message : String(e),
+      code: "UNCAUGHT_ERROR",
+    }
+    throw e // Re-throw so Hono returns 500
   } finally {
     if (!manualEmit) {
       event.durationMs = Math.round(performance.now() - start)
