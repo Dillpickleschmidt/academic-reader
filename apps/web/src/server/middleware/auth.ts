@@ -1,6 +1,7 @@
 import { createMiddleware } from "hono/factory"
 import { getCookie } from "hono/cookie"
 import type { Context } from "hono"
+import { env } from "../env"
 
 // Extend Hono's context variable types
 declare module "hono" {
@@ -8,33 +9,6 @@ declare module "hono" {
     userId: string
   }
 }
-
-// Convex HTTP actions URL (auth endpoints)
-function getConvexHttpUrl(): string {
-  const url = process.env.CONVEX_HTTP_URL
-  const isDev = process.env.NODE_ENV === "development"
-
-  if (!url) {
-    if (isDev) {
-      return "http://localhost:3211"
-    }
-    throw new Error("CONVEX_HTTP_URL is required in production")
-  }
-
-  // Allow HTTP for localhost/127.0.0.1 and internal Docker hostnames (no dots)
-  const hostname = new URL(url).hostname
-  const isLocalOrInternal =
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    !hostname.includes(".") // Docker service names don't have dots
-  if (!isLocalOrInternal && !url.startsWith("https://")) {
-    throw new Error("CONVEX_HTTP_URL must use HTTPS for non-local hosts")
-  }
-
-  return url
-}
-
-const CONVEX_HTTP_URL = getConvexHttpUrl()
 
 // Cookie names
 const SECURE_COOKIE_NAME = "__Secure-better-auth.session_token"
@@ -59,7 +33,7 @@ export async function getAuth(c: Context): Promise<{ userId: string } | null> {
   }
 
   try {
-    const response = await fetch(`${CONVEX_HTTP_URL}/api/auth/get-session`, {
+    const response = await fetch(`${env.CONVEX_HTTP_URL}/api/auth/get-session`, {
       headers: { Cookie: `${cookieName}=${sessionToken}` },
       signal: AbortSignal.timeout(5000),
     })
@@ -97,7 +71,7 @@ export const requireAuth = createMiddleware(async (c, next) => {
   }
 
   try {
-    const response = await fetch(`${CONVEX_HTTP_URL}/api/auth/get-session`, {
+    const response = await fetch(`${env.CONVEX_HTTP_URL}/api/auth/get-session`, {
       headers: { Cookie: `${cookieName}=${sessionToken}` },
       signal: AbortSignal.timeout(5000),
     })
@@ -110,11 +84,10 @@ export const requireAuth = createMiddleware(async (c, next) => {
       if (event) {
         event.error = {
           category: "auth",
-          message: "Auth service returned error",
+          message: `Auth service returned ${response.status}`,
           code: "AUTH_UPSTREAM_ERROR",
         }
       }
-      console.error(`[auth] Upstream error: ${response.status}`)
       return c.json({ error: "Auth service unavailable" }, 502)
     }
 

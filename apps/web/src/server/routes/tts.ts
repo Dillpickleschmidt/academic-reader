@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { createTTSBackend } from "../backends/tts/factory"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
+import { env } from "../env"
 
 interface TTSChunkRequest {
   documentId: string
@@ -325,11 +326,11 @@ tts.get("/tts/voices", async (c) => {
 tts.post("/tts/unload", async (c) => {
   const event = c.get("event")
 
-  if (process.env.BACKEND_MODE !== "local") {
+  if (env.BACKEND_MODE !== "local") {
     return c.json({ unloaded: false, reason: "not local mode" })
   }
 
-  const ttsWorkerUrl = process.env.TTS_WORKER_URL || "http://worker-tts:8001"
+  const ttsWorkerUrl = env.TTS_WORKER_URL
   const unloadResult = await tryCatch(
     fetch(`${ttsWorkerUrl}/unload`, { method: "POST" }),
   )

@@ -19,6 +19,7 @@ import { tts } from "./routes/tts"
 import type { Storage } from "./storage/types"
 import { createStorage } from "./storage/factory"
 import { wideEvent } from "./middleware/wide-event-middleware"
+import { env } from "./env"
 
 type Variables = {
   storage: Storage
@@ -27,13 +28,7 @@ type Variables = {
 const app = new Hono<{ Variables: Variables }>()
 
 // Create unified storage (S3 in prod, Disk in dev)
-const storage = createStorage({
-  S3_ENDPOINT: process.env.S3_ENDPOINT,
-  S3_PUBLIC_URL: process.env.S3_PUBLIC_URL,
-  S3_ACCESS_KEY: process.env.S3_ACCESS_KEY,
-  S3_SECRET_KEY: process.env.S3_SECRET_KEY,
-  S3_BUCKET: process.env.S3_BUCKET,
-})
+const storage = createStorage()
 
 // Wide event middleware for API routes only (not static files)
 app.use("/api/*", wideEvent)
@@ -49,10 +44,9 @@ app.use(
   "/api/*",
   cors({
     origin: (origin) => {
-      const siteUrl = process.env.SITE_URL
       // Require SITE_URL to be configured for cross-origin requests
-      if (!siteUrl) return null
-      return origin === siteUrl ? origin : null
+      if (!env.SITE_URL) return null
+      return origin === env.SITE_URL ? origin : null
     },
     credentials: true,
   }),
@@ -63,9 +57,8 @@ app.use(
 // ─────────────────────────────────────────────────────────────
 const authProxy = async (c: Context) => {
   const url = new URL(c.req.url)
-  const convexHttpUrl = process.env.CONVEX_HTTP_URL || "http://localhost:3211"
-  const targetUrl = `${convexHttpUrl}${url.pathname}${url.search}`
-  const targetHost = new URL(convexHttpUrl).host
+  const targetUrl = `${env.CONVEX_HTTP_URL}${url.pathname}${url.search}`
+  const targetHost = new URL(env.CONVEX_HTTP_URL).host
 
   try {
     return await proxy(targetUrl, {
@@ -100,7 +93,7 @@ api.route("/", chat)
 api.route("/", ttsRewrite)
 api.route("/", tts)
 api.get("/health", (c) =>
-  c.json({ status: "ok", mode: process.env.BACKEND_MODE }),
+  c.json({ status: "ok", mode: env.BACKEND_MODE }),
 )
 app.route("/api", api)
 
@@ -111,23 +104,19 @@ app.use("/*", serveStatic({ root: "./dist" }))
 app.use("/*", serveStatic({ path: "./dist/index.html" })) // SPA fallback
 
 // Start server
-const port = parseInt(process.env.PORT || "8787", 10)
-const tlsCert = process.env.TLS_CERT
-const tlsKey = process.env.TLS_KEY
-
-console.log(`Starting server on port ${port}`)
-console.log(`Backend: ${process.env.BACKEND_MODE || "local"}`)
-if (tlsCert && tlsKey) console.log("TLS: enabled")
+console.log(`Starting server on port ${env.PORT}`)
+console.log(`Backend: ${env.BACKEND_MODE}`)
+if (env.TLS_CERT && env.TLS_KEY) console.log("TLS: enabled")
 
 export default {
-  port,
+  port: env.PORT,
   fetch: app.fetch,
   idleTimeout: 0, // Disable timeout for SSE streams
-  ...(tlsCert && tlsKey
+  ...(env.TLS_CERT && env.TLS_KEY
     ? {
         tls: {
-          cert: Bun.file(tlsCert),
-          key: Bun.file(tlsKey),
+          cert: Bun.file(env.TLS_CERT),
+          key: Bun.file(env.TLS_KEY),
         },
       }
     : {}),

@@ -105,6 +105,16 @@ class DatalabBackend implements ConversionBackend {
     return this.parseResponse(data)
   }
 
+  supportsStreaming(): boolean {
+    return false
+  }
+
+  supportsCancellation(): boolean {
+    return false
+  }
+
+  // Private helpers
+
   private mapStatus(status: string, success?: boolean): JobStatus {
     if (status === "complete" && !success) return "failed"
     const STATUS_MAP: Record<string, JobStatus> = {
@@ -141,14 +151,6 @@ class DatalabBackend implements ConversionBackend {
           : undefined,
       error: data.error,
     }
-  }
-
-  supportsStreaming(): boolean {
-    return false
-  }
-
-  supportsCancellation(): boolean {
-    return false
   }
 }
 

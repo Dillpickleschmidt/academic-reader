@@ -176,8 +176,11 @@ ttsRewrite.post("/tts/rewrite", async (c) => {
   )
 
   if (!createResult.success) {
-    // Log but don't fail - caching is not critical
-    console.error("Failed to store TTS segments:", createResult.error)
+    // Non-critical: caching failure doesn't prevent response
+    event.warning = {
+      message: getErrorMessage(createResult.error),
+      code: "TTS_SEGMENT_CACHE_FAILED",
+    }
   }
 
   event.metadata = {

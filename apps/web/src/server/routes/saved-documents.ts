@@ -16,6 +16,7 @@ import {
   processParagraphs,
   convertMathToHtml,
 } from "../utils/html-processing"
+import { env } from "../env"
 
 type Variables = {
   storage: Storage
@@ -30,7 +31,7 @@ export const savedDocuments = new Hono<{ Variables: Variables }>()
  */
 savedDocuments.get("/saved-documents/:documentId", requireAuth, async (c) => {
   const event = c.get("event")
-  event.backend = (process.env.BACKEND_MODE || "local") as
+  event.backend = env.BACKEND_MODE as
     | "local"
     | "runpod"
     | "datalab"
@@ -115,7 +116,7 @@ savedDocuments.delete(
   requireAuth,
   async (c) => {
     const event = c.get("event")
-    event.backend = (process.env.BACKEND_MODE || "local") as
+    event.backend = env.BACKEND_MODE as
       | "local"
       | "runpod"
       | "datalab"

@@ -3,12 +3,13 @@ import { readFileSync, existsSync } from "fs"
 import type { PresignedUrlResult } from "../types"
 import type { Storage, SaveFileOptions } from "./types"
 import { getImageMimeType } from "../utils/mime-types"
+import { env } from "../env"
 
 const TUNNEL_URL_FILE = "/tunnel/url"
 
 export interface S3Config {
   endpoint: string
-  publicUrl?: string
+  publicUrl: string
   accessKeyId: string
   secretAccessKey: string
   bucket: string
@@ -58,7 +59,7 @@ export class S3Storage implements Storage {
 
   private getTunnelUrl(): string | undefined {
     // Only use tunnel URL in runpod mode
-    if (process.env.BACKEND_MODE !== "runpod") return undefined
+    if (env.BACKEND_MODE !== "runpod") return undefined
 
     try {
       if (existsSync(TUNNEL_URL_FILE)) {
@@ -77,7 +78,7 @@ export class S3Storage implements Storage {
       return `${tunnelUrl}/${this.config.bucket}/${uploadKey}`
     }
 
-    if (!internal && this.config.publicUrl) {
+    if (!internal) {
       return `${this.config.publicUrl}/${uploadKey}`
     }
 
@@ -186,11 +187,6 @@ export class S3Storage implements Storage {
     docPath: string,
     images: Record<string, string>,
   ): Promise<Record<string, string>> {
-    if (!this.config.publicUrl) {
-      throw new Error(
-        "S3_PUBLIC_URL is required for image uploads. Set it to your R2 bucket's public URL.",
-      )
-    }
     const baseUrl = this.config.publicUrl.replace(/\/+$/, "")
 
     const entries = await Promise.all(

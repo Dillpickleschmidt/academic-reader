@@ -120,16 +120,6 @@ class RunpodBackend implements ConversionBackend {
     }
   }
 
-  private mapStatus(status: string): JobStatus {
-    const STATUS_MAP: Record<string, JobStatus> = {
-      IN_QUEUE: "pending",
-      IN_PROGRESS: "processing",
-      COMPLETED: "completed",
-      FAILED: "failed",
-    }
-    return STATUS_MAP[status] ?? "failed"
-  }
-
   supportsStreaming(): boolean {
     return false
   }
@@ -152,6 +142,18 @@ class RunpodBackend implements ConversionBackend {
       console.warn(`[Runpod] Failed to cancel job ${jobId}:`, error)
       return false
     }
+  }
+
+  // Private helpers
+
+  private mapStatus(status: string): JobStatus {
+    const STATUS_MAP: Record<string, JobStatus> = {
+      IN_QUEUE: "pending",
+      IN_PROGRESS: "processing",
+      COMPLETED: "completed",
+      FAILED: "failed",
+    }
+    return STATUS_MAP[status] ?? "failed"
   }
 }
 

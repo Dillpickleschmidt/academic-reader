@@ -20,21 +20,13 @@ import { transformSSEStream } from "../utils/sse-transform"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 import type { ChunkInput } from "../services/document-persistence"
+import { env } from "../env"
 
 type Variables = {
   storage: Storage
 }
 
 type CleanupReason = "cancelled" | "failed" | "timeout" | "client_disconnect"
-
-function handleCleanup(
-  event: WideEvent,
-  jobId: string,
-  reason: CleanupReason,
-): void {
-  const result = cleanupJob(jobId)
-  event.cleanup = { reason, ...result }
-}
 
 interface JobResultFormats {
   html?: string
@@ -63,147 +55,21 @@ interface FileInfo {
   documentPath: string
 }
 
-/**
- * Process chunks and cache job result for persistence.
- * Used by both streaming and polling paths.
- */
-function cacheJobResult(
-  jobId: string,
-  result: JobResultInput,
-  fileInfo: FileInfo,
-): ChunkInput[] {
-  const rawChunks = result.formats?.chunks?.blocks ?? []
-  const chunks: ChunkInput[] = rawChunks
-    .map((chunk) => ({
-      blockId: chunk.id,
-      blockType: chunk.block_type,
-      content: stripHtmlForEmbedding(chunk.html),
-      page: chunk.page,
-      section: chunk.section_hierarchy
-        ? Object.values(chunk.section_hierarchy).filter(Boolean).join(" > ")
-        : undefined,
-    }))
-    .filter((c) => c.content.trim().length > 0)
-
-  resultCache.set(jobId, {
-    html: result.formats?.html ?? result.content ?? "",
-    markdown: result.formats?.markdown ?? "",
-    chunks,
-    metadata: { pages: result.metadata?.pages },
-    filename: fileInfo.filename,
-    fileId: fileInfo.fileId,
-    documentPath: fileInfo.documentPath,
-  })
-
-  return chunks
-}
-
-/** HTML transforms applied to all content */
-const HTML_TRANSFORMS = [
-  removeImgDescriptions,
-  wrapCitations,
-  processParagraphs,
-  convertMathToHtml,
-]
-
 interface ProcessedJobResult {
   content: string
   imageUrls?: Record<string, string>
 }
 
-/**
- * Process a completed job: upload images, rewrite URLs, save to S3, cache for persistence.
- * Shared by both streaming and polling paths.
- */
-async function processCompletedJob(
-  jobId: string,
-  result: JobResultInput,
-  fileInfo: FileInfo | undefined,
-  storage: Storage,
-  event: WideEvent,
-): Promise<ProcessedJobResult> {
-  // Upload images and get public URLs
-  let imageUrls: Record<string, string> | undefined
-  if (
-    result.images &&
-    Object.keys(result.images).length > 0 &&
-    fileInfo?.documentPath
-  ) {
-    const uploadResult = await tryCatch(
-      storage.uploadImages(fileInfo.documentPath, result.images),
-    )
-    if (uploadResult.success) {
-      imageUrls = uploadResult.data
-      console.log(
-        `[jobs] Uploaded ${Object.keys(imageUrls).length} images to storage`,
-      )
-    } else {
-      const errorMsg = getErrorMessage(uploadResult.error)
-      console.error(`[jobs] Failed to upload images: ${errorMsg}`)
-      event.error = {
-        category: "configuration",
-        message: errorMsg,
-        code: "IMAGE_UPLOAD_FAILED",
-      }
-    }
-  }
-
-  // Rewrite image sources in display content
-  let processedContent = result.content || ""
-  if (imageUrls && processedContent) {
-    processedContent = rewriteImageSources(processedContent, imageUrls)
-  }
-
-  // Apply HTML enhancements
-  if (processedContent) {
-    processedContent = processHtml(processedContent, HTML_TRANSFORMS)
-  }
-
-  // Rewrite image sources in formats.html for storage
-  if (imageUrls && result.formats?.html) {
-    result.formats.html = rewriteImageSources(result.formats.html, imageUrls)
-  }
-
-  // Save to S3
-  if (result.formats && fileInfo?.documentPath) {
-    const saveResult = await tryCatch(
-      Promise.all([
-        storage.saveFile(
-          `${fileInfo.documentPath}/content.html`,
-          result.formats.html || "",
-        ),
-        storage.saveFile(
-          `${fileInfo.documentPath}/content.md`,
-          result.formats.markdown || "",
-        ),
-      ]),
-    )
-    if (!saveResult.success) {
-      console.error(`[jobs] Failed to save results: ${saveResult.error}`)
-    }
-  }
-
-  // Cache for persistence
-  if (fileInfo) {
-    cacheJobResult(jobId, { ...result, content: processedContent }, fileInfo)
-  }
-
-  return { content: processedContent, imageUrls }
-}
+// ─────────────────────────────────────────────────────────────
+// Public API
+// ─────────────────────────────────────────────────────────────
 
 export const jobs = new Hono<{ Variables: Variables }>()
-
-const SSE_HEADERS = {
-  "Content-Type": "text/event-stream",
-  "Cache-Control": "no-cache, no-transform",
-  "X-Accel-Buffering": "no",
-  Connection: "keep-alive",
-} as const
 
 jobs.get("/jobs/:jobId/stream", async (c) => {
   const event = c.get("event")
   const jobId = c.req.param("jobId")
-  const backendType = process.env.BACKEND_MODE || "local"
+  const backendType = env.BACKEND_MODE
   const storage = c.get("storage")
 
   event.jobId = jobId
@@ -300,7 +166,11 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
 
           return JSON.stringify(parsed)
         } catch (err) {
-          console.error(`[jobs] Error processing completed event:`, err)
+          event.error = {
+            category: "internal",
+            message: err instanceof Error ? err.message : String(err),
+            code: "COMPLETED_EVENT_PROCESSING_ERROR",
+          }
           return data
         }
       },
@@ -481,7 +351,7 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
 jobs.post("/jobs/:jobId/cancel", async (c) => {
   const event = c.get("event")
   const jobId = c.req.param("jobId")
-  const backendType = process.env.BACKEND_MODE || "local"
+  const backendType = env.BACKEND_MODE
 
   event.jobId = jobId
   event.backend = backendType as BackendType
@@ -516,3 +386,146 @@ jobs.post("/jobs/:jobId/cancel", async (c) => {
 
   return c.json({ status: "cancelled", jobId })
 })
+
+// ─────────────────────────────────────────────────────────────
+// Private helpers
+// ─────────────────────────────────────────────────────────────
+
+const SSE_HEADERS = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache, no-transform",
+  "X-Accel-Buffering": "no",
+  Connection: "keep-alive",
+} as const
+
+function handleCleanup(
+  event: WideEvent,
+  jobId: string,
+  reason: CleanupReason,
+): void {
+  const result = cleanupJob(jobId)
+  event.cleanup = { reason, ...result }
+}
+
+/** HTML transforms applied to all content */
+const HTML_TRANSFORMS = [
+  removeImgDescriptions,
+  wrapCitations,
+  processParagraphs,
+  convertMathToHtml,
+]
+
+/**
+ * Process chunks and cache job result for persistence.
+ * Used by both streaming and polling paths.
+ */
+function cacheJobResult(
+  jobId: string,
+  result: JobResultInput,
+  fileInfo: FileInfo,
+): ChunkInput[] {
+  const rawChunks = result.formats?.chunks?.blocks ?? []
+  const chunks: ChunkInput[] = rawChunks
+    .map((chunk) => ({
+      blockId: chunk.id,
+      blockType: chunk.block_type,
+      content: stripHtmlForEmbedding(chunk.html),
+      page: chunk.page,
+      section: chunk.section_hierarchy
+        ? Object.values(chunk.section_hierarchy).filter(Boolean).join(" > ")
+        : undefined,
+    }))
+    .filter((c) => c.content.trim().length > 0)
+
+  resultCache.set(jobId, {
+    html: result.formats?.html ?? result.content ?? "",
+    markdown: result.formats?.markdown ?? "",
+    chunks,
+    metadata: { pages: result.metadata?.pages },
+    filename: fileInfo.filename,
+    fileId: fileInfo.fileId,
+    documentPath: fileInfo.documentPath,
+  })
+
+  return chunks
+}
+
+/**
+ * Process a completed job: upload images, rewrite URLs, save to S3, cache for persistence.
+ * Shared by both streaming and polling paths.
+ */
+async function processCompletedJob(
+  jobId: string,
+  result: JobResultInput,
+  fileInfo: FileInfo | undefined,
+  storage: Storage,
+  event: WideEvent,
+): Promise<ProcessedJobResult> {
+  // Upload images and get public URLs
+  let imageUrls: Record<string, string> | undefined
+  if (
+    result.images &&
+    Object.keys(result.images).length > 0 &&
+    fileInfo?.documentPath
+  ) {
+    const uploadResult = await tryCatch(
+      storage.uploadImages(fileInfo.documentPath, result.images),
+    )
+    if (uploadResult.success) {
+      imageUrls = uploadResult.data
+      event.imageCount = Object.keys(imageUrls).length
+    } else {
+      event.error = {
+        category: "storage",
+        message: getErrorMessage(uploadResult.error),
+        code: "IMAGE_UPLOAD_FAILED",
+      }
+    }
+  }
+
+  // Rewrite image sources in display content
+  let processedContent = result.content || ""
+  if (imageUrls && processedContent) {
+    processedContent = rewriteImageSources(processedContent, imageUrls)
+  }
+
+  // Apply HTML enhancements
+  if (processedContent) {
+    processedContent = processHtml(processedContent, HTML_TRANSFORMS)
+  }
+
+  // Rewrite image sources in formats.html for storage
+  if (imageUrls && result.formats?.html) {
+    result.formats.html = rewriteImageSources(result.formats.html, imageUrls)
+  }
+
+  // Save to S3
+  if (result.formats && fileInfo?.documentPath) {
+    const saveResult = await tryCatch(
+      Promise.all([
+        storage.saveFile(
+          `${fileInfo.documentPath}/content.html`,
+          result.formats.html || "",
+        ),
+        storage.saveFile(
+          `${fileInfo.documentPath}/content.md`,
+          result.formats.markdown || "",
+        ),
+      ]),
+    )
+    if (!saveResult.success) {
+      event.error = {
+        category: "storage",
+        message: getErrorMessage(saveResult.error),
+        code: "S3_SAVE_FAILED",
+      }
+    }
+  }
+
+  // Cache for persistence
+  if (fileInfo) {
+    cacheJobResult(jobId, { ...result, content: processedContent }, fileInfo)
+  }
+
+  return { content: processedContent, imageUrls }
+}

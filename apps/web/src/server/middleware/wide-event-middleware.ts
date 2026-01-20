@@ -9,6 +9,7 @@
 import { createMiddleware } from "hono/factory"
 import type { WideEvent } from "../types"
 import { createWideEvent, emitEvent } from "../utils/wide-event-logger"
+import { env } from "../env"
 
 // Extend Hono's context variable types
 declare module "hono" {
@@ -42,9 +43,8 @@ export const wideEvent = createMiddleware(async (c, next) => {
 
   // Create and store wide event
   const event = createWideEvent(c.req.method, c.req.path, {
-    backendMode:
-      (process.env.BACKEND_MODE as "local" | "runpod" | "datalab") || "local",
-    siteUrl: process.env.SITE_URL,
+    backendMode: env.BACKEND_MODE,
+    siteUrl: env.SITE_URL,
   })
   c.set("event", event)
 

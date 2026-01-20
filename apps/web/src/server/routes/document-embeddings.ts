@@ -10,6 +10,7 @@ import { generateEmbeddings } from "../services/embeddings"
 import { createAuthenticatedConvexClient } from "../services/convex"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
+import { env } from "../env"
 
 export const documentEmbeddings = new Hono()
 
@@ -22,7 +23,7 @@ export const documentEmbeddings = new Hono()
  */
 documentEmbeddings.post("/documents/:documentId/embeddings", requireAuth, async (c) => {
   const event = c.get("event")
-  event.backend = (process.env.BACKEND_MODE || "local") as "local" | "runpod" | "datalab"
+  event.backend = env.BACKEND_MODE
   const startTime = performance.now()
 
   // Create authenticated Convex client

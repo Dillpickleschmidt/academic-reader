@@ -6,6 +6,7 @@ import { jobFileMap } from "../storage/job-file-map"
 import { createBackend } from "../backends/factory"
 import { getAuth } from "../middleware/auth"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
+import { env } from "../env"
 
 type Variables = {
   storage: Storage
@@ -17,7 +18,7 @@ convert.post("/convert/:fileId", async (c) => {
   const event = c.get("event")
   const fileId = c.req.param("fileId")
   const query = c.req.query()
-  const backendType = process.env.BACKEND_MODE || "local"
+  const backendType = env.BACKEND_MODE
   const filename = query.filename
   if (!filename) {
     return c.json({ error: "Missing filename parameter" }, { status: 400 })
@@ -95,8 +96,7 @@ convert.post("/convert/:fileId", async (c) => {
 
   // Free TTS VRAM before conversion (local mode only)
   if (backendType === "local") {
-    const ttsWorkerUrl = process.env.TTS_WORKER_URL || "http://worker-tts:8001"
-    await fetch(`${ttsWorkerUrl}/unload`, { method: "POST" }).catch(() => {})
+    await fetch(`${env.TTS_WORKER_URL}/unload`, { method: "POST" }).catch(() => {})
   }
 
   const jobResult = await tryCatch(backend.submitJob(input))
@@ -120,7 +120,7 @@ convert.post("/convert/:fileId", async (c) => {
 // Warm models (passthrough for local only)
 convert.post("/warm-models", async (c) => {
   const event = c.get("event")
-  const backendType = process.env.BACKEND_MODE || "local"
+  const backendType = env.BACKEND_MODE
   event.backend = backendType as BackendType
 
   if (backendType !== "local") {
@@ -130,10 +130,8 @@ convert.post("/warm-models", async (c) => {
     })
   }
 
-  const localUrl = process.env.LOCAL_WORKER_URL || "http://localhost:8000"
-
   const warmResult = await tryCatch(
-    fetch(`${localUrl}/warm-models`, {
+    fetch(`${env.LOCAL_WORKER_URL}/warm-models`, {
       method: "POST",
       signal: AbortSignal.timeout(30_000),
     }),

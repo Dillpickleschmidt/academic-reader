@@ -6,6 +6,7 @@ import { S3Storage } from "../storage/s3"
 import { getAuth } from "../middleware/auth"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { sanitizeFilename } from "../utils/sanitize"
+import { env } from "../env"
 
 type Variables = {
   storage: Storage
@@ -16,7 +17,7 @@ export const upload = new Hono<{ Variables: Variables }>()
 // Upload file directly - saves to S3/MinIO for all modes
 upload.post("/upload", async (c) => {
   const event = c.get("event")
-  const backend = process.env.BACKEND_MODE || "local"
+  const backend = env.BACKEND_MODE
   event.backend = backend as BackendType
 
   const storage = c.get("storage")
@@ -70,7 +71,7 @@ upload.post("/upload", async (c) => {
 // Get presigned upload URL (S3 only - production)
 upload.post("/upload-url", async (c) => {
   const event = c.get("event")
-  const backend = process.env.BACKEND_MODE || "local"
+  const backend = env.BACKEND_MODE
   event.backend = backend as BackendType
 
   const storage = c.get("storage")
@@ -109,6 +110,83 @@ upload.post("/upload-url", async (c) => {
     expiresAt: urlResult.data.expiresAt,
   })
 })
+
+// Fetch file from URL - saves to S3/MinIO for all modes
+upload.post("/fetch-url", async (c) => {
+  const event = c.get("event")
+  const url = c.req.query("url")
+
+  if (!url) {
+    event.error = { category: "validation", message: "Missing url parameter", code: "MISSING_URL" }
+    return c.json({ error: "Missing url parameter" }, { status: 400 })
+  }
+
+  // Validate URL (defense-in-depth, iptables is primary protection)
+  const urlError = validateExternalUrl(url)
+  if (urlError) {
+    event.error = { category: "validation", message: urlError, code: "BLOCKED_URL" }
+    return c.json({ error: urlError }, { status: 400 })
+  }
+
+  event.sourceUrl = url
+  const backend = env.BACKEND_MODE
+  event.backend = backend as BackendType
+
+  const storage = c.get("storage")
+
+  // Fetch the file
+  const fileResponseResult = await tryCatch(
+    fetch(url, { signal: AbortSignal.timeout(30_000) })
+  )
+  if (!fileResponseResult.success) {
+    event.error = { category: "network", message: getErrorMessage(fileResponseResult.error), code: "URL_FETCH_ERROR" }
+    return c.json({ error: "Failed to fetch URL" }, { status: 500 })
+  }
+
+  if (!fileResponseResult.data.ok) {
+    event.error = { category: "network", message: `Failed to fetch URL: ${fileResponseResult.data.statusText}`, code: "URL_FETCH_FAILED" }
+    return c.json({ error: `Failed to fetch URL: ${fileResponseResult.data.statusText}` }, { status: 400 })
+  }
+
+  // Extract and sanitize filename from URL
+  const rawFilename = url.split("/").pop()?.split("?")[0] || ""
+  const filename = sanitizeFilename(rawFilename)
+
+  const arrayBufferResult = await tryCatch(fileResponseResult.data.arrayBuffer())
+  if (!arrayBufferResult.success) {
+    event.error = { category: "network", message: getErrorMessage(arrayBufferResult.error), code: "URL_READ_ERROR" }
+    return c.json({ error: "Failed to read fetched content" }, { status: 500 })
+  }
+
+  event.filename = filename
+  event.contentType = fileResponseResult.data.headers.get("content-type") || "application/pdf"
+  event.fileSize = arrayBufferResult.data.byteLength
+
+  // Get optional auth for storage path
+  const auth = await getAuth(c)
+  const fileId = crypto.randomUUID()
+  const docPath = getDocumentPath(fileId, auth?.userId)
+
+  // Save original file to document path
+  const saveResult = await tryCatch(
+    storage.saveFile(`${docPath}/original.pdf`, Buffer.from(arrayBufferResult.data))
+  )
+  if (!saveResult.success) {
+    event.error = { category: "storage", message: getErrorMessage(saveResult.error), code: "UPLOAD_ERROR" }
+    return c.json({ error: "Failed to store file" }, { status: 500 })
+  }
+
+  event.fileId = fileId
+  return c.json({
+    file_id: fileId,
+    filename,
+    size: arrayBufferResult.data.byteLength,
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Private helpers
+// ─────────────────────────────────────────────────────────────
 
 /**
  * Validate URL for SSRF protection (defense-in-depth, complements iptables rules).
@@ -168,76 +246,3 @@ function validateExternalUrl(urlString: string): string | null {
 
   return null
 }
-
-// Fetch file from URL - saves to S3/MinIO for all modes
-upload.post("/fetch-url", async (c) => {
-  const event = c.get("event")
-  const url = c.req.query("url")
-
-  if (!url) {
-    event.error = { category: "validation", message: "Missing url parameter", code: "MISSING_URL" }
-    return c.json({ error: "Missing url parameter" }, { status: 400 })
-  }
-
-  // Validate URL (defense-in-depth, iptables is primary protection)
-  const urlError = validateExternalUrl(url)
-  if (urlError) {
-    event.error = { category: "validation", message: urlError, code: "BLOCKED_URL" }
-    return c.json({ error: urlError }, { status: 400 })
-  }
-
-  event.sourceUrl = url
-  const backend = process.env.BACKEND_MODE || "local"
-  event.backend = backend as BackendType
-
-  const storage = c.get("storage")
-
-  // Fetch the file
-  const fileResponseResult = await tryCatch(
-    fetch(url, { signal: AbortSignal.timeout(30_000) })
-  )
-  if (!fileResponseResult.success) {
-    event.error = { category: "network", message: getErrorMessage(fileResponseResult.error), code: "URL_FETCH_ERROR" }
-    return c.json({ error: "Failed to fetch URL" }, { status: 500 })
-  }
-
-  if (!fileResponseResult.data.ok) {
-    event.error = { category: "network", message: `Failed to fetch URL: ${fileResponseResult.data.statusText}`, code: "URL_FETCH_FAILED" }
-    return c.json({ error: `Failed to fetch URL: ${fileResponseResult.data.statusText}` }, { status: 400 })
-  }
-
-  // Extract and sanitize filename from URL
-  const rawFilename = url.split("/").pop()?.split("?")[0] || ""
-  const filename = sanitizeFilename(rawFilename)
-
-  const arrayBufferResult = await tryCatch(fileResponseResult.data.arrayBuffer())
-  if (!arrayBufferResult.success) {
-    event.error = { category: "network", message: getErrorMessage(arrayBufferResult.error), code: "URL_READ_ERROR" }
-    return c.json({ error: "Failed to read fetched content" }, { status: 500 })
-  }
-
-  event.filename = filename
-  event.contentType = fileResponseResult.data.headers.get("content-type") || "application/pdf"
-  event.fileSize = arrayBufferResult.data.byteLength
-
-  // Get optional auth for storage path
-  const auth = await getAuth(c)
-  const fileId = crypto.randomUUID()
-  const docPath = getDocumentPath(fileId, auth?.userId)
-
-  // Save original file to document path
-  const saveResult = await tryCatch(
-    storage.saveFile(`${docPath}/original.pdf`, Buffer.from(arrayBufferResult.data))
-  )
-  if (!saveResult.success) {
-    event.error = { category: "storage", message: getErrorMessage(saveResult.error), code: "UPLOAD_ERROR" }
-    return c.json({ error: "Failed to store file" }, { status: 500 })
-  }
-
-  event.fileId = fileId
-  return c.json({
-    file_id: fileId,
-    filename,
-    size: arrayBufferResult.data.byteLength,
-  })
-})

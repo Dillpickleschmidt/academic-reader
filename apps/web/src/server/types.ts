@@ -63,6 +63,9 @@ export interface WideEvent {
   // Error context
   error?: WideEventError
 
+  // Warning context (non-critical issues)
+  warning?: { message: string; code: string }
+
   // SSE streaming
   isStreaming?: boolean
   streamEvents?: number
@@ -76,40 +79,4 @@ export interface WideEvent {
 
   // Extensible
   [key: string]: unknown
-}
-
-export interface Env {
-  // Backend selection
-  BACKEND_MODE: BackendType
-
-  // Local backend
-  LOCAL_WORKER_URL?: string
-
-  // Runpod backend
-  RUNPOD_MARKER_ENDPOINT_ID?: string
-  RUNPOD_TTS_ENDPOINT_ID?: string
-  RUNPOD_API_KEY?: string
-
-  // Datalab backend
-  DATALAB_API_KEY?: string
-
-  // Google AI (Gemini)
-  GOOGLE_API_KEY?: string
-
-  // S3-compatible storage (for Runpod mode)
-  S3_ENDPOINT?: string
-  S3_ACCESS_KEY?: string
-  S3_SECRET_KEY?: string
-  S3_BUCKET?: string
-
-  // Frontend URL (used for CORS)
-  SITE_URL?: string
-
-  // Convex HTTP actions URL for auth proxy and token fetching (port 3211)
-  // Use internal Docker hostname in production (e.g., http://convex-container:3211)
-  CONVEX_HTTP_URL?: string
-
-  // Convex API URL for mutations/queries (port 3210)
-  // Use internal Docker hostname in production (e.g., http://convex-container:3210)
-  CONVEX_SITE_URL?: string
 }
