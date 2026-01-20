@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync } from "fs"
 import { resolve, basename } from "path"
 import { spawn } from "bun"
-import { MUSIC_TRACKS } from "../../apps/web/src/audio/constants"
+import { MUSIC_TRACKS } from "../../web/client/audio/constants"
 import { ROOT_DIR, colors } from "./utils"
 
-const MUSIC_DIR = resolve(ROOT_DIR, "apps/web/public/audio/music")
+const MUSIC_DIR = resolve(ROOT_DIR, "web/public/audio/music")
 const PREVIEWS_DIR = resolve(MUSIC_DIR, "previews")
 
 export async function generateMusicPreviews(): Promise<void> {

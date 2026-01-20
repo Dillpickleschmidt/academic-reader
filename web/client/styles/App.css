@@ -2,7 +2,7 @@
    Tailwind & shadcn Imports
    ======================================== */
 @import "tailwindcss";
-@source "../../../../packages/core/src";
+@source "../../../shared/core/src";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";

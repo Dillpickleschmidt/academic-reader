@@ -29,10 +29,10 @@ bun run build            # Build frontend
 
 ### Package-Specific Commands
 ```bash
-bun run --cwd frontend dev       # Vite dev server
-bun run --cwd frontend lint      # ESLint
-bun run --cwd api dev            # Watch mode server
-bun run --cwd api typecheck      # TypeScript check
+bun run --cwd web dev          # Vite dev server
+bun run --cwd web lint         # ESLint
+bun run --cwd web dev:server   # Watch mode server
+bun run --cwd web typecheck    # TypeScript check
 ```
 
 ### Running Tests
@@ -50,7 +50,7 @@ bun run --cwd api typecheck      # TypeScript check
 import { useState } from "react"
 import { FileUp } from "lucide-react"
 
-// 2. Path-aliased (frontend only, @/ -> ./src/)
+// 2. Path-aliased (client only, @/ -> ./client/)
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
@@ -118,11 +118,14 @@ if (!file) return c.json({ error: "File not found" }, { status: 404 })
 
 ## Architecture
 
-Bun workspace monorepo with three packages:
+Bun workspace monorepo:
 
-- **frontend/** - React + Vite + Tailwind. Convex for realtime DB, better-auth for auth. AI SDK for chat. Path alias `@/` -> `src/`.
-- **api/** - Hono server. Routes to backends (local/runpod/datalab). S3-compatible storage (MinIO locally, R2 prod).
-- **worker/** - Python FastAPI with Marker for local GPU processing.
+- **web/client/** - React + Vite + Tailwind. Path alias `@/` -> `client/`.
+- **web/server/** - Hono server. Routes to backends (local/runpod/datalab). S3-compatible storage (MinIO locally, R2 prod).
+- **shared/convex/** - Convex functions + better-auth integration for realtime DB and auth.
+- **shared/core/** - Shared UI components (shadcn/ui) and utilities.
+- **converter/** - Python FastAPI with Marker for local GPU processing.
+- **tts/** - Python FastAPI TTS worker.
 
 ### Backend Modes (set `BACKEND_MODE` in `.env.dev`)
 - `local` - Local GPU via Docker (requires NVIDIA Docker)
@@ -138,28 +141,35 @@ Bun workspace monorepo with three packages:
 
 ## Directory Structure
 ```
-├── api/src/              # Hono API server
-│   ├── routes/           # API endpoints
-│   ├── backends/         # Backend adapters (interface.ts defines contract)
-│   └── storage/          # Storage adapters (s3, temp)
-├── frontend/src/         # React SPA
-│   ├── components/ui/    # shadcn/ui primitives (base-vega style)
-│   └── hooks/            # Custom React hooks
-├── frontend/convex/      # Convex functions + better-auth integration
-├── worker/               # Python GPU worker (Docker)
+├── web/
+│   ├── client/           # React SPA
+│   │   ├── components/   # UI components
+│   │   ├── pages/        # Page components
+│   │   ├── hooks/        # Custom React hooks
+│   │   ├── context/      # React contexts
+│   │   └── styles/       # CSS
+│   └── server/           # Hono API server
+│       ├── routes/       # API endpoints
+│       ├── backends/     # Backend adapters (interface.ts defines contract)
+│       └── storage/      # Storage adapters (s3, temp)
+├── shared/
+│   ├── convex/           # Convex functions + better-auth
+│   └── core/             # Shared UI primitives (shadcn/ui)
+├── converter/            # Python GPU worker (Docker)
+├── tts/                  # Python TTS worker (Docker)
 └── scripts/              # Dev scripts
 ```
 
 ## Key Patterns
 
-- **Backend factory:** `createBackend()` in `api/src/backends/factory.ts`
-- **Convex + better-auth:** Auth integration in `frontend/convex/`
+- **Backend factory:** `createBackend()` in `web/server/backends/factory.ts`
+- **Convex + better-auth:** Auth integration in `shared/convex/`
 - **AI SDK:** `@ai-sdk/react` and `ai` packages for chat functionality
 - **Docker Compose profiles:** Control which services run per backend mode
 
 ## Important Notes
 
 - Always use `bun`, never `npm` or `yarn`
-- Frontend path alias `@/` maps to `./src/`
+- Client path alias `@/` maps to `./client/`
 - Three backend modes: local (Docker GPU), runpod (serverless), datalab (API)
 - Convex runs self-hosted in Docker for auth

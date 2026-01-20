@@ -1,6 +1,6 @@
 /**
  * OpenTelemetry initialization for logs.
- * Preload this file with: bun --preload ./src/otel.ts
+ * Preload this file with: bun --preload ./server/otel.ts
  */
 
 import {

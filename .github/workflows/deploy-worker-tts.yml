@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "worker-tts/**"
+      - "tts/**"
 
 jobs:
   build-worker-tts:
@@ -32,7 +32,7 @@ jobs:
 
       - uses: docker/build-push-action@v6
         with:
-          context: ./worker-tts
+          context: ./tts
           push: true
           tags: |
             dillpickleschmidt/academic-reader-worker-tts:latest

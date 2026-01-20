@@ -2,14 +2,14 @@
 services:
   # GPU worker for local Marker processing
   # Profile: local
-  worker:
-    build: ./worker
+  converter:
+    build: ./converter
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     env_file:
       - .env.local
     volumes:
-      - ./worker/app:/app/app
+      - ./converter/app:/app/app
     deploy:
       resources:
         reservations:
@@ -20,13 +20,13 @@ services:
 
   # GPU worker for local TTS processing
   # Profile: local
-  worker-tts:
-    build: ./worker-tts
+  tts:
+    build: ./tts
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     volumes:
-      - ./worker-tts/app:/app/app
-      - ./worker-tts/voices:/app/voices
+      - ./tts/app:/app/app
+      - ./tts/voices:/app/voices
     deploy:
       resources:
         reservations:
@@ -54,24 +54,24 @@ services:
       - BACKEND_MODE=${BACKEND_MODE}
       - CONVEX_HTTP_URL=http://convex-backend:3211
       - CONVEX_SITE_URL=http://convex-backend:3210
-      - LOCAL_WORKER_URL=http://worker:8000
-      - TTS_WORKER_URL=http://worker-tts:8001
+      - LOCAL_WORKER_URL=http://converter:8000
+      - TTS_WORKER_URL=http://tts:8001
       - S3_ENDPOINT=http://minio:9000
       - S3_PUBLIC_URL=http://localhost:9000/academic-reader
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET=academic-reader
     volumes:
-      - ./apps/web/src/server:/app/apps/web/src/server
-      - ./packages/core/src:/app/packages/core/src
+      - ./web/server:/app/web/server
+      - ./shared/core/src:/app/shared/core/src
       - tunnel_url:/tunnel:ro
     depends_on:
       convex-backend:
         condition: service_healthy
-      worker:
+      converter:
         condition: service_started
         required: false
-      worker-tts:
+      tts:
         condition: service_started
         required: false
       minio:

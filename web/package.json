@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "bun --preload ./src/server/otel.ts --watch src/server/server.ts",
-    "start": "bun --preload ./src/server/otel.ts src/server/server.ts",
+    "dev:server": "bun --preload ./server/otel.ts --watch server/server.ts",
+    "start": "bun --preload ./server/otel.ts server/server.ts",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

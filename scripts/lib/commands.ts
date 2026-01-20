@@ -139,7 +139,7 @@ const devCommand: Command = {
     )
     processes.push(
       await runProcess(["bunx", "convex", "dev"], {
-        cwd: resolve(ROOT_DIR, "packages/convex"),
+        cwd: resolve(ROOT_DIR, "shared/convex"),
         env: convexEnv,
       }),
     )
@@ -151,7 +151,7 @@ const devCommand: Command = {
 
     processes.push(
       await runProcess(["bun", "run", "dev", "--port", sitePort], {
-        cwd: resolve(ROOT_DIR, "apps/web"),
+        cwd: resolve(ROOT_DIR, "web"),
         env: { VITE_API_URL: apiUrl },
       }),
     )

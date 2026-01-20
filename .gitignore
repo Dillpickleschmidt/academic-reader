@@ -34,4 +34,4 @@ dist/
 /minio-data/
 
 # Audio preview files (auto-generated)
-apps/web/public/audio/music/previews/*
+web/public/audio/music/previews/*

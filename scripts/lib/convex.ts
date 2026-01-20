@@ -89,7 +89,7 @@ async function setConvexEnvVars(
   for (const [key, value] of varsToSet) {
     const proc = spawn({
       cmd: ["bunx", "convex", "env", "set", key, value!],
-      cwd: resolve(ROOT_DIR, "packages/convex"),
+      cwd: resolve(ROOT_DIR, "shared/convex"),
       env: processEnv,
       stdout: "pipe",
       stderr: "pipe",

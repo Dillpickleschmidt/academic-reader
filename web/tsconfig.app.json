@@ -28,8 +28,8 @@
     /* Import paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./client/*"]
     }
   },
-  "include": ["src"]
+  "include": ["client"]
 }
