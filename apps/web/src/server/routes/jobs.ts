@@ -120,6 +120,7 @@ async function processCompletedJob(
   result: JobResultInput,
   fileInfo: FileInfo | undefined,
   storage: Storage,
+  event: WideEvent,
 ): Promise<ProcessedJobResult> {
   // Upload images and get public URLs
   let imageUrls: Record<string, string> | undefined
@@ -137,7 +138,13 @@ async function processCompletedJob(
         `[jobs] Uploaded ${Object.keys(imageUrls).length} images to storage`,
       )
     } else {
-      console.error(`[jobs] Failed to upload images: ${uploadResult.error}`)
+      const errorMsg = getErrorMessage(uploadResult.error)
+      console.error(`[jobs] Failed to upload images: ${errorMsg}`)
+      event.error = {
+        category: "configuration",
+        message: errorMsg,
+        code: "IMAGE_UPLOAD_FAILED",
+      }
     }
   }
 
@@ -275,6 +282,7 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
             parsed,
             fileInfo,
             storage,
+            event,
           )
 
           // Update with processed content and metadata for frontend
@@ -376,6 +384,7 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
               resultToProcess,
               fileInfo,
               storage,
+              event,
             )
 
             // For backends that don't support html_ready (like datalab), send early preview

@@ -186,10 +186,12 @@ export class S3Storage implements Storage {
     docPath: string,
     images: Record<string, string>,
   ): Promise<Record<string, string>> {
-    const baseUrl = (this.config.publicUrl ?? this.config.endpoint).replace(
-      /\/+$/,
-      "",
-    )
+    if (!this.config.publicUrl) {
+      throw new Error(
+        "S3_PUBLIC_URL is required for image uploads. Set it to your R2 bucket's public URL.",
+      )
+    }
+    const baseUrl = this.config.publicUrl.replace(/\/+$/, "")
 
     const entries = await Promise.all(
       Object.entries(images).map(async ([filename, base64Data]) => {
