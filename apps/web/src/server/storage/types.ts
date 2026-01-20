@@ -12,6 +12,7 @@ export function getDocumentPath(fileId: string, userId?: string): string {
 /** Options for saving files */
 export interface SaveFileOptions {
   contentType?: string
+  cacheControl?: string
 }
 
 /** Storage interface for all file operations */

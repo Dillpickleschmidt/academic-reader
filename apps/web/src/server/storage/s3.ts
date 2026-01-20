@@ -123,6 +123,9 @@ export class S3Storage implements Storage {
     if (options?.contentType) {
       headers["Content-Type"] = options.contentType
     }
+    if (options?.cacheControl) {
+      headers["Cache-Control"] = options.cacheControl
+    }
 
     const response = await this.client.fetch(url.toString(), {
       method: "PUT",
@@ -198,7 +201,10 @@ export class S3Storage implements Storage {
         const url = this.getObjectUrl(key)
         const response = await this.client.fetch(url.toString(), {
           method: "PUT",
-          headers: { "Content-Type": getImageMimeType(filename) },
+          headers: {
+            "Content-Type": getImageMimeType(filename),
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
           body: new Uint8Array(buffer),
         })
 

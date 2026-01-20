@@ -217,7 +217,10 @@ tts.post("/tts/chunk", async (c) => {
           const audioBuffer = Buffer.from(result.audio!, "base64")
 
           const saveResult = await tryCatch(
-            storage.saveFile(storagePath, audioBuffer, { contentType: "audio/wav" }),
+            storage.saveFile(storagePath, audioBuffer, {
+              contentType: "audio/wav",
+              cacheControl: "public, max-age=31536000, immutable",
+            }),
           )
 
           if (!saveResult.success) {
