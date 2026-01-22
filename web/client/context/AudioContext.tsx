@@ -427,6 +427,7 @@ export function AudioProvider({
         ...s,
         audioUrl: null,
         durationMs: null,
+        wordTimestamps: null,
         status: "pending" as SegmentStatus,
       }))
 
@@ -547,6 +548,7 @@ export function AudioProvider({
             text: s.text,
             audioUrl: null,
             durationMs: null,
+            wordTimestamps: null,
             status: "pending" as SegmentStatus,
           }),
         )
@@ -616,6 +618,7 @@ export function AudioProvider({
                 ...newSegments[event.segmentIndex],
                 audioUrl: event.audioUrl,
                 durationMs: event.durationMs,
+                wordTimestamps: event.wordTimestamps ?? null,
                 status: "ready",
               }
 

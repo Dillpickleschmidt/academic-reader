@@ -375,3 +375,21 @@
     font-size: 1.125rem;
   }
 }
+
+/* ========================================
+   TTS Word Highlighting
+   Subtle background highlight for spoken words
+   ======================================== */
+
+.tts-word {
+  border-radius: 4px;
+}
+
+.tts-word-active {
+  background-color: oklch(from var(--primary) L C H / 0.25);
+}
+
+/* Dark mode adjustment */
+[data-reader-mode="dark"] .tts-word-active {
+  background-color: oklch(from var(--primary) L C H / 0.35);
+}

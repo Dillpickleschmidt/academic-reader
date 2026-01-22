@@ -41,11 +41,18 @@ export type AudioPreset = {
 // TTS Segment types
 export type SegmentStatus = "pending" | "loading" | "ready" | "error"
 
+export type WordTimestamp = {
+  word: string
+  startMs: number
+  endMs: number
+}
+
 export type TTSSegment = {
   index: number
   text: string
   audioUrl: string | null
   durationMs: number | null
+  wordTimestamps: WordTimestamp[] | null
   status: SegmentStatus
 }
 

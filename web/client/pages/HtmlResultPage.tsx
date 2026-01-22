@@ -6,6 +6,7 @@ import { ReaderLayout } from "../components/ReaderLayout"
 import { useDocumentContext } from "@/context/DocumentContext"
 import { useAudioSelector } from "@/context/AudioContext"
 import { useTTSChunkDetection } from "@/hooks/use-tts-chunk-detection"
+import { useWordHighlighting } from "@/hooks/use-word-highlighting"
 
 interface Props {
   content: string
@@ -24,6 +25,9 @@ export function HtmlResultPage({
   const chunks = documentContext?.chunks ?? []
   const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
   const { handleContentClick } = useTTSChunkDetection(chunks)
+
+  // Enable word-level highlighting during TTS playback
+  useWordHighlighting()
 
   const htmlContent = useMemo(() => ({ __html: content }), [content])
 
