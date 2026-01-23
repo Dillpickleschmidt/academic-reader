@@ -4,6 +4,7 @@ import { useQuery } from "convex/react"
 import { api } from "@repo/convex/convex/_generated/api"
 import { useConversion } from "./hooks/use-conversion"
 import { useAppConfig } from "./hooks/use-app-config"
+import { useColorAnimation } from "./hooks/use-color-animation"
 import { DocumentProvider } from "./context/DocumentContext"
 import { AudioProvider } from "./context/AudioContext"
 import { UploadPage } from "./pages/UploadPage"
@@ -28,6 +29,9 @@ const backendMode = import.meta.env.VITE_BACKEND_MODE
 function App() {
   const conversion = useConversion()
   const { user } = useAppConfig()
+
+  // Initialize color cycling animation
+  useColorAnimation()
 
   // Listen for system dark mode changes
   useEffect(() => {

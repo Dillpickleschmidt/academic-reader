@@ -145,13 +145,14 @@ export function UploadPage({
             tabIndex={0}
             aria-label="Upload document"
             className={cn(
-              "bg-transparent border-[1.5px] border-dashed border-muted-foreground/40 rounded-xl",
+              "bg-transparent border-[1.5px] border-dashed rounded-xl",
               "py-16 px-12 grid grid-cols-[1fr_auto] gap-8 items-center",
               "cursor-pointer transition-[border-color,background] duration-150",
-              "hover:border-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               "max-sm:grid-cols-1 max-sm:text-center max-sm:py-8 max-sm:px-5",
-              isDragging && "border-primary bg-primary/5 dark:bg-primary/10",
+              isDragging && "bg-primary/5 dark:bg-primary/10",
             )}
+            style={{ borderColor: "var(--primary-animated-muted)" }}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}

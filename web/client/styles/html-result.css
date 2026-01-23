@@ -8,18 +8,22 @@
 /* Theme variables for HTML content - supports both React app and standalone downloads */
 
 .reader-output {
-  --reader-text-heading: oklch(0.218 0 0);
-  --reader-text-heading-h2: var(--reader-text-heading);
+  --reader-text-heading: oklch(0.1450 0 0);
+  --reader-text-heading-accent: #f59e0b;
+  --reader-text-heading-h2: oklch(from var(--reader-link) L calc(C * 0.65) H);
+}
+
+/* Animated h2 colors only for basic theme */
+[data-color-theme="basic"] .reader-output {
+  --reader-text-heading-h2: var(--primary-animated, var(--reader-text-heading-accent));
 }
 
 :is([data-reader-mode="comfort"], #theme-comfort:checked ~ .reader-output) {
   --reader-text-heading: #2a2520;
-  --reader-text-heading-h2: var(--reader-text-heading);
 }
 
 :is([data-reader-mode="dark"], #theme-dark:checked ~ .reader-output) {
-  --reader-text-heading: #e8e8e8;
-  --reader-text-heading-h2: oklch(from var(--reader-link) L calc(C * 0.65) H);
+  --reader-text-heading: oklch(0.9850 0 0);
 }
 
 /* ========================================
@@ -72,6 +76,19 @@
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--reader-border);
   color: var(--reader-text-heading-h2);
+}
+
+/* Animated gradient h2 only for basic theme */
+[data-color-theme="basic"] .reader-content h2 {
+  color: var(--reader-text-heading-accent);
+  background: linear-gradient(
+    to right,
+    var(--primary-animated, var(--reader-text-heading-accent)),
+    var(--primary-animated-end, var(--reader-text-heading-accent))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .reader-content h1 + h2,
@@ -386,10 +403,5 @@
 }
 
 .tts-word-active {
-  background-color: oklch(from var(--primary) L C H / 0.25);
-}
-
-/* Dark mode adjustment */
-[data-reader-mode="dark"] .tts-word-active {
-  background-color: oklch(from var(--primary) L C H / 0.35);
+  background-color: oklch(from var(--foreground) L C H / 15%);
 }
