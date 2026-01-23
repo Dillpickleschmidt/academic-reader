@@ -13,6 +13,7 @@ import {
   wrapCitations,
   processParagraphs,
   convertMathToHtml,
+  wrapTablesInScrollContainers,
   rewriteImageSources,
 } from "../utils/html-processing"
 import { stripHtmlForEmbedding } from "../services/embeddings"
@@ -124,12 +125,7 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
             const parsed = JSON.parse(data)
             // Process HTML for early preview (images will show skeleton)
             if (parsed.content) {
-              parsed.content = processHtml(parsed.content, [
-                removeImgDescriptions,
-                wrapCitations,
-                processParagraphs,
-                convertMathToHtml,
-              ])
+              parsed.content = processHtml(parsed.content, HTML_TRANSFORMS)
             }
             return JSON.stringify(parsed)
           } catch {
@@ -292,12 +288,7 @@ jobs.get("/jobs/:jobId/stream", async (c) => {
             if (!htmlReadySent) {
               // Apply reader enhancements (block IDs already added by Marker)
               if (job.htmlContent) {
-                job.htmlContent = processHtml(job.htmlContent, [
-                  removeImgDescriptions,
-                  wrapCitations,
-                  processParagraphs,
-                  convertMathToHtml,
-                ])
+                job.htmlContent = processHtml(job.htmlContent, HTML_TRANSFORMS)
               }
               sendEvent("html_ready", { content: job.htmlContent })
               htmlReadySent = true
@@ -413,6 +404,7 @@ const HTML_TRANSFORMS = [
   wrapCitations,
   processParagraphs,
   convertMathToHtml,
+  wrapTablesInScrollContainers,
 ]
 
 /**

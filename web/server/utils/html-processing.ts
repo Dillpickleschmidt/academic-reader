@@ -35,7 +35,16 @@ export function enhanceHtmlForReader(html: string): string {
     wrapCitations,
     processParagraphs,
     convertMathToHtml,
+    wrapTablesInScrollContainers,
   ])
+}
+
+/** Wrap tables in scroll containers for horizontal overflow with shadow indicators */
+export function wrapTablesInScrollContainers($: CheerioAPI): void {
+  $("table").each(function () {
+    // Two wrappers: outer holds shadows (position: relative), inner handles scroll (overflow-x: auto)
+    $(this).wrap('<div class="table-container"><div class="table-scroll"></div></div>')
+  })
 }
 
 /**

@@ -341,7 +341,7 @@ function createInitialState(): AudioState {
       playlist: [],
       currentTrackIndex: 0,
       isPlaying: false,
-      volume: 0.25,
+      volume: 0.35,
       shuffle: false,
       loop: true,
     },

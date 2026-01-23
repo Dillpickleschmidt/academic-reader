@@ -8,14 +8,17 @@
 /* Theme variables for HTML content - supports both React app and standalone downloads */
 
 .reader-output {
-  --reader-text-heading: oklch(0.1450 0 0);
+  --reader-text-heading: oklch(0.145 0 0);
   --reader-text-heading-accent: #f59e0b;
   --reader-text-heading-h2: oklch(from var(--reader-link) L calc(C * 0.65) H);
 }
 
 /* Animated h2 colors only for basic theme */
 [data-color-theme="basic"] .reader-output {
-  --reader-text-heading-h2: var(--primary-animated, var(--reader-text-heading-accent));
+  --reader-text-heading-h2: var(
+    --primary-animated,
+    var(--reader-text-heading-accent)
+  );
 }
 
 :is([data-reader-mode="comfort"], #theme-comfort:checked ~ .reader-output) {
@@ -23,7 +26,7 @@
 }
 
 :is([data-reader-mode="dark"], #theme-dark:checked ~ .reader-output) {
-  --reader-text-heading: oklch(0.9850 0 0);
+  --reader-text-heading: oklch(0.985 0 0);
 }
 
 /* ========================================
@@ -220,13 +223,67 @@
   color: var(--reader-text-muted);
 }
 
+/* Table container - holds shadow pseudo-elements (doesn't scroll) */
+.reader-content .table-container {
+  position: relative;
+  margin: 1.5rem 0;
+}
+
+/* Table scroll - handles horizontal overflow */
+.reader-content .table-scroll {
+  overflow-x: auto;
+}
+
+/* Scroll shadows for light/comfort modes */
+:is([data-reader-mode="light"], [data-reader-mode="comfort"])
+  .reader-content
+  .table-container {
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 15px;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  &::before {
+    left: 0;
+    background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
+  }
+
+  &::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(0, 0, 0, 0.08), transparent);
+  }
+
+  &.has-overflow-left::before {
+    opacity: 1;
+  }
+  &.has-overflow-right::after {
+    opacity: 1;
+  }
+}
+
 /* Tables - original smaller sizes */
 .reader-content table {
   border-collapse: collapse;
   width: auto;
-  margin: 1.5rem 0;
   font-size: 1rem;
   text-align: left;
+}
+
+[data-reader-mode="light"] .reader-content th,
+[data-reader-mode="light"] .reader-content td {
+  border-color: oklch(0.75 0 0);
+}
+
+[data-reader-mode="light"] .reader-content tr {
+  border-top-color: oklch(0.75 0 0);
 }
 
 .reader-content tr {
@@ -250,6 +307,20 @@
   font-family: "Source Sans 3 Variable", "Source Sans Pro", sans-serif;
   font-size: 0.9rem;
   font-weight: 600;
+}
+
+/* Compact mode for wide tables */
+.reader-content table.table-compact {
+  zoom: 0.85;
+}
+
+.reader-content table.table-compact th,
+.reader-content table.table-compact td {
+  padding: 0.2rem 0.4rem;
+}
+
+.reader-content table.table-compact th {
+  font-size: 1rem;
 }
 
 /* Horizontal rules */

@@ -106,6 +106,23 @@ ${renderedContent}
         });
       });
     })();
+    // Compact wide tables and update shadow classes based on scroll position
+    document.querySelectorAll('.table-scroll').forEach(function(el) {
+      // Compact wide tables (reduce padding + zoom)
+      if (el.scrollWidth > el.clientWidth) {
+        var t = el.querySelector('table');
+        if (t) t.classList.add('table-compact');
+      }
+      function update() {
+        var c = el.parentElement, o = el.scrollWidth > el.clientWidth;
+        if (c) {
+          c.classList.toggle('has-overflow-left', o && el.scrollLeft > 0);
+          c.classList.toggle('has-overflow-right', o && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+        }
+      }
+      update();
+      el.addEventListener('scroll', update, { passive: true });
+    });
   </script>
   <script>${copyTexScript.replace(/<\/script/gi, "<\\/script")}</script>
 </body>
