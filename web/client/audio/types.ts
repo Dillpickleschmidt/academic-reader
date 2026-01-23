@@ -74,6 +74,7 @@ export type AudioState = {
     segments: TTSSegment[]
     currentSegmentIndex: number
     isPlaying: boolean
+    isWaitingForSegment: boolean // True when playback paused waiting for next segment to be ready
     isSynthesizing: boolean
     totalDuration: number
     currentTime: number

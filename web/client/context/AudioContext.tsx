@@ -331,6 +331,7 @@ function createInitialState(): AudioState {
       segments: [],
       currentSegmentIndex: 0,
       isPlaying: false,
+      isWaitingForSegment: false,
       isSynthesizing: false,
       totalDuration: 0,
       currentTime: 0,
@@ -415,7 +416,11 @@ export function AudioProvider({
 
       if (segment.status === "ready" && segment.audioUrl && audioRef.current) {
         store.setState({
-          playback: { ...state.playback, currentSegmentIndex: segmentIndex },
+          playback: {
+            ...state.playback,
+            currentSegmentIndex: segmentIndex,
+            isWaitingForSegment: false,
+          },
         })
         audioRef.current.src = segment.audioUrl
         safePlay(audioRef.current)
@@ -458,6 +463,7 @@ export function AudioProvider({
         currentBlockId: null,
         error: null,
         isPlaying: false,
+        isWaitingForSegment: false,
         isSynthesizing: false,
         currentSegmentIndex: 0,
         totalDuration: 0,
@@ -502,6 +508,7 @@ export function AudioProvider({
           ...state.playback,
           segments: resetSegments,
           isPlaying: false,
+          isWaitingForSegment: false,
           isSynthesizing: false,
           totalDuration: 0,
           currentTime: 0,
@@ -574,6 +581,7 @@ export function AudioProvider({
             ...currentState.playback,
             segments: [],
             isPlaying: false,
+            isWaitingForSegment: false,
             currentSegmentIndex: 0,
             currentTime: 0,
             totalDuration: 0,
@@ -787,9 +795,28 @@ export function AudioProvider({
                     ...store.getState().playback,
                     isPlaying: true,
                     currentSegmentIndex: 0,
+                    isWaitingForSegment: false,
                   },
                 })
                 toast.success("Speech ready", { id: "tts-synth" })
+              }
+
+              // Auto-resume if we were waiting for this segment
+              const currentState = store.getState()
+              if (
+                currentState.playback.isWaitingForSegment &&
+                event.segmentIndex === currentState.playback.currentSegmentIndex &&
+                audioRef.current
+              ) {
+                audioRef.current.src = event.audioUrl
+                safePlay(audioRef.current)
+                store.setState({
+                  playback: {
+                    ...store.getState().playback,
+                    isPlaying: true,
+                    isWaitingForSegment: false,
+                  },
+                })
               }
             } else if (event.type === "error") {
               const freshState = store.getState()
@@ -839,9 +866,17 @@ export function AudioProvider({
     const state = store.getState()
     const segment = state.playback.segments[state.playback.currentSegmentIndex]
     if (audioRef.current && segment?.audioUrl) {
+      // Ensure correct audio is loaded before playing
+      if (audioRef.current.src !== segment.audioUrl) {
+        audioRef.current.src = segment.audioUrl
+      }
       safePlay(audioRef.current)
       store.setState({
-        playback: { ...state.playback, isPlaying: true },
+        playback: {
+          ...state.playback,
+          isPlaying: true,
+          isWaitingForSegment: false,
+        },
       })
     }
   }, [store, safePlay])
@@ -891,7 +926,11 @@ export function AudioProvider({
             const segment = state.playback.segments[i]
             if (segment.status === "ready" && segment.audioUrl) {
               store.setState({
-                playback: { ...state.playback, currentSegmentIndex: i },
+                playback: {
+                  ...state.playback,
+                  currentSegmentIndex: i,
+                  isWaitingForSegment: false,
+                },
               })
               audioRef.current.src = segment.audioUrl
               audioRef.current.currentTime = segmentTime
@@ -1298,18 +1337,22 @@ export function AudioProvider({
         const nextSegment = state.playback.segments[nextIndex]
         if (nextSegment.status === "ready" && nextSegment.audioUrl) {
           store.setState({
-            playback: { ...state.playback, currentSegmentIndex: nextIndex },
+            playback: {
+              ...state.playback,
+              currentSegmentIndex: nextIndex,
+              isWaitingForSegment: false,
+            },
           })
           audio.src = nextSegment.audioUrl
           safePlay(audio)
         } else {
-          // Next segment not ready yet - pause and wait
-          // (SSE will deliver it, then user can resume)
+          // Next segment not ready yet - pause and wait for SSE to deliver it
           store.setState({
             playback: {
               ...state.playback,
               currentSegmentIndex: nextIndex,
               isPlaying: false,
+              isWaitingForSegment: true,
             },
           })
         }
@@ -1319,6 +1362,7 @@ export function AudioProvider({
           playback: {
             ...state.playback,
             isPlaying: false,
+            isWaitingForSegment: false,
             segmentCurrentTime: 0,
           },
         })
