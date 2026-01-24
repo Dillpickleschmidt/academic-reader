@@ -33,6 +33,7 @@ export function enhanceHtmlForReader(html: string): string {
   return processHtml(html, [
     removeImgDescriptions,
     wrapCitations,
+    linkInlineReferences,
     processParagraphs,
     convertMathToHtml,
     wrapTablesInScrollContainers,
@@ -53,6 +54,12 @@ export function wrapTablesInScrollContainers($: CheerioAPI): void {
  * - Numeric: [1], [1, 2], [1-5], [1, 3-5, 8]
  */
 const CITATION_PATTERN = /\[(?:[A-Z][^\]]{0,100}\d{4}|[\d,;\s\-–]{1,50})\]/g
+
+/**
+ * Cross-reference patterns for sections and figures
+ */
+const SECTION_REF_PATTERN = /\bSec(?:tion)?\.?\s*([\d.]+)/g
+const FIGURE_REF_PATTERN = /\bFig(?:ure)?\.?\s*([\d.]+)/g
 
 /** Wrap academic citations in spans for styling */
 export function wrapCitations($: CheerioAPI): void {
@@ -91,6 +98,83 @@ export function wrapCitations($: CheerioAPI): void {
 
       if (parts.length > 0) {
         $(this).replaceWith(parts.join(""))
+      }
+    })
+}
+
+/** Link inline references (Sec. 5.1, Fig. 4) to their targets */
+export function linkInlineReferences($: CheerioAPI): void {
+  // Build section index: "5.1" -> block ID
+  const sectionIndex = new Map<string, string>()
+  $("h1, h2, h3, h4, h5, h6").each(function () {
+    const id = $(this).attr("data-block-id")
+    const text = $(this).text().trim()
+    // Extract section number from heading text (e.g., "5.1" from "5.1 Branch Modules")
+    const match = text.match(/^([\d.]+)\s/)
+    if (match && id) {
+      sectionIndex.set(match[1], id)
+    }
+  })
+
+  // Build figure index: "4" -> generated ID, also add ID to figure captions
+  const figureIndex = new Map<string, string>()
+  $(".figure-caption").each(function () {
+    const text = $(this).text()
+    const match = text.match(/^Fig\.?\s*([\d.]+)/i)
+    if (match) {
+      const id = `fig-${match[1].replace(/\./g, "-")}`
+      $(this).attr("id", id)
+      figureIndex.set(match[1], id)
+    }
+  })
+
+  // Process text nodes and replace references with links
+  $("body")
+    .find("*")
+    .contents()
+    .filter(function () {
+      return this.type === "text"
+    })
+    .each(function () {
+      const text = $(this).text()
+
+      // Quick check if any patterns exist
+      SECTION_REF_PATTERN.lastIndex = 0
+      FIGURE_REF_PATTERN.lastIndex = 0
+      if (!SECTION_REF_PATTERN.test(text) && !FIGURE_REF_PATTERN.test(text)) {
+        return
+      }
+
+      // Reset patterns and process
+      SECTION_REF_PATTERN.lastIndex = 0
+      FIGURE_REF_PATTERN.lastIndex = 0
+
+      let result = text
+      let modified = false
+
+      // Replace section refs
+      result = result.replace(SECTION_REF_PATTERN, (match, num) => {
+        const id = sectionIndex.get(num)
+        if (id) {
+          modified = true
+          return `<a href="#${id}" class="ref-link">${escapeHtml(match)}</a>`
+        }
+        return match
+      })
+
+      // Replace figure refs
+      FIGURE_REF_PATTERN.lastIndex = 0
+      result = result.replace(FIGURE_REF_PATTERN, (match, num) => {
+        const id = figureIndex.get(num)
+        if (id) {
+          modified = true
+          return `<a href="#${id}" class="ref-link">${escapeHtml(match)}</a>`
+        }
+        return match
+      })
+
+      if (modified) {
+        $(this).replaceWith(result)
       }
     })
 }

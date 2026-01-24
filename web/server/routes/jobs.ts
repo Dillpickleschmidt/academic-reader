@@ -11,6 +11,7 @@ import {
   processHtml,
   removeImgDescriptions,
   wrapCitations,
+  linkInlineReferences,
   processParagraphs,
   convertMathToHtml,
   wrapTablesInScrollContainers,
@@ -402,6 +403,7 @@ function handleCleanup(
 const HTML_TRANSFORMS = [
   removeImgDescriptions,
   wrapCitations,
+  linkInlineReferences,
   processParagraphs,
   convertMathToHtml,
   wrapTablesInScrollContainers,
