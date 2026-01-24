@@ -11,13 +11,14 @@ import {
   processHtml,
   removeImgDescriptions,
   wrapCitations,
-  linkInlineReferences,
+  // addInferredCrossReferenceLinks, // Disabled: infers new links vs PDF extraction which preserves original links
   processParagraphs,
   convertMathToHtml,
   wrapTablesInScrollContainers,
   rewriteImageSources,
 } from "../utils/html-processing"
 import { stripHtmlForEmbedding } from "../services/embeddings"
+import { extractPdfLinks, injectLinksIntoHtml } from "../services/link-extraction"
 import { transformSSEStream } from "../utils/sse-transform"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
@@ -39,6 +40,7 @@ interface JobResultFormats {
       block_type: string
       html: string
       page: number
+      bbox?: number[]
       section_hierarchy?: Record<string, string>
     }>
   }
@@ -403,7 +405,7 @@ function handleCleanup(
 const HTML_TRANSFORMS = [
   removeImgDescriptions,
   wrapCitations,
-  linkInlineReferences,
+  // addInferredCrossReferenceLinks, // Disabled: infers new links vs PDF extraction which preserves original links
   processParagraphs,
   convertMathToHtml,
   wrapTablesInScrollContainers,
@@ -486,6 +488,35 @@ async function processCompletedJob(
   // Apply HTML enhancements
   if (processedContent) {
     processedContent = processHtml(processedContent, HTML_TRANSFORMS)
+  }
+
+  // Extract and inject PDF links (all backends)
+  const chunks = result.formats?.chunks?.blocks
+  if (chunks?.length && fileInfo?.documentPath) {
+    const pdfReadResult = await tryCatch(
+      storage.readFile(`${fileInfo.documentPath}/original.pdf`),
+    )
+    if (pdfReadResult.success) {
+      try {
+        const linkMappings = extractPdfLinks(pdfReadResult.data, chunks)
+        if (linkMappings.length > 0) {
+          processedContent = injectLinksIntoHtml(processedContent, linkMappings)
+          // Also inject into formats.html for storage/download
+          if (result.formats?.html) {
+            result.formats.html = injectLinksIntoHtml(
+              result.formats.html,
+              linkMappings,
+            )
+          }
+          event.linkCount = linkMappings.length
+        }
+      } catch (err) {
+        console.warn("[jobs] Link extraction failed:", err)
+        // Graceful degradation - continue without links
+      }
+    } else {
+      console.warn("[jobs] Failed to read PDF for link extraction:", pdfReadResult.error)
+    }
   }
 
   // Rewrite image sources in formats.html for storage

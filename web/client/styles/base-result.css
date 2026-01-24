@@ -147,7 +147,17 @@ body {
   --reader-border: var(--border);
   --reader-border-strong: var(--accent);
   --reader-link: var(--primary);
-  --reader-code-bg: var(--card);
+}
+
+/* Code background needs explicit values per theme (not derived from --card which equals background) */
+[data-reader-mode="light"] {
+  --reader-code-bg: #f5f5f5;
+}
+[data-reader-mode="dark"] {
+  --reader-code-bg: oklch(0.269 0 0);
+}
+[data-reader-mode="comfort"] {
+  --reader-code-bg: #ebe6db;
 }
 
 /* ========================================

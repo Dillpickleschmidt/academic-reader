@@ -15,6 +15,7 @@ import {
   wrapCitations,
   processParagraphs,
   convertMathToHtml,
+  wrapTablesInScrollContainers,
 } from "../utils/html-processing"
 import { env } from "../env"
 
@@ -98,6 +99,7 @@ savedDocuments.get("/saved-documents/:documentId", requireAuth, async (c) => {
     wrapCitations,
     processParagraphs,
     convertMathToHtml,
+    wrapTablesInScrollContainers,
   ])
 
   return c.json({

@@ -31,21 +31,21 @@ export function HtmlResultPage({
   const htmlContent = useMemo(() => ({ __html: content }), [content])
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Combined click handler: ref-links first, then TTS chunk detection
+  // Combined click handler: internal links first, then TTS chunk detection
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       const target = e.target as HTMLElement
-      const refLink = target.closest(".ref-link")
+      const anchor = target.closest("a[href^='#']") as HTMLAnchorElement | null
 
-      if (refLink) {
+      if (anchor) {
         e.preventDefault()
-        const href = refLink.getAttribute("href")
-        if (href?.startsWith("#")) {
-          const targetId = href.slice(1)
-          const targetEl = document.querySelector(`[data-block-id="${targetId}"]`)
-          if (targetEl) {
-            targetEl.scrollIntoView({ behavior: "smooth" })
-          }
+        const targetId = anchor.getAttribute("href")!.slice(1)
+        // Try id attribute first (Datalab format), then data-block-id (our format)
+        const targetEl =
+          document.getElementById(targetId) ??
+          document.querySelector(`[data-block-id="${targetId}"]`)
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: "smooth" })
         }
         return
       }

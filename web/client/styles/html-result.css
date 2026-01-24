@@ -193,18 +193,25 @@
 }
 
 /* Cross-reference links (Sec. 5.1, Fig. 4) - inherit normal link styles */
-.reader-content .ref-link {
+.reader-content .ref-link,
+.reader-content .pdf-link {
   color: var(--reader-link);
   text-decoration: none;
 }
 
-.reader-content .ref-link:hover {
+.reader-content .ref-link:hover,
+.reader-content .pdf-link:hover {
   text-decoration: underline;
 }
 
 /* Smooth scroll for anchor navigation */
 .reader-content {
   scroll-behavior: smooth;
+}
+
+/* PDF link targets - offset from top to avoid header overlap */
+.reader-content [id^="pdf-link-"] {
+  scroll-margin-top: 5rem;
 }
 
 /* Inline code */

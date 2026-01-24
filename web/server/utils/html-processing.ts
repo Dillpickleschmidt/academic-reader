@@ -33,7 +33,7 @@ export function enhanceHtmlForReader(html: string): string {
   return processHtml(html, [
     removeImgDescriptions,
     wrapCitations,
-    linkInlineReferences,
+    // addInferredCrossReferenceLinks, // Disabled: infers new links from text patterns (vs PDF extraction which preserves original links)
     processParagraphs,
     convertMathToHtml,
     wrapTablesInScrollContainers,
@@ -63,12 +63,12 @@ const FIGURE_REF_PATTERN = /\bFig(?:ure)?\.?\s*([\d.]+)/g
 
 /** Wrap academic citations in spans for styling */
 export function wrapCitations($: CheerioAPI): void {
-  // Process all text nodes
+  // Process all text nodes (skip text inside existing anchors to avoid conflicts)
   $("body")
     .find("*")
     .contents()
     .filter(function () {
-      return this.type === "text"
+      return this.type === "text" && !$(this).closest("a").length
     })
     .each(function () {
       const text = $(this).text()
@@ -102,8 +102,12 @@ export function wrapCitations($: CheerioAPI): void {
     })
 }
 
-/** Link inline references (Sec. 5.1, Fig. 4) to their targets */
-export function linkInlineReferences($: CheerioAPI): void {
+/**
+ * Infer cross-reference links from text patterns (Sec. 5.1, Fig. 4).
+ * Unlike PDF link extraction which preserves links that existed in the original PDF,
+ * this function creates NEW links by matching text patterns to headings/figures.
+ */
+export function addInferredCrossReferenceLinks($: CheerioAPI): void {
   // Build section index: "5.1" -> block ID
   const sectionIndex = new Map<string, string>()
   $("h1, h2, h3, h4, h5, h6").each(function () {
@@ -128,12 +132,12 @@ export function linkInlineReferences($: CheerioAPI): void {
     }
   })
 
-  // Process text nodes and replace references with links
+  // Process text nodes and replace references with links (skip text inside existing anchors)
   $("body")
     .find("*")
     .contents()
     .filter(function () {
-      return this.type === "text"
+      return this.type === "text" && !$(this).closest("a").length
     })
     .each(function () {
       const text = $(this).text()
