@@ -270,8 +270,6 @@ function createStore(initial: AudioState): AudioStore {
 
 type AudioActions = {
   // Narrator actions
-  enableNarrator: () => void
-  disableNarrator: () => void
   setVoice: (voiceId: VoiceId) => void
   setNarratorSpeed: (speed: number) => void
   setNarratorVolume: (volume: number) => void
@@ -319,7 +317,6 @@ const AudioContext = createContext<{
 function createInitialState(): AudioState {
   return {
     narrator: {
-      isEnabled: false,
       voice: "male_1",
       speed: 1.0,
       volume: 1.0,
@@ -433,49 +430,6 @@ export function AudioProvider({
   )
 
   // === Narrator Actions ===
-  const enableNarrator = useCallback(() => {
-    const state = store.getState()
-    store.setState({
-      narrator: { ...state.narrator, isEnabled: true },
-      playback: { ...state.playback, error: null },
-    })
-  }, [store])
-
-  const disableNarrator = useCallback(() => {
-    // Cancel any ongoing SSE stream
-    if (sseAbortRef.current) {
-      sseAbortRef.current.abort()
-      sseAbortRef.current = null
-    }
-
-    // Stop audio and cleanup
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.src = ""
-    }
-
-    const state = store.getState()
-    store.setState({
-      narrator: { ...state.narrator, isEnabled: false },
-      playback: {
-        ...state.playback,
-        segments: [],
-        currentBlockId: null,
-        error: null,
-        isPlaying: false,
-        isWaitingForSegment: false,
-        isSynthesizing: false,
-        currentSegmentIndex: 0,
-        totalDuration: 0,
-        currentTime: 0,
-        segmentCurrentTime: 0,
-      },
-    })
-
-    // Fire-and-forget: free GPU memory
-    fetch("/api/tts/unload", { method: "POST" }).catch(() => {})
-  }, [store])
-
   const setVoice = useCallback(
     (voiceId: VoiceId) => {
       const state = store.getState()
@@ -1410,6 +1364,26 @@ export function AudioProvider({
     }
   }, [store, safePlay])
 
+  // Auto-unload TTS models when synthesis completes
+  const prevSynthesizingRef = useRef<boolean | null>(null)
+  useEffect(() => {
+    const state = store.getState()
+    const { isSynthesizing, segments } = state.playback
+
+    // Only act on transition from synthesizing to not synthesizing
+    const wasSynthesizing = prevSynthesizingRef.current
+    prevSynthesizingRef.current = isSynthesizing
+
+    if (
+      wasSynthesizing === true &&
+      isSynthesizing === false &&
+      segments.length > 0
+    ) {
+      // Synthesis complete - unload models to free GPU memory
+      fetch("/api/tts/unload", { method: "POST" }).catch(() => {})
+    }
+  })
+
   const valueRef = useRef<{
     store: AudioStore
     actions: AudioActions
@@ -1426,8 +1400,6 @@ export function AudioProvider({
 
   // Update actions on each render to capture latest callbacks
   valueRef.current.actions = {
-    enableNarrator,
-    disableNarrator,
     setVoice,
     setNarratorSpeed,
     setNarratorVolume,

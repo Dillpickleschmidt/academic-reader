@@ -20,7 +20,12 @@ import { AmbienceTab } from "./AmbienceTab"
 import { AudioSettingsFooter } from "./AudioSettingsFooter"
 
 export function AudioSettingsPopover() {
-  const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
+  const isNarrationPlaying = useAudioSelector((s) => s.playback.isPlaying)
+  const isMusicPlaying = useAudioSelector((s) => s.music.isPlaying)
+  const hasActiveAmbience = useAudioSelector((s) =>
+    s.ambience.sounds.some((sound) => sound.enabled),
+  )
+  const isAudioActive = isNarrationPlaying || isMusicPlaying || hasActiveAmbience
 
   return (
     <Popover>
@@ -28,7 +33,7 @@ export function AudioSettingsPopover() {
         render={
           <SidebarMenuButton
             tooltip="Narration & Audio"
-            data-active={isEnabled}
+            data-active={isAudioActive}
             className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
           >
             <Volume2 />

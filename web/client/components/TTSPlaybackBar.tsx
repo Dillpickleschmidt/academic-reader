@@ -16,7 +16,6 @@ function formatTime(seconds: number): string {
 }
 
 export function TTSPlaybackBar() {
-  const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
   const isPlaying = useAudioSelector((s) => s.playback.isPlaying)
   const isSynthesizing = useAudioSelector((s) => s.playback.isSynthesizing)
   const isLoading = useAudioSelector((s) => s.playback.isLoading)
@@ -29,9 +28,8 @@ export function TTSPlaybackBar() {
   const { togglePlayPause, skip, setVoice } = useAudioActions()
   const { voices } = useVoiceSelection(currentVoice, setVoice)
 
-  if (!isEnabled) return null
-
   const hasSegments = segments.length > 0
+  if (!hasSegments) return null
   const currentSegment = segments[currentSegmentIndex]
   const hasAudio = currentSegment?.status === "ready"
 

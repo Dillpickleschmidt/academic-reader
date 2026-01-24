@@ -1,6 +1,5 @@
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useState } from "react"
 import type { ChunkBlock } from "@repo/core/types/api"
-import { useAudioSelector, useAudioActions } from "@/context/AudioContext"
 import { ensureWordsWrapped } from "@/utils/tts-word-wrapping"
 
 // Block types to skip for TTS (from Marker BlockTypes enum)
@@ -19,13 +18,28 @@ const SKIP_BLOCK_TYPES = new Set([
   "Form",
 ])
 
+export interface TTSMenuState {
+  isOpen: boolean
+  anchorElement: HTMLElement | null
+  blockId: string | null
+  wordIndex: number | null
+  chunkContent: string
+}
+
+const initialMenuState: TTSMenuState = {
+  isOpen: false,
+  anchorElement: null,
+  blockId: null,
+  wordIndex: null,
+  chunkContent: "",
+}
+
 /**
  * Hook for detecting which chunk a clicked element belongs to
- * and triggering TTS for that chunk's content.
+ * and showing a context menu for TTS playback.
  */
 export function useTTSChunkDetection(chunks: ChunkBlock[]) {
-  const isEnabled = useAudioSelector((s) => s.narrator.isEnabled)
-  const { loadBlockTTS } = useAudioActions()
+  const [menuState, setMenuState] = useState<TTSMenuState>(initialMenuState)
 
   // Build lookup map: blockId -> chunk
   const chunkMap = useMemo(() => {
@@ -38,18 +52,19 @@ export function useTTSChunkDetection(chunks: ChunkBlock[]) {
 
   /**
    * Handle click on reader content.
-   * Reads data-block-id attribute and triggers TTS for that chunk.
-   * If a specific word is clicked, uses that word as the starting point.
+   * Opens context menu for TTS playback at clicked word.
    */
   const handleContentClick = useCallback(
     (event: React.MouseEvent) => {
-      if (!isEnabled) return
-
       const target = event.target as HTMLElement
       const element = target.closest("[data-block-id]")
       const blockId = element?.getAttribute("data-block-id")
 
-      if (!blockId) return
+      if (!blockId) {
+        // Click outside readable content - close menu
+        setMenuState(initialMenuState)
+        return
+      }
 
       const chunk = chunkMap.get(blockId)
       if (!chunk) {
@@ -70,21 +85,39 @@ export function useTTSChunkDetection(chunks: ChunkBlock[]) {
 
       // Check if a word was clicked (look for data-word-index)
       // Re-resolve click target after wrapping in case spans were just created
-      let wordSpan = target.closest("[data-word-index]")
+      let wordSpan = target.closest("[data-word-index]") as HTMLElement | null
       if (!wordSpan) {
         const freshTarget = document.elementFromPoint(event.clientX, event.clientY)
-        wordSpan = freshTarget?.closest("[data-word-index]") ?? null
+        wordSpan = freshTarget?.closest("[data-word-index]") as HTMLElement | null
       }
-      const wordIndex = wordSpan?.getAttribute("data-word-index")
 
-      loadBlockTTS(
+      if (!wordSpan) {
+        // Click on block but not on a word - close menu
+        setMenuState(initialMenuState)
+        return
+      }
+
+      const wordIndexAttr = wordSpan.getAttribute("data-word-index")
+      const wordIndex = wordIndexAttr ? parseInt(wordIndexAttr, 10) : null
+
+      setMenuState({
+        isOpen: true,
+        anchorElement: wordSpan,
         blockId,
+        wordIndex,
         chunkContent,
-        wordIndex ? { wordIndex: parseInt(wordIndex, 10) } : undefined,
-      )
+      })
     },
-    [isEnabled, chunkMap, loadBlockTTS],
+    [chunkMap],
   )
 
-  return { handleContentClick }
+  const setMenuOpen = useCallback((open: boolean) => {
+    if (!open) {
+      setMenuState(initialMenuState)
+    } else {
+      setMenuState((prev) => ({ ...prev, isOpen: true }))
+    }
+  }, [])
+
+  return { menuState, setMenuOpen, handleContentClick }
 }

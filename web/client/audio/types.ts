@@ -60,7 +60,6 @@ export type TTSSegment = {
 export type AudioState = {
   // Narrator settings
   narrator: {
-    isEnabled: boolean
     voice: VoiceId
     speed: number // 0.5 - 2.0
     volume: number // 0 - 1
