@@ -24,10 +24,10 @@ class VoiceConfig:
 
 # Voice presets
 VOICES: dict[str, VoiceConfig] = {
-    "male_1": VoiceConfig(
-        id="male_1",
-        display_name="Male 1",
-        reference_audio="male_1.wav",
+    "male_2": VoiceConfig(
+        id="male_2",
+        display_name="Male 2",
+        reference_audio="male_2.wav",
         exaggeration=0.25,
         post_process=True,
     ),

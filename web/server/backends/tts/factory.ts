@@ -1,29 +1,38 @@
 import type { TTSBackend } from "./interface"
 import { createLocalTTSBackend } from "./local"
 import { createRunpodTTSBackend } from "./runpod"
+import { getVoice, getEngineConfig } from "./registry"
 import { env } from "../../env"
 
 /**
- * Create the appropriate TTS backend based on environment configuration.
- *
- * Uses existing BACKEND_MODE to determine which backend to use:
- * - "local" -> Local TTS worker container
- * - "runpod" or "datalab" -> RunPod TTS endpoint
+ * Create TTS backend for a specific voice.
+ * Routes to the appropriate engine based on VOICE_REGISTRY.
  */
-export function createTTSBackend(): TTSBackend {
+export function createTTSBackend(voiceId: string): TTSBackend {
+  const voice = getVoice(voiceId)
+  const engineConfig = getEngineConfig(voiceId)
+
   switch (env.BACKEND_MODE) {
-    case "local":
+    case "local": {
       return createLocalTTSBackend({
-        TTS_WORKER_URL: env.TTS_WORKER_URL,
+        TTS_WORKER_URL: engineConfig.getLocalUrl(),
       })
+    }
 
     case "runpod":
-    case "datalab":
+    case "datalab": {
       // Both runpod and datalab modes use Runpod for TTS
       // (Datalab doesn't provide TTS, so we use our Runpod TTS endpoint)
+      const endpointId = engineConfig.getRunpodEndpointId()
+      if (!endpointId) {
+        throw new Error(
+          `No RunPod endpoint configured for ${voice.engine} TTS engine.`,
+        )
+      }
       return createRunpodTTSBackend({
-        RUNPOD_TTS_ENDPOINT_ID: env.RUNPOD_TTS_ENDPOINT_ID,
+        RUNPOD_TTS_ENDPOINT_ID: endpointId,
         RUNPOD_API_KEY: env.RUNPOD_API_KEY,
       })
+    }
   }
 }

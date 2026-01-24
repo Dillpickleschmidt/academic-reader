@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from "@repo/core/ui/primitives/select"
 import { useAudioSelector, useAudioActions } from "@/context/AudioContext"
-import { VOICES } from "@/audio/constants"
+import { useVoiceSelection } from "@/hooks/use-voices"
 
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
@@ -27,6 +27,7 @@ export function TTSPlaybackBar() {
   const totalDuration = useAudioSelector((s) => s.playback.totalDuration)
 
   const { togglePlayPause, skip, setVoice } = useAudioActions()
+  const { voices } = useVoiceSelection(currentVoice, setVoice)
 
   if (!isEnabled) return null
 
@@ -148,13 +149,13 @@ export function TTSPlaybackBar() {
           >
             <SelectTrigger className="h-8 w-27.5 border-none bg-transparent shadow-none text-(--reader-text) hover:bg-(--reader-border) disabled:opacity-50">
               <SelectValue>
-                {VOICES.find((v) => v.value === currentVoice)?.label}
+                {voices.find((v) => v.id === currentVoice)?.displayName}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {VOICES.map((v) => (
-                <SelectItem key={v.value} value={v.value}>
-                  {v.label}
+              {voices.map((v) => (
+                <SelectItem key={v.id} value={v.id}>
+                  {v.displayName}
                 </SelectItem>
               ))}
             </SelectContent>

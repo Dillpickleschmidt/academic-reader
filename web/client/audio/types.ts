@@ -1,7 +1,7 @@
-import type { VOICES, AMBIENT_SOUNDS, MUSIC_TRACKS } from "./constants"
+import type { AMBIENT_SOUNDS, MUSIC_TRACKS } from "./constants"
 
-// Voice types
-export type VoiceId = (typeof VOICES)[number]["value"]
+// Voice types - dynamic, fetched from backend
+export type VoiceId = string
 
 // Music types
 export type MusicTrackId = (typeof MUSIC_TRACKS)[number]["id"]

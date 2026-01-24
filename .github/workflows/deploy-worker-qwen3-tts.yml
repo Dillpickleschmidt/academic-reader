@@ -1,14 +1,14 @@
-name: Build and Deploy TTS Worker
+name: Build and Deploy Qwen3 TTS Worker
 
 on:
   push:
     branches: [main]
     paths:
-      - "tts/**"
-      - ".github/workflows/deploy-worker-tts.yml"
+      - "qwen3-tts/**"
+      - ".github/workflows/deploy-worker-qwen3-tts.yml"
 
 jobs:
-  build-worker-tts:
+  build-worker-qwen3-tts:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -23,9 +23,9 @@ jobs:
 
       - uses: useblacksmith/build-push-action@v2
         with:
-          context: ./tts
+          context: ./qwen3-tts
           push: true
           tags: |
-            dillpickleschmidt/academic-reader-worker-tts:latest
-            dillpickleschmidt/academic-reader-worker-tts:${{ github.sha }}
+            dillpickleschmidt/academic-reader-worker-qwen3-tts:latest
+            dillpickleschmidt/academic-reader-worker-qwen3-tts:${{ github.sha }}
           provenance: false

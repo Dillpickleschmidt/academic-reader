@@ -10,7 +10,7 @@ import { Switch } from "@repo/core/ui/primitives/switch"
 import { Slider } from "@repo/core/ui/primitives/slider"
 import { Label } from "@repo/core/ui/primitives/label"
 import { useAudioSelector, useAudioActions } from "@/context/AudioContext"
-import { VOICES } from "@/audio/constants"
+import { useVoiceSelection } from "@/hooks/use-voices"
 import type { VoiceId } from "@/audio/types"
 
 export function NarratorTab() {
@@ -26,6 +26,7 @@ export function NarratorTab() {
     setNarratorSpeed,
     setNarratorVolume,
   } = useAudioActions()
+  const { voices } = useVoiceSelection(currentVoice, setVoice)
 
   const handleToggle = (checked: boolean) => {
     if (checked) {
@@ -68,13 +69,13 @@ export function NarratorTab() {
           <Select value={currentVoice} onValueChange={handleVoiceChange}>
             <SelectTrigger className="w-full">
               <SelectValue>
-                {VOICES.find((v) => v.value === currentVoice)?.label}
+                {voices.find((v) => v.id === currentVoice)?.displayName}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {VOICES.map((voice) => (
-                <SelectItem key={voice.value} value={voice.value}>
-                  {voice.label}
+              {voices.map((voice) => (
+                <SelectItem key={voice.id} value={voice.id}>
+                  {voice.displayName}
                 </SelectItem>
               ))}
             </SelectContent>

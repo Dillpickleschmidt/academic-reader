@@ -33,13 +33,19 @@ const baseSchema = z.object({
 
   // Local backend
   LOCAL_WORKER_URL: z.string().url().default("http://localhost:8000"),
-  TTS_WORKER_URL: z.string().url().default("http://worker-tts:8001"),
+
+  // TTS Engine: Chatterbox
+  CHATTERBOX_TTS_WORKER_URL: z.string().url().default("http://chatterbox-tts:8001"),
+  RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID: z.string().optional(),
+
+  // TTS Engine: Qwen3
+  QWEN3_TTS_WORKER_URL: z.string().url().default("http://qwen3-tts:8002"),
+  RUNPOD_QWEN3_TTS_ENDPOINT_ID: z.string().optional(),
 
   // RunPod backend
   RUNPOD_API_KEY: z.string().optional(),
   RUNPOD_MARKER_ENDPOINT_ID: z.string().optional(),
   RUNPOD_CHANDRA_ENDPOINT_ID: z.string().optional(),
-  RUNPOD_TTS_ENDPOINT_ID: z.string().optional(),
 
   // DataLab backend
   DATALAB_API_KEY: z.string().optional(),
@@ -79,12 +85,16 @@ const envSchema = baseSchema.superRefine((data, ctx) => {
     }
   }
 
-  // TTS on cloud backends requires RunPod TTS endpoint
-  if (data.BACKEND_MODE !== "local" && !data.RUNPOD_TTS_ENDPOINT_ID) {
+  // TTS on cloud backends requires at least one TTS endpoint
+  if (
+    data.BACKEND_MODE !== "local" &&
+    !data.RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID &&
+    !data.RUNPOD_QWEN3_TTS_ENDPOINT_ID
+  ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "RUNPOD_TTS_ENDPOINT_ID required for cloud backends",
-      path: ["RUNPOD_TTS_ENDPOINT_ID"],
+      message: "At least one TTS endpoint required for cloud backends",
+      path: ["RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID"],
     })
   }
 })

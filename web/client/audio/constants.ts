@@ -1,8 +1,3 @@
-export const VOICES = [
-  { value: "male_1", label: "Male 1" },
-  { value: "female_1", label: "Female 1" },
-] as const
-
 // prettier-ignore
 export const AMBIENT_SOUNDS = [
   {

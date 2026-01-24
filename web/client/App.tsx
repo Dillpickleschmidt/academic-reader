@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect } from "react"
+import { lazy, Suspense, useCallback } from "react"
 import { Loader2 } from "lucide-react"
 import { useQuery } from "convex/react"
 import { api } from "@repo/convex/convex/_generated/api"

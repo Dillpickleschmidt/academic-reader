@@ -6,6 +6,7 @@ import { createAuthenticatedConvexClient } from "../services/convex"
 import { requireAuth } from "../middleware/auth"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { createTTSBackend } from "../backends/tts/factory"
+import { listAvailableVoiceSummaries, ensureEngineReady } from "../backends/tts/registry"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 import { env } from "../env"
 
@@ -149,10 +150,13 @@ tts.post("/tts/chunk", async (c) => {
 
   const doc = docResult.data
 
-  // Create TTS backend
+  // Ensure correct engine is loaded (unloads previous engine in local mode if needed)
+  await ensureEngineReady(voiceId)
+
+  // Create TTS backend for this voice
   let backend
   try {
-    backend = createTTSBackend()
+    backend = createTTSBackend(voiceId)
   } catch (error) {
     event.error = {
       category: "configuration",
@@ -334,59 +338,31 @@ tts.post("/tts/chunk", async (c) => {
   })
 })
 
-// Endpoint to list available voices
+// Endpoint to list available voices (from registry)
 tts.get("/tts/voices", async (c) => {
-  const event = c.get("event")
-
-  let backend
-  try {
-    backend = createTTSBackend()
-  } catch (error) {
-    event.error = {
-      category: "configuration",
-      message: getErrorMessage(error),
-      code: "TTS_BACKEND_CONFIG_ERROR",
-    }
-    return c.json({ error: "TTS backend configuration error" }, 500)
-  }
-
-  const voicesResult = await tryCatch(backend.listVoices())
-
-  if (!voicesResult.success) {
-    event.error = {
-      category: "backend",
-      message: getErrorMessage(voicesResult.error),
-      code: "TTS_VOICES_ERROR",
-    }
-    return c.json({ error: "Failed to list voices" }, 500)
-  }
-
-  return c.json({ voices: voicesResult.data })
+  const voices = listAvailableVoiceSummaries()
+  return c.json({ voices })
 })
 
-// Unload TTS model to free GPU memory (local mode only)
+// Unload all TTS models to free GPU memory (local mode only)
 tts.post("/tts/unload", async (c) => {
-  const event = c.get("event")
-
   if (env.BACKEND_MODE !== "local") {
     return c.json({ unloaded: false, reason: "not local mode" })
   }
 
-  const ttsWorkerUrl = env.TTS_WORKER_URL
-  const unloadResult = await tryCatch(
-    fetch(`${ttsWorkerUrl}/unload`, { method: "POST" }),
+  const results: Record<string, boolean> = {}
+
+  // Unload Chatterbox
+  const chatterboxResult = await tryCatch(
+    fetch(`${env.CHATTERBOX_TTS_WORKER_URL}/unload`, { method: "POST" }),
   )
+  results.chatterbox = chatterboxResult.success && chatterboxResult.data.ok
 
-  if (!unloadResult.success || !unloadResult.data.ok) {
-    event.error = {
-      category: "backend",
-      message: unloadResult.success
-        ? `Worker returned ${unloadResult.data.status}`
-        : getErrorMessage(unloadResult.error),
-      code: "TTS_UNLOAD_ERROR",
-    }
-    return c.json({ unloaded: false, reason: "worker error" }, 500)
-  }
+  // Unload Qwen3
+  const qwen3Result = await tryCatch(
+    fetch(`${env.QWEN3_TTS_WORKER_URL}/unload`, { method: "POST" }),
+  )
+  results.qwen3 = qwen3Result.success && qwen3Result.data.ok
 
-  return c.json(await unloadResult.data.json())
+  return c.json({ unloaded: results })
 })

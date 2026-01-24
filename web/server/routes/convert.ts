@@ -96,7 +96,10 @@ convert.post("/convert/:fileId", async (c) => {
 
   // Free TTS VRAM before conversion (local mode only)
   if (backendType === "local") {
-    await fetch(`${env.TTS_WORKER_URL}/unload`, { method: "POST" }).catch(() => {})
+    await Promise.all([
+      fetch(`${env.CHATTERBOX_TTS_WORKER_URL}/unload`, { method: "POST" }).catch(() => {}),
+      fetch(`${env.QWEN3_TTS_WORKER_URL}/unload`, { method: "POST" }).catch(() => {}),
+    ])
   }
 
   const jobResult = await tryCatch(backend.submitJob(input))

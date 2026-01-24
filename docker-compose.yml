@@ -18,15 +18,32 @@ services:
               count: 1
               capabilities: [gpu]
 
-  # GPU worker for local TTS processing
+  # GPU worker for local Chatterbox TTS (male_2, female_1)
   # Profile: local
-  tts:
-    build: ./tts
+  chatterbox-tts:
+    build: ./chatterbox-tts
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     volumes:
-      - ./tts/app:/app/app
-      - ./tts/voices:/app/voices
+      - ./chatterbox-tts/app:/app/app
+      - ./chatterbox-tts/voices:/app/voices
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # GPU worker for local Qwen3 TTS (male_1)
+  # Profile: local
+  qwen3-tts:
+    build: ./qwen3-tts
+    profiles: ["local"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002
+    volumes:
+      - ./qwen3-tts/app:/app/app
+      - ./qwen3-tts/voices:/app/voices
     deploy:
       resources:
         reservations:
@@ -55,7 +72,8 @@ services:
       - CONVEX_HTTP_URL=http://convex-backend:3211
       - CONVEX_SITE_URL=http://convex-backend:3210
       - LOCAL_WORKER_URL=http://converter:8000
-      - TTS_WORKER_URL=http://tts:8001
+      - CHATTERBOX_TTS_WORKER_URL=http://chatterbox-tts:8001
+      - QWEN3_TTS_WORKER_URL=http://qwen3-tts:8002
       - S3_ENDPOINT=http://minio:9000
       - S3_PUBLIC_URL=http://localhost:9000/academic-reader
       - S3_ACCESS_KEY=minioadmin
@@ -71,7 +89,10 @@ services:
       converter:
         condition: service_started
         required: false
-      tts:
+      chatterbox-tts:
+        condition: service_started
+        required: false
+      qwen3-tts:
         condition: service_started
         required: false
       minio:

@@ -1,0 +1,31 @@
+name: Build and Deploy Chatterbox TTS Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "chatterbox-tts/**"
+      - ".github/workflows/deploy-worker-chatterbox-tts.yml"
+
+jobs:
+  build-worker-chatterbox-tts:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./chatterbox-tts
+          push: true
+          tags: |
+            dillpickleschmidt/academic-reader-worker-chatterbox-tts:latest
+            dillpickleschmidt/academic-reader-worker-chatterbox-tts:${{ github.sha }}
+          provenance: false
