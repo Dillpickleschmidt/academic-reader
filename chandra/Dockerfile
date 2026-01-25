@@ -1,5 +1,5 @@
-# Runpod PyTorch base image - matches Marker pattern
-FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+# Runpod PyTorch base image with PyTorch 2.9.1 (required by vLLM 0.14.x)
+FROM runpod/pytorch:1.0.3-cu1290-torch291-ubuntu2204
 
 WORKDIR /app
 
