@@ -1,175 +1,85 @@
-# AGENTS.md - Guidelines for AI Coding Agents
+# CLAUDE.md
 
-This document provides guidelines for AI agents working in the academic-reader codebase.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Overview
 
-Academic Reader converts documents to HTML/Markdown using [Marker](https://github.com/datalab-to/marker). Supports PDF, DOCX, XLSX, PPTX, HTML, EPUB, and images.
+Academic Reader converts documents to HTML/Markdown. Supports PDF, DOCX, XLSX, PPTX, HTML, EPUB, and images.
 
-**Stack:**
-- Runtime: **Bun** (not Node.js/npm)
-- Frontend: React 19, Vite 7, Tailwind CSS 4, shadcn/ui, Convex
-- Backend API: Hono + Bun
-- Worker: Python 3.11, FastAPI, Marker-PDF (GPU)
+**Stack:** Bun monorepo, React 19, Vite, Tailwind 4, Convex, Hono
 
-## Build/Lint/Test Commands
+## Commands
 
-### Root Commands (run from repo root)
 ```bash
-bun install              # Install all dependencies
-bun run dev              # Start dev environment (reads BACKEND_MODE from .env.dev)
-bun run dev:local        # Dev with local Docker GPU worker
-bun run dev:runpod       # Dev with Runpod backend
-bun run dev:datalab      # Dev with Datalab API backend
-bun run dev --dashboard  # Enable Convex dashboard at localhost:6791
-bun run typecheck        # Typecheck all packages
-bun run lint             # Lint frontend
-bun run build            # Build frontend
+# Run the app
+bun run dev  # scripts/dev.ts (don't run this unless instructed to)
+
+# Build everything
+docker compose --profile local build
+
+# Type Check
+bun run typecheck
 ```
-
-### Package-Specific Commands
-```bash
-bun run --cwd web dev          # Vite dev server
-bun run --cwd web lint         # ESLint
-bun run --cwd web dev:server   # Watch mode server
-bun run --cwd web typecheck    # TypeScript check
-```
-
-### Running Tests
-**No test framework configured.** If adding tests, use Vitest (frontend/API) or pytest (worker).
-
-## Code Style Guidelines
-
-### Formatting (Prettier enforced)
-- **No semicolons**, **double quotes**, **2-space indentation**
-- **Trailing commas** in multi-line, **80 char print width**, **LF line endings**
-
-### Import Organization
-```typescript
-// 1. Third-party packages
-import { useState } from "react"
-import { FileUp } from "lucide-react"
-
-// 2. Path-aliased (client only, @/ -> ./client/)
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-
-// 3. Relative imports
-import { uploadFile } from "./api"
-import type { ConversionJob } from "./types"  // Always use `import type` for types
-```
-
-### TypeScript Patterns
-**Prefer `type` over `interface`** for most definitions:
-```typescript
-export type BackendType = "local" | "runpod" | "datalab"
-export type ConversionInput = { fileId: string; outputFormat: OutputFormat }
-```
-
-**Use `interface` for contracts with methods:**
-```typescript
-export interface ConversionBackend {
-  readonly name: string
-  submitJob(input: ConversionInput): Promise<string>
-}
-```
-
-**Avoid `any`** - use `unknown` for dynamic values.
-
-### Naming Conventions
-
-| Element | Convention | Example |
-|---------|------------|---------|
-| Files (components) | PascalCase | `UploadPage.tsx` |
-| Files (UI primitives) | kebab-case | `button.tsx` |
-| Files (hooks) | camelCase | `useConversion.ts` |
-| Components | PascalCase | `function UploadPage()` |
-| Hooks | camelCase with `use` | `useConversion()` |
-| Event handlers | `handle` prefix | `handleSubmit()` |
-| Constants | SCREAMING_SNAKE | `API_URL` |
-| Types | PascalCase | `ConversionJob` |
-
-### Error Handling
-```typescript
-// Try-catch with type narrowing
-try {
-  const data = await api.uploadFile(file)
-} catch (err) {
-  setError(err instanceof Error ? err.message : "Upload failed")
-}
-
-// HTTP errors
-if (!res.ok) {
-  const err = await res.json()
-  throw new Error(err.detail || "Upload failed")
-}
-
-// API route errors
-if (!file) return c.json({ error: "File not found" }, { status: 404 })
-```
-
-### React Patterns
-**Hook organization:** Context -> State -> Refs -> Callbacks -> Memos -> Effects
-
-**Use `cn()` for className composition:**
-```typescript
-<div className={cn("flex w-full", isActive && "bg-primary", className)} />
-```
-
-## Architecture
-
-Bun workspace monorepo:
-
-- **web/client/** - React + Vite + Tailwind. Path alias `@/` -> `client/`.
-- **web/server/** - Hono server. Routes to backends (local/runpod/datalab). S3-compatible storage (MinIO locally, R2 prod).
-- **shared/convex/** - Convex functions + better-auth integration for realtime DB and auth.
-- **shared/core/** - Shared UI components (shadcn/ui) and utilities.
-- **converter/** - Python FastAPI with Marker for local GPU processing.
-- **tts/** - Python FastAPI TTS worker.
 
 ### Backend Modes (set `BACKEND_MODE` in `.env.dev`)
+
 - `local` - Local GPU via Docker (requires NVIDIA Docker)
 - `runpod` - Runpod cloud GPU with S3/MinIO storage
 - `datalab` - Datalab API (no GPU required)
 
-### API Endpoints
-- `POST /api/upload` - Upload file
-- `POST /api/convert/:fileId` - Start conversion job
-- `GET /api/jobs/:jobId/stream` - SSE progress stream
-- `GET /api/files/:fileId/download` - Download converted result
-- `/api/auth/*` - Auth (proxied to Convex)
+### Processing Modes
 
-## Directory Structure
+- `fast` - Uses Marker (layout-aware extraction)
+- `accurate` - Uses LightOnOCR (vision model OCR)
+- `balanced` - Datalab-only mode
+
+## Code Conventions
+
+**Always use `bun`, never `npm` or `yarn`.**
+
+**Formatting:** No semicolons, double quotes, 2-space indentation.
+
+**Path alias:** `@/` maps to `web/client/`
+
+### Monorepo Structure
+
+- `web/client/` - React SPA
+- `web/server/` - Hono API server
+- `shared/convex/` - Convex functions + better-auth
+- `shared/core/` - Shared UI components (shadcn/ui)
+- `workers/` - GPU workers (marker, lightonocr, chatterbox-tts, qwen3-tts)
+
+### File Organization
+
+- Public API at top of file
+- Private helpers below, in order of usage
+
+```ts
+export function mainFunction() {
+  helperA()
+  helperB()
+}
+
+function helperA() { ... }
+function helperB() { ... }
 ```
-├── web/
-│   ├── client/           # React SPA
-│   │   ├── components/   # UI components
-│   │   ├── pages/        # Page components
-│   │   ├── hooks/        # Custom React hooks
-│   │   ├── context/      # React contexts
-│   │   └── styles/       # CSS
-│   └── server/           # Hono API server
-│       ├── routes/       # API endpoints
-│       ├── backends/     # Backend adapters (interface.ts defines contract)
-│       └── storage/      # Storage adapters (s3, temp)
-├── shared/
-│   ├── convex/           # Convex functions + better-auth
-│   └── core/             # Shared UI primitives (shadcn/ui)
-├── converter/            # Python GPU worker (Docker)
-├── tts/                  # Python TTS worker (Docker)
-└── scripts/              # Dev scripts
+
+### Data Loading States
+
+- `undefined` = not yet loaded → show skeleton/loader
+- `[]` = loaded but empty → show empty state
+
+Avoid fallbacks like `?? []` that mask the difference. Derive loading state from the data itself or derived reactive data, not separate `isLoading` props.
+
+```tsx
+<Show when={data !== undefined} fallback={<Loader />}>
+  <Show when={data.length} fallback={<EmptyState />}>
+    <Content data={data} />
+  </Show>
+</Show>
 ```
 
-## Key Patterns
+### Convex Folder Structure
 
-- **Backend factory:** `createBackend()` in `web/server/backends/factory.ts`
-- **Convex + better-auth:** Auth integration in `shared/convex/`
-- **AI SDK:** `@ai-sdk/react` and `ai` packages for chat functionality
-- **Docker Compose profiles:** Control which services run per backend mode
-
-## Important Notes
-
-- Always use `bun`, never `npm` or `yarn`
-- Client path alias `@/` maps to `./client/`
-- Three backend modes: local (Docker GPU), runpod (serverless), datalab (API)
-- Convex runs self-hosted in Docker for auth
+- `api/` - Thin queries/mutations: define args, pass ctx to model helpers, return
+- `model/` - Business logic + auth checks via `ctx.auth.getUserIdentity()` (when necessary)

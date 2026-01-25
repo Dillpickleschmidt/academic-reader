@@ -31,9 +31,6 @@ const baseSchema = z.object({
   // Backend mode
   BACKEND_MODE: backendModeSchema,
 
-  // Local backend
-  LOCAL_WORKER_URL: z.string().url().default("http://localhost:8000"),
-
   // TTS Engine: Chatterbox
   CHATTERBOX_TTS_WORKER_URL: z.string().url().default("http://chatterbox-tts:8001"),
   RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID: z.string().optional(),
@@ -46,9 +43,6 @@ const baseSchema = z.object({
   RUNPOD_API_KEY: z.string().optional(),
   RUNPOD_MARKER_ENDPOINT_ID: z.string().optional(),
   RUNPOD_LIGHTONOCR_ENDPOINT_ID: z.string().optional(),
-
-  // LightOnOCR worker (for local accurate mode)
-  LIGHTONOCR_WORKER_URL: z.string().url().default("http://lightonocr:8001"),
 
   // DataLab backend
   DATALAB_API_KEY: z.string().optional(),

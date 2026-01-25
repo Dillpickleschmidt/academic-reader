@@ -10,10 +10,7 @@ import { env } from "../env"
 export function createBackend(): ConversionBackend {
   switch (env.BACKEND_MODE) {
     case "local":
-      return createLocalBackend({
-        LOCAL_WORKER_URL: env.LOCAL_WORKER_URL,
-        LIGHTONOCR_WORKER_URL: env.LIGHTONOCR_WORKER_URL,
-      })
+      return createLocalBackend()
 
     case "runpod":
       return createRunpodBackend({

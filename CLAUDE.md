@@ -2,11 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Overview
+
+Academic Reader converts documents to HTML/Markdown. Supports PDF, DOCX, XLSX, PPTX, HTML, EPUB, and images.
+
+**Stack:** Bun monorepo, React 19, Vite, Tailwind 4, Convex, Hono
+
 ## Commands
 
 ```bash
 # Run the app
 bun run dev  # scripts/dev.ts (don't run this unless instructed to)
+
+# Build everything
+docker compose --profile local build
 
 # Type Check
 bun run typecheck
@@ -18,7 +27,27 @@ bun run typecheck
 - `runpod` - Runpod cloud GPU with S3/MinIO storage
 - `datalab` - Datalab API (no GPU required)
 
+### Processing Modes
+
+- `fast` - Uses Marker (layout-aware extraction)
+- `accurate` - Uses LightOnOCR (vision model OCR)
+- `balanced` - Datalab-only mode
+
 ## Code Conventions
+
+**Always use `bun`, never `npm` or `yarn`.**
+
+**Formatting:** No semicolons, double quotes, 2-space indentation.
+
+**Path alias:** `@/` maps to `web/client/`
+
+### Monorepo Structure
+
+- `web/client/` - React SPA
+- `web/server/` - Hono API server
+- `shared/convex/` - Convex functions + better-auth
+- `shared/core/` - Shared UI components (shadcn/ui)
+- `workers/` - GPU workers (marker, lightonocr, chatterbox-tts, qwen3-tts)
 
 ### File Organization
 

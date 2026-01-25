@@ -1,14 +1,14 @@
-name: Build and Deploy Worker
+name: Build and Deploy Marker Worker
 
 on:
   push:
     branches: [main]
     paths:
-      - 'converter/**'
-      - '.github/workflows/deploy-worker.yml'
+      - "workers/marker/**"
+      - ".github/workflows/deploy-worker-marker.yml"
 
 jobs:
-  build-worker:
+  build-worker-marker:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
@@ -23,9 +23,9 @@ jobs:
 
       - uses: useblacksmith/build-push-action@v2
         with:
-          context: ./converter
+          context: ./workers/marker
           push: true
           tags: |
-            dillpickleschmidt/academic-reader-worker:latest
-            dillpickleschmidt/academic-reader-worker:${{ github.sha }}
+            dillpickleschmidt/academic-reader-worker-marker:latest
+            dillpickleschmidt/academic-reader-worker-marker:${{ github.sha }}
           provenance: false

@@ -134,7 +134,7 @@ convert.post("/warm-models", async (c) => {
   }
 
   const warmResult = await tryCatch(
-    fetch(`${env.LOCAL_WORKER_URL}/warm-models`, {
+    fetch("http://marker:8000/warm-models", {
       method: "POST",
       signal: AbortSignal.timeout(30_000),
     }),

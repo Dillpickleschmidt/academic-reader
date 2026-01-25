@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "qwen3-tts/**"
+      - "workers/qwen3-tts/**"
       - ".github/workflows/deploy-worker-qwen3-tts.yml"
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
 
       - uses: useblacksmith/build-push-action@v2
         with:
-          context: ./qwen3-tts
+          context: ./workers/qwen3-tts
           push: true
           tags: |
             dillpickleschmidt/academic-reader-worker-qwen3-tts:latest

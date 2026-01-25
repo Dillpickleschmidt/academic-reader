@@ -2,14 +2,14 @@
 services:
   # GPU worker for local Marker processing
   # Profile: local
-  converter:
-    build: ./converter
+  marker:
+    build: ./workers/marker
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     env_file:
       - .env.local
     volumes:
-      - ./converter/app:/app/app
+      - ./workers/marker/app:/app/app
     deploy:
       resources:
         reservations:
@@ -21,12 +21,12 @@ services:
   # GPU worker for local Chatterbox TTS (male_2, female_1)
   # Profile: local
   chatterbox-tts:
-    build: ./chatterbox-tts
+    build: ./workers/chatterbox-tts
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     volumes:
-      - ./chatterbox-tts/app:/app/app
-      - ./chatterbox-tts/voices:/app/voices
+      - ./workers/chatterbox-tts/app:/app/app
+      - ./workers/chatterbox-tts/voices:/app/voices
     deploy:
       resources:
         reservations:
@@ -38,12 +38,12 @@ services:
   # GPU worker for local Qwen3 TTS (male_1)
   # Profile: local
   qwen3-tts:
-    build: ./qwen3-tts
+    build: ./workers/qwen3-tts
     profiles: ["local"]
     command: uvicorn app.main:app --host 0.0.0.0 --port 8002
     volumes:
-      - ./qwen3-tts/app:/app/app
-      - ./qwen3-tts/voices:/app/voices
+      - ./workers/qwen3-tts/app:/app/app
+      - ./workers/qwen3-tts/voices:/app/voices
     deploy:
       resources:
         reservations:
@@ -55,13 +55,13 @@ services:
   # GPU worker for local LightOnOCR (accurate mode)
   # Profile: local
   lightonocr:
-    build: ./lightonocr
+    build: ./workers/lightonocr
     profiles: ["local"]
     command: ./entrypoint.sh
     environment:
       - MODE=local
     volumes:
-      - ./lightonocr/app:/app/app
+      - ./workers/lightonocr/app:/app/app
     deploy:
       resources:
         reservations:
@@ -89,8 +89,6 @@ services:
       - BACKEND_MODE=${BACKEND_MODE}
       - CONVEX_HTTP_URL=http://convex-backend:3211
       - CONVEX_SITE_URL=http://convex-backend:3210
-      - LOCAL_WORKER_URL=http://converter:8000
-      - LIGHTONOCR_WORKER_URL=http://lightonocr:8001
       - CHATTERBOX_TTS_WORKER_URL=http://chatterbox-tts:8001
       - QWEN3_TTS_WORKER_URL=http://qwen3-tts:8002
       - S3_ENDPOINT=http://minio:9000
@@ -105,7 +103,7 @@ services:
     depends_on:
       convex-backend:
         condition: service_healthy
-      converter:
+      marker:
         condition: service_started
         required: false
       lightonocr:

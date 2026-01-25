@@ -1,53 +1,32 @@
 import type { ConversionBackend } from "./interface"
 import type { ConversionInput, ConversionJob } from "../types"
 import { parseJobId, prefixJobId } from "./job-id"
-import { workerNotConfiguredError } from "./errors"
 import { mapLocalResponse, type LocalWorkerResponse } from "./response-mapper"
 
 const TIMEOUT_MS = 30_000
 
-interface LocalConfig {
-  baseUrl: string
-  lightonocrUrl?: string
-}
+// Docker service URLs (hardcoded - local mode always uses docker-compose)
+const MARKER_URL = "http://marker:8000"
+const LIGHTONOCR_URL = "http://lightonocr:8001"
 
 /**
- * Local backend - passes through to FastAPI workers running locally.
+ * Local backend - passes through to FastAPI workers running in Docker.
  * Routes to Marker (fast mode) or LightOnOCR (accurate mode) based on processingMode.
  */
 export class LocalBackend implements ConversionBackend {
   readonly name = "local"
-  private markerUrl: string
-  private lightonocrUrl: string | null
-
-  constructor(config: LocalConfig) {
-    this.markerUrl = config.baseUrl.replace(/\/+$/, "")
-    this.lightonocrUrl = config.lightonocrUrl?.replace(/\/+$/, "") ?? null
-  }
 
   /**
    * Get base URL and raw job ID from a prefixed job ID.
    */
   private getWorkerUrl(jobId: string): { baseUrl: string; rawJobId: string } {
     const { worker, rawId } = parseJobId(jobId)
-
-    if (worker === "lightonocr") {
-      if (!this.lightonocrUrl) {
-        throw workerNotConfiguredError("local", "LightOnOCR")
-      }
-      return { baseUrl: this.lightonocrUrl, rawJobId: rawId }
-    }
-
-    return { baseUrl: this.markerUrl, rawJobId: rawId }
+    const baseUrl = worker === "lightonocr" ? LIGHTONOCR_URL : MARKER_URL
+    return { baseUrl, rawJobId: rawId }
   }
 
   async submitJob(input: ConversionInput): Promise<string> {
     const useLightOnOCR = input.processingMode === "accurate"
-
-    // Validate LightOnOCR endpoint if needed
-    if (useLightOnOCR && !this.lightonocrUrl) {
-      throw workerNotConfiguredError("local", "LightOnOCR")
-    }
 
     if (useLightOnOCR) {
       // LightOnOCR: simple API with file_url and page_range
@@ -59,7 +38,7 @@ export class LocalBackend implements ConversionBackend {
         params.set("page_range", input.pageRange)
       }
 
-      const response = await fetch(`${this.lightonocrUrl}/convert?${params}`, {
+      const response = await fetch(`${LIGHTONOCR_URL}/convert?${params}`, {
         method: "POST",
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
@@ -87,7 +66,7 @@ export class LocalBackend implements ConversionBackend {
       }
 
       const response = await fetch(
-        `${this.markerUrl}/convert/${input.fileId}?${params}`,
+        `${MARKER_URL}/convert/${input.fileId}?${params}`,
         { method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS) },
       )
 
@@ -147,14 +126,8 @@ export class LocalBackend implements ConversionBackend {
 }
 
 /**
- * Create Local backend from environment.
+ * Create Local backend.
  */
-export function createLocalBackend(env: {
-  LOCAL_WORKER_URL?: string
-  LIGHTONOCR_WORKER_URL?: string
-}): LocalBackend {
-  return new LocalBackend({
-    baseUrl: env.LOCAL_WORKER_URL || "http://localhost:8000",
-    lightonocrUrl: env.LIGHTONOCR_WORKER_URL,
-  })
+export function createLocalBackend(): LocalBackend {
+  return new LocalBackend()
 }
