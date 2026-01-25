@@ -299,7 +299,7 @@ function extractTextAtPointLine(
     }
   }
 
-  if (nearestLine && nearestDist <= 3) {
+  if (nearestLine && nearestDist <= 20) {
     return nearestLine.text.trim()
   }
 
@@ -366,7 +366,7 @@ function getPageBlocks($: CheerioAPI, page: number, blockPageMap: Map<string, nu
   return $("[data-block-id]").filter((_, el) => {
     const blockId = $(el).attr("data-block-id")
     if (blockId === undefined) return false
-    if (blockId.includes("/PageHeader/") || blockId.includes("/PageFooter/")) return false
+    if (blockId.includes("/PageHeader/") || blockId.includes("/PageFooter/") || blockId.includes("/Picture/")) return false
     return blockPageMap.get(blockId) === page
   })
 }
@@ -470,6 +470,12 @@ function wrapTextInElement(
       }
       matchIndex = candidateIndex
       matchedLength = candidate.length
+      // If we matched a bracketed variant for a plain number, wrap only the inner number
+      if (isShortNumeric && !isBracketedShortNumber(searchText) &&
+          (candidate.startsWith("(") || candidate.startsWith("["))) {
+        matchIndex += 1
+        matchedLength = normalizedSearch.length
+      }
       break
     }
   }
@@ -531,11 +537,10 @@ function getBracketedShortNumberVariants(text: string): string[] {
 
 function isNumericBoundaryMatch(text: string, start: number, end: number, candidate: string): boolean {
   if (!/\d/.test(candidate)) return true
-  const before = start > 0 ? text[start - 1] : ""
-  const after = end < text.length ? text[end] : ""
-  const beforeIsDigit = /\d/.test(before)
-  const afterIsDigit = /\d/.test(after)
-  return !beforeIsDigit && !afterIsDigit
+  const before = text.slice(Math.max(0, start - 2), start)
+  const after = text.slice(end, end + 2)
+  // Reject if adjacent to digits or part of decimal (e.g., "24.40", "0.24")
+  return !/\d$/.test(before) && !/^\d/.test(after) && !/\d\.$/.test(before) && !/^\.\d/.test(after)
 }
 
 function normalizeText(text: string): string {

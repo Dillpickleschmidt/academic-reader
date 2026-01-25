@@ -318,6 +318,10 @@
   background: var(--reader-code-bg);
 }
 
+[data-reader-mode="dark"] .reader-content tr:nth-child(even) {
+  background: var(--card);
+}
+
 .reader-content th,
 .reader-content td {
   border: 1px solid var(--reader-border-strong);
