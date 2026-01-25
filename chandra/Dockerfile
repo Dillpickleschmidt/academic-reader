@@ -6,6 +6,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -15,9 +16,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --ignore-installed -r requirements.txt
 
 COPY app/ ./app/
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
-# Download and cache Chandra model during build
-RUN python -c "from chandra.model import InferenceManager; InferenceManager(method='hf')"
+# Download model during build (for vLLM server)
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('datalab-to/chandra')"
 
-# Default to Runpod serverless handler
-CMD ["python", "-u", "-m", "app.handler"]
+# vLLM server port
+EXPOSE 8000
+
+# Use entrypoint script to manage vLLM server + handler
+CMD ["./entrypoint.sh"]

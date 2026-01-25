@@ -5,7 +5,7 @@ import httpx
 import runpod
 from .conversion import convert_file
 
-# Pre-warm model on worker startup
+# Initialize vLLM client on worker startup (waits for vLLM server to be ready)
 from .models import get_or_create_manager
 get_or_create_manager()
 
