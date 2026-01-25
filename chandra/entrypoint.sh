@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e
 
-# Avoid CPU contention during preprocessing
-export OMP_NUM_THREADS=1
-
 echo "[entrypoint] Starting vLLM server..."
 vllm serve datalab-to/chandra \
     --dtype bfloat16 \
