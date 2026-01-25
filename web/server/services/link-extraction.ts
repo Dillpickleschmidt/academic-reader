@@ -1,360 +1,202 @@
 /**
  * PDF Link Extraction Service
  *
- * Extracts hyperlinks from PDFs and maps them to Marker chunk blocks.
- * Handles both internal links (within-document navigation) and external links (URLs).
- * Uses text-primary matching: finds blocks by text content first, then uses
- * coordinates only for disambiguation when multiple blocks contain the same text.
+ * Extracts hyperlinks from PDFs and injects them into HTML output.
+ * Uses PDF structured text as source of truth, with page scoping via block IDs.
  */
 
 import * as mupdf from "mupdf"
-import { load } from "cheerio"
+import { load, type CheerioAPI, type Cheerio } from "cheerio"
 import type { Rect, Quad } from "mupdf"
 
+// Use Cheerio's internal element type
+type CheerioElement = Cheerio<any>[0]
+type MatchCandidate = { element: CheerioElement; matchedText: string }
+type SourceMatch = { element: CheerioElement; index: number }
+
+// ─────────────────────────────────────────────────────────────
 // Types
+// ─────────────────────────────────────────────────────────────
 
-interface ChunkBlock {
-  id: string
-  page: number
-  bbox?: number[] // [x0, y0, x1, y1]
-  html?: string // HTML content for text-based matching
-}
-
-interface LinkMapping {
-  sourceBlock: string | null
+export interface LinkMapping {
   sourceText: string
-  targetBlock: string | null // null for external links
+  targetText: string | null // null for external links
   targetUrl: string | null // null for internal links
   sourcePage: number
   destPage: number // -1 for external links
 }
 
-interface IndexedBlock {
+/** Minimal chunk interface - only need id and page for page scoping */
+export interface ChunkPageInfo {
   id: string
-  bbox: Rect
-  textContent: string // stripped HTML for text-based searching
+  page: number
 }
-
-type BlockIndex = Map<number, IndexedBlock[]>
 
 // ─────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Extract PDF links and map them to Marker chunk blocks.
+ * Extract link mappings from PDF buffer.
+ * Returns mappings that can be used with injectLinks().
  */
-export function extractPdfLinks(
+export function extractLinkMappings(
   pdfBuffer: Buffer | Uint8Array,
-  chunks: ChunkBlock[],
 ): LinkMapping[] {
   const doc = mupdf.Document.openDocument(pdfBuffer, "application/pdf")
-
   try {
-    // Build block index by page
-    const blockIndex = buildBlockIndex(chunks)
-    const pageCount = doc.countPages()
-
-    // Marker renders at higher DPI than PDF's 72 DPI standard
-    const scaleFactors = calculateScaleFactors(doc, chunks, pageCount)
-    const mappings: LinkMapping[] = []
-
-    for (let pageNum = 0; pageNum < pageCount; pageNum++) {
-      const page = doc.loadPage(pageNum)
-      const links = page.getLinks()
-      const stext = page.toStructuredText()
-      const scale = scaleFactors.get(pageNum) ?? { x: 1, y: 1 }
-
-      for (const link of links) {
-        // Get source rectangle and extract text
-        const sourceBounds = link.getBounds()
-        const sourceText = extractTextFromRect(stext, sourceBounds)
-
-        if (!sourceText.trim()) continue
-
-        let targetBlock: string | null = null
-        let targetUrl: string | null = null
-        let destPage = -1
-
-        if (link.isExternal()) {
-          // External link: get the URL
-          targetUrl = link.getURI()
-          if (!targetUrl) continue
-        } else {
-          // Internal link: resolve destination
-          const dest = doc.resolveLinkDestination(link)
-          if (dest.page < 0) continue
-          destPage = dest.page
-
-          // Find target block (closest to destination Y, scaled)
-          const destScale = scaleFactors.get(dest.page) ?? { x: 1, y: 1 }
-          targetBlock = findTargetBlock(
-            dest.page,
-            dest.y * destScale.y,
-            blockIndex,
-          )
-
-          if (!targetBlock) continue
-        }
-
-        // Scale PDF coordinates to Marker coordinate system
-        const scaledSourceBounds: Rect = [
-          sourceBounds[0] * scale.x,
-          sourceBounds[1] * scale.y,
-          sourceBounds[2] * scale.x,
-          sourceBounds[3] * scale.y,
-        ]
-
-        // Find source block (text-primary matching with coordinate disambiguation)
-        const normalizedSourceText = normalizeWhitespace(sourceText)
-        const sourceBlock = findSourceBlock(
-          pageNum,
-          normalizedSourceText,
-          scaledSourceBounds,
-          blockIndex,
-        )
-
-        mappings.push({
-          sourceBlock,
-          sourceText: normalizedSourceText,
-          targetBlock,
-          targetUrl,
-          sourcePage: pageNum,
-          destPage,
-        })
-      }
-    }
-
-    return mappings
+    return extractLinkMappingsFromDoc(doc)
   } finally {
     doc.destroy()
   }
 }
 
 /**
- * Inject link anchors into HTML based on link mappings.
+ * Extract links from PDF and inject them into HTML.
+ * Convenience function that combines extractLinkMappings + injectLinks.
  */
-export function injectLinksIntoHtml(
+export function extractAndInjectLinks(
+  pdfBuffer: Buffer | Uint8Array,
   html: string,
-  linkMappings: LinkMapping[],
-): string {
-  if (!linkMappings.length) return html
+  chunks: ChunkPageInfo[],
+): { html: string; linkCount: number } {
+  const mappings = extractLinkMappings(pdfBuffer)
+  if (!mappings.length) return { html, linkCount: 0 }
+  return injectLinks(html, mappings, chunks)
+}
 
+/**
+ * Inject link anchors and hrefs into HTML based on link mappings.
+ */
+export function injectLinks(
+  html: string,
+  mappings: LinkMapping[],
+  chunks: ChunkPageInfo[],
+): { html: string; linkCount: number } {
   const $ = load(html)
   const hasHtmlWrapper = /<html[\s>]/i.test(html) || /<body[\s>]/i.test(html)
 
-  // Assign unique IDs to internal link targets
-  const targetToLinkId = new Map<string, string>()
-  let linkCounter = 0
-  for (const mapping of linkMappings) {
-    if (mapping.targetBlock && !targetToLinkId.has(mapping.targetBlock)) {
-      targetToLinkId.set(mapping.targetBlock, `pdf-link-${linkCounter++}`)
-    }
+  const blockPageMap = new Map<string, number>()
+  for (const chunk of chunks) {
+    blockPageMap.set(chunk.id, chunk.page)
   }
 
-  // Add id attributes to target block elements
-  // For tables inside scroll wrappers, put the id on the wrapper for proper scroll-margin
-  for (const [targetBlock, linkId] of targetToLinkId) {
-    const $target = $(`[data-block-id="${targetBlock}"]`)
-    const $wrapper = $target.closest(".table-container")
-    if ($wrapper.length) {
-      $wrapper.attr("id", linkId)
-    } else {
-      $target.attr("id", linkId)
-    }
-  }
+  let anchorCounter = 0
+  const targetAnchors = new Map<string, string>()
 
-  // Track which text has been linked per block to avoid double-wrapping
-  const linkedInBlock = new Map<string | null, Set<string>>()
+  let linkCount = 0
+  const sourceBlockCursor = new Map<number, Map<string, number>>()
 
-  // Wrap source text with anchor tags
-  for (const mapping of linkMappings) {
-    const { sourceBlock, sourceText, targetBlock, targetUrl } = mapping
-    if (!sourceText) continue
+  for (const mapping of mappings) {
+    const { sourceText, targetText, targetUrl, sourcePage, destPage } = mapping
 
-    // Skip links without a sourceBlock - matching against entire body is too error-prone
-    if (!sourceBlock) continue
-
-    // Build href: external URL or internal anchor
     let href: string
     if (targetUrl) {
       href = targetUrl
-    } else if (targetBlock) {
-      const linkId = targetToLinkId.get(targetBlock)
-      if (!linkId) continue
-      href = `#${linkId}`
+    } else if (targetText) {
+      const anchorKey = `${destPage}:${targetText}`
+
+      if (!targetAnchors.has(anchorKey)) {
+        const anchorId = `pdf-link-${anchorCounter++}`
+        const targetMatch = findTargetMatchOnPage($, targetText, destPage, blockPageMap)
+
+        if (targetMatch) {
+          const wrapped = wrapWithAnchorId($, targetMatch.element, targetMatch.matchedText, anchorId)
+          if (!wrapped) continue
+          targetAnchors.set(anchorKey, anchorId)
+        } else {
+          continue
+        }
+      }
+
+      href = `#${targetAnchors.get(anchorKey)}`
     } else {
       continue
     }
 
-    // Track linked text per block
-    if (!linkedInBlock.has(sourceBlock)) {
-      linkedInBlock.set(sourceBlock, new Set())
+    if (!sourceBlockCursor.has(sourcePage)) {
+      sourceBlockCursor.set(sourcePage, new Map())
     }
-    if (linkedInBlock.get(sourceBlock)!.has(sourceText)) continue
-
-    // Find the source element
-    const $source = $(`[data-block-id="${sourceBlock}"]`)
-
-    if (!$source.length) continue
-
-    // For purely numeric texts, require citation context (parens/commas)
-    const isNumeric = /^\d+$/.test(sourceText)
-
-    // Find and wrap the first occurrence of the text
-    const wrapped = wrapTextWithLink($, $source, sourceText, href, isNumeric)
-    if (wrapped) {
-      linkedInBlock.get(sourceBlock)!.add(sourceText)
+    const pageCursor = sourceBlockCursor.get(sourcePage)!
+    const baseKey = sourceText.trim()
+    const cursorKey = `${baseKey}:${destPage}:${targetText ?? targetUrl ?? ""}`
+    const sourceIndex = pageCursor.get(cursorKey) ?? 0
+    const sourceMatch = findTextOnPage($, sourceText, sourcePage, blockPageMap, sourceIndex)
+    if (sourceMatch) {
+      const isExternal = !!targetUrl
+      const wrapped = wrapWithLink($, sourceMatch.element, sourceText, href, isExternal)
+      if (wrapped) {
+        linkCount++
+      }
+      pageCursor.set(cursorKey, sourceMatch.index + 1)
     }
   }
 
-  return hasHtmlWrapper ? ($.html() ?? "") : ($("body").html() ?? "")
+  const resultHtml = hasHtmlWrapper
+    ? ($.html() ?? "")
+    : ($("body").html() ?? "")
+  return { html: resultHtml, linkCount }
 }
 
 // ─────────────────────────────────────────────────────────────
-// Private Helpers
+// PDF Link Extraction
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Calculate scale factors from PDF coordinates to Marker bbox coordinates.
- * Marker renders PDFs at a different DPI than the 72 DPI PDF standard.
+ * Extract all link mappings from PDF document.
+ * For each link, extracts source text (from link bounds) and target text (at destination Y).
  */
-function calculateScaleFactors(
-  doc: mupdf.Document,
-  chunks: ChunkBlock[],
-  pageCount: number,
-): Map<number, { x: number; y: number }> {
-  const scales = new Map<number, { x: number; y: number }>()
+function extractLinkMappingsFromDoc(doc: mupdf.Document): LinkMapping[] {
+  const mappings: LinkMapping[] = []
+  const pageCount = doc.countPages()
 
-  // Find max bbox dimensions per page from chunks
-  const pageMaxes = new Map<number, { maxX: number; maxY: number }>()
-  for (const chunk of chunks) {
-    if (chunk.page == null || !chunk.bbox) continue
-    const current = pageMaxes.get(chunk.page) ?? { maxX: 0, maxY: 0 }
-    pageMaxes.set(chunk.page, {
-      maxX: Math.max(current.maxX, chunk.bbox[2]),
-      maxY: Math.max(current.maxY, chunk.bbox[3]),
-    })
-  }
-
-  // Calculate scale for each page
   for (let pageNum = 0; pageNum < pageCount; pageNum++) {
     const page = doc.loadPage(pageNum)
-    const pdfBounds = page.getBounds()
-    const pdfWidth = pdfBounds[2] - pdfBounds[0]
-    const pdfHeight = pdfBounds[3] - pdfBounds[1]
+    const stext = page.toStructuredText()
 
-    const markerMax = pageMaxes.get(pageNum)
-    if (markerMax && pdfWidth > 0 && pdfHeight > 0) {
-      // Use the max bbox coordinates as approximation of Marker's page dimensions
-      // Add small margin (chunks may not extend to edge)
-      scales.set(pageNum, {
-        x: markerMax.maxX / pdfWidth,
-        y: markerMax.maxY / pdfHeight,
-      })
-    } else {
-      // Default: assume 1.7x scale (typical for Marker's ~120 DPI rendering)
-      scales.set(pageNum, { x: 1.7, y: 1.7 })
+    for (const link of page.getLinks()) {
+      const sourceText = extractTextFromRect(stext, link.getBounds())
+      if (!sourceText.trim()) continue
+
+      if (link.isExternal()) {
+        const url = link.getURI()
+        if (!url) continue
+
+        mappings.push({
+          sourceText: sourceText.replace(/\s+/g, " ").trim(),
+          targetText: null,
+          targetUrl: url,
+          sourcePage: pageNum,
+          destPage: -1,
+        })
+      } else {
+        // Internal link - resolve destination and extract target text
+        const dest = doc.resolveLinkDestination(link)
+        if (dest.page < 0) continue
+
+        const destPage = doc.loadPage(dest.page)
+        const destStext = destPage.toStructuredText()
+        const targetText = extractTextAtPointLine(destStext, dest.x, dest.y)
+
+        if (!targetText.trim()) continue
+
+        mappings.push({
+          sourceText: sourceText.replace(/\s+/g, " ").trim(),
+          targetText: targetText.replace(/\s+/g, " ").trim(),
+          targetUrl: null,
+          sourcePage: pageNum,
+          destPage: dest.page,
+        })
+      }
     }
   }
 
-  return scales
+  return mappings
 }
 
-function buildBlockIndex(chunks: ChunkBlock[]): BlockIndex {
-  const index: BlockIndex = new Map()
-
-  for (const chunk of chunks) {
-    const { id, page, bbox, html } = chunk
-    if (page == null || !bbox || !id) continue
-
-    // Skip structural elements that don't render in HTML
-    if (id.includes("/PageHeader/") || id.includes("/PageFooter/")) continue
-
-    // Strip HTML tags to get searchable text content
-    const textContent =
-      html
-        ?.replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim() ?? ""
-
-    if (!index.has(page)) {
-      index.set(page, [])
-    }
-    index.get(page)!.push({ id, bbox: bbox as Rect, textContent })
-  }
-
-  return index
-}
-
-function findTargetBlock(
-  destPage: number,
-  destY: number,
-  blockIndex: BlockIndex,
-): string | null {
-  const candidates = blockIndex.get(destPage)
-  if (!candidates?.length) return null
-
-  // Prefer blocks that contain destY (topmost if multiple), else closest top edge
-  const containing = candidates.filter(
-    (c) => c.bbox[1] <= destY && destY <= c.bbox[3],
-  )
-
-  if (containing.length > 0) {
-    return containing.reduce((a, b) => (a.bbox[1] < b.bbox[1] ? a : b)).id
-  }
-
-  return candidates.reduce((a, b) =>
-    Math.abs(a.bbox[1] - destY) < Math.abs(b.bbox[1] - destY) ? a : b,
-  ).id
-}
-
-/** Find source block by text content, using coordinates only for disambiguation. */
-function findSourceBlock(
-  sourcePage: number,
-  sourceText: string,
-  scaledSourceRect: Rect,
-  blockIndex: BlockIndex,
-): string | null {
-  const candidates = blockIndex.get(sourcePage)
-  if (!candidates) return null
-
-  // PRIMARY: Find all blocks on this page containing the source text
-  const textMatches = candidates.filter((b) =>
-    b.textContent.includes(sourceText),
-  )
-
-  if (textMatches.length === 0) return null
-  if (textMatches.length === 1) return textMatches[0].id
-
-  // SECONDARY: Multiple matches - use coordinates to pick the closest one
-  const sourceCenter = {
-    x: (scaledSourceRect[0] + scaledSourceRect[2]) / 2,
-    y: (scaledSourceRect[1] + scaledSourceRect[3]) / 2,
-  }
-
-  let bestMatch = textMatches[0]
-  let bestDistance = Infinity
-
-  for (const match of textMatches) {
-    const blockCenter = {
-      x: (match.bbox[0] + match.bbox[2]) / 2,
-      y: (match.bbox[1] + match.bbox[3]) / 2,
-    }
-    const distance = Math.hypot(
-      sourceCenter.x - blockCenter.x,
-      sourceCenter.y - blockCenter.y,
-    )
-    if (distance < bestDistance) {
-      bestDistance = distance
-      bestMatch = match
-    }
-  }
-
-  return bestMatch.id
-}
-
-/** Extract text from a rectangle using character-level quad positions. */
+/**
+ * Extract text from a rectangle using character-level quad positions.
+ */
 function extractTextFromRect(
   stext: mupdf.StructuredText,
   linkBounds: Rect,
@@ -364,7 +206,6 @@ function extractTextFromRect(
 
   stext.walk({
     onChar(c: string, _origin, _font, _size, quad: Quad) {
-      // Quad corners: [x0,y0, x1,y1, x2,y2, x3,y3]
       const charX0 = Math.min(quad[0], quad[2], quad[4], quad[6])
       const charY0 = Math.min(quad[1], quad[3], quad[5], quad[7])
       const charX1 = Math.max(quad[0], quad[2], quad[4], quad[6])
@@ -397,74 +238,397 @@ function extractTextFromRect(
   return result
 }
 
-function normalizeWhitespace(text: string): string {
-  return text.replace(/\s+/g, " ").trim()
-}
+/**
+ * Extract text from the line that contains the target point.
+ */
+function extractTextAtPointLine(
+  stext: mupdf.StructuredText,
+  targetX: number,
+  targetY: number,
+): string {
+  interface Line {
+    minX: number
+    maxX: number
+    minY: number
+    maxY: number
+    text: string
+  }
+  const lines: Line[] = []
+  let cur = { chars: [] as string[], minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
 
-function wrapTextWithLink(
-  $: ReturnType<typeof load>,
-  $element: ReturnType<ReturnType<typeof load>>,
-  text: string,
-  href: string,
-  requireCitationContext: boolean = false,
-): boolean {
-  // Walk text nodes only - never replace inside HTML attributes
-  let found = false
-
-  // Use word boundaries to avoid matching "15" inside "155"
-  const escapedText = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-
-  // For numeric texts, require citation context: (N), (N, ,N), N–M ranges, etc.
-  // This avoids matching numbers in dates, statistics, page numbers
-  // Delimiters: ( , ) and en-dash/hyphen for ranges like "11–13"
-  const pattern = requireCitationContext
-    ? new RegExp(`(^|[,(–-]\\s*)(${escapedText})(?=\\s*[,)–-])`)
-    : new RegExp(`\\b${escapedText}\\b`)
-
-  // External links open in new tab
-  const isExternal = !href.startsWith("#")
-  const attrs = isExternal ? ' target="_blank" rel="noopener noreferrer"' : ""
-
-  function walkNodes(nodes: ReturnType<ReturnType<typeof load>>): boolean {
-    for (let i = 0; i < nodes.length; i++) {
-      const node = nodes[i]
-
-      // Skip if already found
-      if (found) return true
-
-      // Only process text nodes
-      if (node.type === "text") {
-        const textContent = node.data || ""
-        const match = pattern.exec(textContent)
-
-        if (match) {
-          // Found the text - split and wrap
-          const prefixLength = requireCitationContext
-            ? (match[1]?.length ?? 0)
-            : 0
-          const idx = (match.index ?? 0) + prefixLength
-          const before = textContent.slice(0, idx)
-          const after = textContent.slice(idx + text.length)
-
-          // Create the link element
-          const linkHtml = `<a href="${href}"${attrs} class="pdf-link">${text}</a>`
-
-          // Replace the text node with: before + link + after
-          const $node = $(node)
-          $node.replaceWith(before + linkHtml + after)
-
-          found = true
-          return true
-        }
-      } else if (node.type === "tag" && node.name !== "a") {
-        // Recurse into child nodes (but skip <a> tags to avoid nesting links)
-        const children = $(node).contents()
-        if (walkNodes(children)) return true
+  stext.walk({
+    onChar(c: string, _origin, _font, _size, quad: Quad) {
+      cur.chars.push(c)
+      cur.minX = Math.min(cur.minX, quad[0], quad[2], quad[4], quad[6])
+      cur.maxX = Math.max(cur.maxX, quad[0], quad[2], quad[4], quad[6])
+      cur.minY = Math.min(cur.minY, quad[1], quad[3], quad[5], quad[7])
+      cur.maxY = Math.max(cur.maxY, quad[1], quad[3], quad[5], quad[7])
+    },
+    endLine() {
+      if (cur.chars.length > 0) {
+        lines.push({ ...cur, text: cur.chars.join("") })
       }
-    }
-    return false
+      cur = { chars: [], minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+    },
+  })
+  if (cur.chars.length > 0) {
+    lines.push({ ...cur, text: cur.chars.join("") })
   }
 
-  walkNodes($element.contents())
-  return found
+  if (lines.length === 0) return ""
+
+  let nearestLine: Line | null = null
+  let nearestDist = Number.POSITIVE_INFINITY
+
+  for (const line of lines) {
+    if (
+      targetX >= line.minX &&
+      targetX <= line.maxX &&
+      targetY >= line.minY &&
+      targetY <= line.maxY
+    ) {
+      return line.text.trim()
+    }
+
+    const dx = targetX < line.minX ? line.minX - targetX : targetX > line.maxX ? targetX - line.maxX : 0
+    const dy = targetY < line.minY ? line.minY - targetY : targetY > line.maxY ? targetY - line.maxY : 0
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist < nearestDist) {
+      nearestDist = dist
+      nearestLine = line
+    }
+  }
+
+  if (nearestLine && nearestDist <= 3) {
+    return nearestLine.text.trim()
+  }
+
+  return ""
+}
+
+function findTextOnPage(
+  $: CheerioAPI,
+  searchText: string,
+  page: number,
+  blockPageMap: Map<string, number>,
+  startIndex = 0,
+): SourceMatch | null {
+  const blockElements = getPageBlocks($, page, blockPageMap)
+
+  const normalizedSearch = normalizeText(searchText)
+  if (!normalizedSearch.length) return null
+  const isShortNumeric = isShortNumber(searchText)
+
+  const elements = blockElements.toArray()
+  const clampedStart = Math.max(0, Math.min(startIndex, elements.length))
+
+  for (let i = clampedStart; i < elements.length; i++) {
+    const el = elements[i]
+    const text = normalizeText($(el).text())
+    if (text.includes(normalizedSearch)) return { element: el, index: i }
+    if (isShortNumeric) {
+      const variants = getBracketedShortNumberVariants(searchText).map(variant => normalizeText(variant))
+      if (variants.some(variant => variant && text.includes(variant))) return { element: el, index: i }
+    }
+  }
+
+  return null
+}
+
+function findTargetMatchOnPage(
+  $: CheerioAPI,
+  targetText: string,
+  page: number,
+  blockPageMap: Map<string, number>,
+): MatchCandidate | null {
+  const normalizedTarget = normalizeText(targetText)
+  if (!normalizedTarget.length) return null
+
+  let best: { match: MatchCandidate; score: number; length: number } | null = null
+
+  const tryUpdate = (el: CheerioElement, candidate: { text: string; score: number } | null) => {
+    if (!candidate) return
+    const dominated = best && (candidate.score < best.score ||
+      (candidate.score === best.score && candidate.text.length >= best.length))
+    if (dominated) return
+    best = { match: { element: el, matchedText: candidate.text }, score: candidate.score, length: candidate.text.length }
+  }
+
+  for (const el of getPageBlocks($, page, blockPageMap).toArray()) {
+    const lines = extractLineCandidates($(el).text())
+    tryUpdate(el, findBestCandidateMatch(lines, normalizedTarget))
+  }
+
+  return best?.match ?? null
+}
+
+function getPageBlocks($: CheerioAPI, page: number, blockPageMap: Map<string, number>) {
+  return $("[data-block-id]").filter((_, el) => {
+    const blockId = $(el).attr("data-block-id")
+    if (blockId === undefined) return false
+    if (blockId.includes("/PageHeader/") || blockId.includes("/PageFooter/")) return false
+    return blockPageMap.get(blockId) === page
+  })
+}
+
+// ─────────────────────────────────────────────────────────────
+// DOM Manipulation Helpers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Wrap specific text within an element with a span containing an anchor ID.
+ */
+function wrapWithAnchorId(
+  $: CheerioAPI,
+  element: CheerioElement,
+  text: string,
+  anchorId: string,
+): boolean {
+  const $el = $(element)
+  return wrapTextInElement($, $el, text, (matchedText) => {
+    return `<span id="${anchorId}" class="pdf-link-target">${matchedText}</span>`
+  })
+}
+
+/**
+ * Wrap specific text within an element with an anchor tag.
+ */
+function wrapWithLink(
+  $: CheerioAPI,
+  element: CheerioElement,
+  text: string,
+  href: string,
+  isExternal: boolean,
+): boolean {
+  const $el = $(element)
+  const attrs = isExternal ? ' target="_blank" rel="noopener noreferrer"' : ""
+  return wrapTextInElement($, $el, text, (matchedText) => {
+    return `<a href="${href}"${attrs} class="pdf-link">${matchedText}</a>`
+  })
+}
+
+/**
+ * Walk text nodes within an element and wrap the first occurrence of text.
+ * Uses core alphanumeric text for matching to handle inline tags (<b>, <i>, etc.)
+ * that split text across multiple DOM nodes.
+ */
+function wrapTextInElement(
+  $: CheerioAPI,
+  $element: ReturnType<CheerioAPI>,
+  searchText: string,
+  wrapFn: (matchedText: string) => string,
+): boolean {
+  const normalizedSearch = normalizeText(searchText)
+  if (!normalizedSearch.length) return false
+  const isShortNumeric = isShortNumber(searchText)
+  if (normalizedSearch.length < 2 && !isShortNumeric && !isBracketedShortNumber(searchText)) return false
+
+  const candidates = [normalizedSearch]
+  if (isShortNumeric && !isBracketedShortNumber(searchText)) {
+    candidates.unshift(
+      ...getBracketedShortNumberVariants(searchText).map(variant => normalizeText(variant))
+    )
+  }
+  const textNodes: Array<{ node: CheerioElement; text: string; inPdfLink: boolean }> = []
+  function collectTextNodes(nodes: ReturnType<CheerioAPI>, inPdfLink: boolean): void {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]
+      if (node.type === "text") {
+        const text = node.data || ""
+        if (text.length) textNodes.push({ node, text, inPdfLink })
+      } else if (node.type === "tag") {
+        const nextInPdfLink = inPdfLink || (node.name === "a" && $(node).hasClass("pdf-link"))
+        collectTextNodes($(node).contents(), nextInPdfLink)
+      }
+    }
+  }
+  collectTextNodes($element.contents(), false)
+
+  const combinedText = textNodes.map(({ text }) => text).join("")
+  const combinedMap: Array<{ nodeIndex: number; offset: number }> = []
+  for (let i = 0; i < textNodes.length; i++) {
+    const text = textNodes[i].text
+    for (let j = 0; j < text.length; j++) {
+      combinedMap.push({ nodeIndex: i, offset: j })
+    }
+  }
+
+  const { normalized: normalizedCombined, map: combinedNormalizeMap } = normalizeWithMap(combinedText)
+
+  let matchIndex = -1
+  let matchedLength = 0
+  for (const candidate of candidates) {
+    if (!candidate.length) continue
+    const candidateIndex = normalizedCombined.indexOf(candidate)
+    if (candidateIndex !== -1) {
+      if (isShortNumeric && !isBracketedShortNumber(searchText)) {
+        const matchStart = candidateIndex
+        const matchEnd = candidateIndex + candidate.length
+        if (!isNumericBoundaryMatch(normalizedCombined, matchStart, matchEnd, candidate)) {
+          continue
+        }
+      }
+      matchIndex = candidateIndex
+      matchedLength = candidate.length
+      break
+    }
+  }
+  if (matchIndex === -1) return false
+
+  const startCombined = combinedNormalizeMap[matchIndex]
+  const endCombined = combinedNormalizeMap[matchIndex + matchedLength - 1] + 1
+  if (startCombined === undefined || endCombined === undefined) return false
+
+  const startInfo = combinedMap[startCombined]
+  const endInfo = combinedMap[endCombined - 1]
+  if (!startInfo || !endInfo) return false
+
+  for (let i = startInfo.nodeIndex; i <= endInfo.nodeIndex; i++) {
+    if (textNodes[i]?.inPdfLink) return true
+  }
+
+  if (startInfo.nodeIndex === endInfo.nodeIndex) {
+    const { node, text } = textNodes[startInfo.nodeIndex]
+    if (node.type !== "text") return false
+
+    const before = text.slice(0, startInfo.offset)
+    const matched = text.slice(startInfo.offset, endInfo.offset + 1)
+    const after = text.slice(endInfo.offset + 1)
+    $(node).replaceWith(before + wrapFn(matched) + after)
+    return true
+  }
+
+  for (let i = endInfo.nodeIndex; i >= startInfo.nodeIndex; i--) {
+    const { node, text } = textNodes[i]
+    if (node.type !== "text") return false
+
+    const start = i === startInfo.nodeIndex ? startInfo.offset : 0
+    const end = i === endInfo.nodeIndex ? endInfo.offset + 1 : text.length
+    if (start >= end) return false
+
+    const before = text.slice(0, start)
+    const matched = text.slice(start, end)
+    const after = text.slice(end)
+    $(node).replaceWith(before + wrapFn(matched) + after)
+  }
+
+  return true
+}
+
+function isBracketedShortNumber(text: string): boolean {
+  return /^\s*[\[(]\s*\d{1,3}\s*[\])]\s*$/.test(text)
+}
+
+function isShortNumber(text: string): boolean {
+  return /^\s*\d{1,3}\s*$/.test(text)
+}
+
+function getBracketedShortNumberVariants(text: string): string[] {
+  const trimmed = text.trim()
+  if (!/^\d{1,3}$/.test(trimmed)) return []
+  return [`(${trimmed})`, `[${trimmed}]`]
+}
+
+function isNumericBoundaryMatch(text: string, start: number, end: number, candidate: string): boolean {
+  if (!/\d/.test(candidate)) return true
+  const before = start > 0 ? text[start - 1] : ""
+  const after = end < text.length ? text[end] : ""
+  const beforeIsDigit = /\d/.test(before)
+  const afterIsDigit = /\d/.test(after)
+  return !beforeIsDigit && !afterIsDigit
+}
+
+function normalizeText(text: string): string {
+  return normalizeWithMap(text).normalized
+}
+
+function normalizeWithMap(text: string): { normalized: string; map: number[] } {
+  // First pass: collapse whitespace and normalize dashes
+  let temp = ""
+  let tempMap: number[] = []
+  let lastWasSpace = false
+
+  for (let i = 0; i < text.length; i++) {
+    let char = text[i]
+    if (/\s/.test(char)) {
+      if (lastWasSpace) continue
+      temp += " "
+      tempMap.push(i)
+      lastWasSpace = true
+      continue
+    }
+    if (/[\u2010-\u2015\u2212]/.test(char)) char = "-"
+    temp += char
+    tempMap.push(i)
+    lastWasSpace = false
+  }
+
+  // Second pass: remove whitespace around brackets
+  let normalized = ""
+  let map: number[] = []
+  for (let i = 0; i < temp.length; i++) {
+    const char = temp[i]
+    if (char === " ") {
+      const prev = temp[i - 1]
+      const next = temp[i + 1]
+      // Skip space if adjacent to bracket
+      if (/[(\[{]/.test(prev) || /[)\]}]/.test(next)) continue
+    }
+    normalized += char
+    map.push(tempMap[i])
+  }
+
+  // Trim leading/trailing spaces
+  let start = 0
+  while (start < normalized.length && normalized[start] === " ") start++
+  let end = normalized.length - 1
+  while (end >= start && normalized[end] === " ") end--
+
+  normalized = normalized.slice(start, end + 1)
+  map = map.slice(start, end + 1)
+
+  return { normalized, map }
+}
+
+function extractLineCandidates(text: string): string[] {
+  return text
+    .split(/\r?\n|<br\s*\/?\s*>/i)
+    .map(line => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+}
+
+function findBestCandidateMatch(
+  candidates: string[],
+  normalizedTarget: string,
+): { text: string; score: number } | null {
+  const THRESHOLD = 0.85
+  let best: { text: string; score: number } | null = null
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeText(candidate)
+    if (!normalizedCandidate.length) continue
+    const score = similarity(normalizedCandidate, normalizedTarget)
+    if (score >= THRESHOLD && (!best || score > best.score)) {
+      best = { text: candidate, score }
+    }
+  }
+  return best
+}
+
+function similarity(a: string, b: string): number {
+  if (!a.length || !b.length) return 0
+  if (a.includes(b) || b.includes(a)) return 1.0
+
+  // Count character frequencies
+  const freqA = new Map<string, number>()
+  const freqB = new Map<string, number>()
+  for (const c of a) freqA.set(c, (freqA.get(c) || 0) + 1)
+  for (const c of b) freqB.set(c, (freqB.get(c) || 0) + 1)
+
+  // Count matching characters (min frequency in both)
+  let matches = 0
+  for (const [c, countA] of freqA) {
+    matches += Math.min(countA, freqB.get(c) || 0)
+  }
+
+  return matches / Math.min(a.length, b.length)
 }

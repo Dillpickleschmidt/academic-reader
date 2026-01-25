@@ -18,7 +18,7 @@ import {
   rewriteImageSources,
 } from "../utils/html-processing"
 import { stripHtmlForEmbedding } from "../services/embeddings"
-import { extractPdfLinks, injectLinksIntoHtml } from "../services/link-extraction"
+import { extractLinkMappings, injectLinks } from "../services/link-extraction"
 import { transformSSEStream } from "../utils/sse-transform"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
@@ -425,7 +425,7 @@ function cacheJobResult(
     .map((chunk) => ({
       blockId: chunk.id,
       blockType: chunk.block_type,
-      content: stripHtmlForEmbedding(chunk.html),
+      content: stripHtmlForEmbedding(chunk.html ?? ""),
       page: chunk.page,
       section: chunk.section_hierarchy
         ? Object.values(chunk.section_hierarchy).filter(Boolean).join(" > ")
@@ -498,17 +498,26 @@ async function processCompletedJob(
     )
     if (pdfReadResult.success) {
       try {
-        const linkMappings = extractPdfLinks(pdfReadResult.data, chunks)
-        if (linkMappings.length > 0) {
-          processedContent = injectLinksIntoHtml(processedContent, linkMappings)
+        const chunkPageInfo = chunks.map((c) => ({ id: c.id, page: c.page }))
+        const mappings = extractLinkMappings(pdfReadResult.data)
+
+        if (mappings.length) {
+          const { html: linkedHtml, linkCount } = injectLinks(
+            processedContent,
+            mappings,
+            chunkPageInfo,
+          )
+          processedContent = linkedHtml
+          event.linkCount = linkCount
+
           // Also inject into formats.html for storage/download
           if (result.formats?.html) {
-            result.formats.html = injectLinksIntoHtml(
+            result.formats.html = injectLinks(
               result.formats.html,
-              linkMappings,
-            )
+              mappings,
+              chunkPageInfo,
+            ).html
           }
-          event.linkCount = linkMappings.length
         }
       } catch (err) {
         console.warn("[jobs] Link extraction failed:", err)
