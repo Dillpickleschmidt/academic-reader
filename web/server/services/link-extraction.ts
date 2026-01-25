@@ -98,10 +98,20 @@ export function injectLinks(
 
       if (!targetAnchors.has(anchorKey)) {
         const anchorId = `pdf-link-${anchorCounter++}`
-        const targetMatch = findTargetMatchOnPage($, targetText, destPage, blockPageMap)
+        const targetMatch = findTargetMatchOnPage(
+          $,
+          targetText,
+          destPage,
+          blockPageMap,
+        )
 
         if (targetMatch) {
-          const wrapped = wrapWithAnchorId($, targetMatch.element, targetMatch.matchedText, anchorId)
+          const wrapped = wrapWithAnchorId(
+            $,
+            targetMatch.element,
+            targetMatch.matchedText,
+            anchorId,
+          )
           if (!wrapped) continue
           targetAnchors.set(anchorKey, anchorId)
         } else {
@@ -121,10 +131,22 @@ export function injectLinks(
     const baseKey = sourceText.trim()
     const cursorKey = `${baseKey}:${destPage}:${targetText ?? targetUrl ?? ""}`
     const sourceIndex = pageCursor.get(cursorKey) ?? 0
-    const sourceMatch = findTextOnPage($, sourceText, sourcePage, blockPageMap, sourceIndex)
+    const sourceMatch = findTextOnPage(
+      $,
+      sourceText,
+      sourcePage,
+      blockPageMap,
+      sourceIndex,
+    )
     if (sourceMatch) {
       const isExternal = !!targetUrl
-      const wrapped = wrapWithLink($, sourceMatch.element, sourceText, href, isExternal)
+      const wrapped = wrapWithLink(
+        $,
+        sourceMatch.element,
+        sourceText,
+        href,
+        isExternal,
+      )
       if (wrapped) {
         linkCount++
       }
@@ -254,7 +276,13 @@ function extractTextAtPointLine(
     text: string
   }
   const lines: Line[] = []
-  let cur = { chars: [] as string[], minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+  let cur = {
+    chars: [] as string[],
+    minX: Infinity,
+    maxX: -Infinity,
+    minY: Infinity,
+    maxY: -Infinity,
+  }
 
   stext.walk({
     onChar(c: string, _origin, _font, _size, quad: Quad) {
@@ -268,7 +296,13 @@ function extractTextAtPointLine(
       if (cur.chars.length > 0) {
         lines.push({ ...cur, text: cur.chars.join("") })
       }
-      cur = { chars: [], minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+      cur = {
+        chars: [],
+        minX: Infinity,
+        maxX: -Infinity,
+        minY: Infinity,
+        maxY: -Infinity,
+      }
     },
   })
   if (cur.chars.length > 0) {
@@ -290,8 +324,18 @@ function extractTextAtPointLine(
       return line.text.trim()
     }
 
-    const dx = targetX < line.minX ? line.minX - targetX : targetX > line.maxX ? targetX - line.maxX : 0
-    const dy = targetY < line.minY ? line.minY - targetY : targetY > line.maxY ? targetY - line.maxY : 0
+    const dx =
+      targetX < line.minX
+        ? line.minX - targetX
+        : targetX > line.maxX
+          ? targetX - line.maxX
+          : 0
+    const dy =
+      targetY < line.minY
+        ? line.minY - targetY
+        : targetY > line.maxY
+          ? targetY - line.maxY
+          : 0
     const dist = Math.sqrt(dx * dx + dy * dy)
     if (dist < nearestDist) {
       nearestDist = dist
@@ -325,10 +369,23 @@ function findTextOnPage(
   for (let i = clampedStart; i < elements.length; i++) {
     const el = elements[i]
     const text = normalizeText($(el).text())
-    if (text.includes(normalizedSearch)) return { element: el, index: i }
+
+    if (findWithBoundaryCheck(text, normalizedSearch, isShortNumeric) !== -1) {
+      return { element: el, index: i }
+    }
+
     if (isShortNumeric) {
-      const variants = getBracketedShortNumberVariants(searchText).map(variant => normalizeText(variant))
-      if (variants.some(variant => variant && text.includes(variant))) return { element: el, index: i }
+      const variants = getBracketedShortNumberVariants(searchText).map(
+        (variant) => normalizeText(variant),
+      )
+      if (
+        variants.some(
+          (variant) =>
+            variant && findWithBoundaryCheck(text, variant, true) !== -1,
+        )
+      ) {
+        return { element: el, index: i }
+      }
     }
   }
 
@@ -346,27 +403,37 @@ function findTargetMatchOnPage(
 
   let best: { match: MatchCandidate; score: number; length: number } | null = null
 
-  const tryUpdate = (el: CheerioElement, candidate: { text: string; score: number } | null) => {
-    if (!candidate) return
-    const dominated = best && (candidate.score < best.score ||
-      (candidate.score === best.score && candidate.text.length >= best.length))
-    if (dominated) return
-    best = { match: { element: el, matchedText: candidate.text }, score: candidate.score, length: candidate.text.length }
-  }
-
   for (const el of getPageBlocks($, page, blockPageMap).toArray()) {
     const lines = extractLineCandidates($(el).text())
-    tryUpdate(el, findBestCandidateMatch(lines, normalizedTarget))
+    const candidate = findBestCandidateMatch(lines, normalizedTarget)
+    if (!candidate) continue
+    const dominated = best && (candidate.score < best.score ||
+      (candidate.score === best.score && candidate.text.length >= best.length))
+    if (dominated) continue
+    best = {
+      match: { element: el, matchedText: candidate.text },
+      score: candidate.score,
+      length: candidate.text.length,
+    }
   }
 
   return best?.match ?? null
 }
 
-function getPageBlocks($: CheerioAPI, page: number, blockPageMap: Map<string, number>) {
+function getPageBlocks(
+  $: CheerioAPI,
+  page: number,
+  blockPageMap: Map<string, number>,
+) {
   return $("[data-block-id]").filter((_, el) => {
     const blockId = $(el).attr("data-block-id")
     if (blockId === undefined) return false
-    if (blockId.includes("/PageHeader/") || blockId.includes("/PageFooter/") || blockId.includes("/Picture/")) return false
+    if (
+      blockId.includes("/PageHeader/") ||
+      blockId.includes("/PageFooter/") ||
+      blockId.includes("/Picture/")
+    )
+      return false
     return blockPageMap.get(blockId) === page
   })
 }
@@ -421,23 +488,38 @@ function wrapTextInElement(
   const normalizedSearch = normalizeText(searchText)
   if (!normalizedSearch.length) return false
   const isShortNumeric = isShortNumber(searchText)
-  if (normalizedSearch.length < 2 && !isShortNumeric && !isBracketedShortNumber(searchText)) return false
+  if (
+    normalizedSearch.length < 2 &&
+    !isShortNumeric &&
+    !isBracketedShortNumber(searchText)
+  )
+    return false
 
   const candidates = [normalizedSearch]
   if (isShortNumeric && !isBracketedShortNumber(searchText)) {
     candidates.unshift(
-      ...getBracketedShortNumberVariants(searchText).map(variant => normalizeText(variant))
+      ...getBracketedShortNumberVariants(searchText).map((variant) =>
+        normalizeText(variant),
+      ),
     )
   }
-  const textNodes: Array<{ node: CheerioElement; text: string; inPdfLink: boolean }> = []
-  function collectTextNodes(nodes: ReturnType<CheerioAPI>, inPdfLink: boolean): void {
+  const textNodes: Array<{
+    node: CheerioElement
+    text: string
+    inPdfLink: boolean
+  }> = []
+  function collectTextNodes(
+    nodes: ReturnType<CheerioAPI>,
+    inPdfLink: boolean,
+  ): void {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       if (node.type === "text") {
         const text = node.data || ""
         if (text.length) textNodes.push({ node, text, inPdfLink })
       } else if (node.type === "tag") {
-        const nextInPdfLink = inPdfLink || (node.name === "a" && $(node).hasClass("pdf-link"))
+        const nextInPdfLink =
+          inPdfLink || (node.name === "a" && $(node).hasClass("pdf-link"))
         collectTextNodes($(node).contents(), nextInPdfLink)
       }
     }
@@ -453,26 +535,28 @@ function wrapTextInElement(
     }
   }
 
-  const { normalized: normalizedCombined, map: combinedNormalizeMap } = normalizeWithMap(combinedText)
+  const { normalized: normalizedCombined, map: combinedNormalizeMap } =
+    normalizeWithMap(combinedText)
 
+  const needsBoundaryCheck =
+    isShortNumeric && !isBracketedShortNumber(searchText)
   let matchIndex = -1
   let matchedLength = 0
   for (const candidate of candidates) {
     if (!candidate.length) continue
-    const candidateIndex = normalizedCombined.indexOf(candidate)
+    const candidateIndex = findWithBoundaryCheck(
+      normalizedCombined,
+      candidate,
+      needsBoundaryCheck,
+    )
     if (candidateIndex !== -1) {
-      if (isShortNumeric && !isBracketedShortNumber(searchText)) {
-        const matchStart = candidateIndex
-        const matchEnd = candidateIndex + candidate.length
-        if (!isNumericBoundaryMatch(normalizedCombined, matchStart, matchEnd, candidate)) {
-          continue
-        }
-      }
       matchIndex = candidateIndex
       matchedLength = candidate.length
       // If we matched a bracketed variant for a plain number, wrap only the inner number
-      if (isShortNumeric && !isBracketedShortNumber(searchText) &&
-          (candidate.startsWith("(") || candidate.startsWith("["))) {
+      if (
+        needsBoundaryCheck &&
+        (candidate.startsWith("(") || candidate.startsWith("["))
+      ) {
         matchIndex += 1
         matchedLength = normalizedSearch.length
       }
@@ -535,12 +619,41 @@ function getBracketedShortNumberVariants(text: string): string[] {
   return [`(${trimmed})`, `[${trimmed}]`]
 }
 
-function isNumericBoundaryMatch(text: string, start: number, end: number, candidate: string): boolean {
+function isNumericBoundaryMatch(
+  text: string,
+  start: number,
+  end: number,
+  candidate: string,
+): boolean {
   if (!/\d/.test(candidate)) return true
   const before = text.slice(Math.max(0, start - 2), start)
   const after = text.slice(end, end + 2)
   // Reject if adjacent to digits or part of decimal (e.g., "24.40", "0.24")
-  return !/\d$/.test(before) && !/^\d/.test(after) && !/\d\.$/.test(before) && !/^\.\d/.test(after)
+  return (
+    !/\d$/.test(before) &&
+    !/^\d/.test(after) &&
+    !/\d\.$/.test(before) &&
+    !/^\.\d/.test(after)
+  )
+}
+
+function findWithBoundaryCheck(
+  text: string,
+  search: string,
+  checkBoundary: boolean,
+): number {
+  let start = 0
+  while (true) {
+    const idx = text.indexOf(search, start)
+    if (idx === -1) return -1
+    if (
+      !checkBoundary ||
+      isNumericBoundaryMatch(text, idx, idx + search.length, search)
+    ) {
+      return idx
+    }
+    start = idx + 1
+  }
 }
 
 function normalizeText(text: string): string {
@@ -598,7 +711,7 @@ function normalizeWithMap(text: string): { normalized: string; map: number[] } {
 function extractLineCandidates(text: string): string[] {
   return text
     .split(/\r?\n|<br\s*\/?\s*>/i)
-    .map(line => line.replace(/\s+/g, " ").trim())
+    .map((line) => line.replace(/\s+/g, " ").trim())
     .filter(Boolean)
 }
 
