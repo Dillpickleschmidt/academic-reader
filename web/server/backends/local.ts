@@ -1,10 +1,8 @@
 import type { ConversionBackend } from "./interface"
-import type {
-  ChunkOutput,
-  ConversionInput,
-  ConversionJob,
-  JobStatus,
-} from "../types"
+import type { ConversionInput, ConversionJob } from "../types"
+import { parseJobId, prefixJobId } from "./job-id"
+import { workerNotConfiguredError } from "./errors"
+import { mapLocalResponse, type LocalWorkerResponse } from "./response-mapper"
 
 const TIMEOUT_MS = 30_000
 
@@ -27,36 +25,20 @@ export class LocalBackend implements ConversionBackend {
     this.lightonocrUrl = config.lightonocrUrl?.replace(/\/+$/, "") ?? null
   }
 
-  private mapStatus(status: string): JobStatus {
-    const STATUS_MAP: Record<string, JobStatus> = {
-      pending: "pending",
-      processing: "processing",
-      html_ready: "html_ready",
-      completed: "completed",
-      failed: "failed",
-      cancelled: "failed",
-    }
-    return STATUS_MAP[status] ?? "failed"
-  }
-
   /**
-   * Parse prefixed job ID to get base URL and raw job ID.
-   * Format: "lightonocr:abc123" or "marker:abc123" or just "abc123" (legacy)
+   * Get base URL and raw job ID from a prefixed job ID.
    */
-  private parseJobId(jobId: string): { baseUrl: string; rawJobId: string } {
-    if (jobId.startsWith("lightonocr:")) {
+  private getWorkerUrl(jobId: string): { baseUrl: string; rawJobId: string } {
+    const { worker, rawId } = parseJobId(jobId)
+
+    if (worker === "lightonocr") {
       if (!this.lightonocrUrl) {
-        throw new Error(
-          "LightOnOCR worker not configured but job ID indicates LightOnOCR",
-        )
+        throw workerNotConfiguredError("local", "LightOnOCR")
       }
-      return { baseUrl: this.lightonocrUrl, rawJobId: jobId.slice(11) }
+      return { baseUrl: this.lightonocrUrl, rawJobId: rawId }
     }
-    if (jobId.startsWith("marker:")) {
-      return { baseUrl: this.markerUrl, rawJobId: jobId.slice(7) }
-    }
-    // Legacy: no prefix, assume Marker
-    return { baseUrl: this.markerUrl, rawJobId: jobId }
+
+    return { baseUrl: this.markerUrl, rawJobId: rawId }
   }
 
   async submitJob(input: ConversionInput): Promise<string> {
@@ -64,9 +46,7 @@ export class LocalBackend implements ConversionBackend {
 
     // Validate LightOnOCR endpoint if needed
     if (useLightOnOCR && !this.lightonocrUrl) {
-      throw new Error(
-        "Accurate mode requires LIGHTONOCR_WORKER_URL to be configured",
-      )
+      throw workerNotConfiguredError("local", "LightOnOCR")
     }
 
     if (useLightOnOCR) {
@@ -86,11 +66,11 @@ export class LocalBackend implements ConversionBackend {
 
       if (!response.ok) {
         const error = await response.text()
-        throw new Error(`LightOnOCR backend error: ${error}`)
+        throw new Error(`[local] LightOnOCR submit failed: ${error}`)
       }
 
       const data = (await response.json()) as { job_id: string }
-      return `lightonocr:${data.job_id}`
+      return prefixJobId(data.job_id, "lightonocr")
     } else {
       // Marker: existing API with file_id path param
       const params = new URLSearchParams({
@@ -113,78 +93,27 @@ export class LocalBackend implements ConversionBackend {
 
       if (!response.ok) {
         const error = await response.text()
-        throw new Error(`Local backend error: ${error}`)
+        throw new Error(`[local] Marker submit failed: ${error}`)
       }
 
       const data = (await response.json()) as { job_id: string }
-      return `marker:${data.job_id}`
+      return prefixJobId(data.job_id, "marker")
     }
   }
 
   async getJobStatus(jobId: string): Promise<ConversionJob> {
-    const { baseUrl, rawJobId } = this.parseJobId(jobId)
+    const { baseUrl, rawJobId } = this.getWorkerUrl(jobId)
     const response = await fetch(`${baseUrl}/jobs/${rawJobId}`, {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
 
     if (!response.ok) {
       const body = await response.text()
-      throw new Error(`Failed to get job status (${response.status}): ${body}`)
+      throw new Error(`[local] Failed to get job status (${response.status}): ${body}`)
     }
 
-    const data = (await response.json()) as {
-      job_id: string
-      status: string
-      result?: {
-        content: string
-        metadata: Record<string, unknown>
-        formats?: {
-          html: string
-          markdown: string
-          json: unknown
-          chunks?: ChunkOutput
-        }
-        images?: Record<string, string>
-      }
-      html_content?: string
-      error?: string
-      progress?: {
-        stage: string
-        current: number
-        total: number
-        elapsed?: number
-      }
-    }
-
-    const status = this.mapStatus(data.status)
-    const isComplete = status === "completed"
-    const result = data.result
-
-    return {
-      jobId: data.job_id,
-      status,
-      htmlContent: data.html_content || result?.formats?.html,
-      result:
-        isComplete && result
-          ? {
-              content: result.content,
-              metadata: result.metadata,
-              formats: result.formats
-                ? {
-                    html: result.formats.html,
-                    markdown: result.formats.markdown,
-                    json: result.formats.json,
-                    chunks: result.formats.chunks,
-                  }
-                : undefined,
-              images: result.images,
-            }
-          : undefined,
-      error: data.error,
-      progress: data.progress
-        ? { ...data.progress, elapsed: data.progress.elapsed ?? 0 }
-        : undefined,
-    }
+    const data = (await response.json()) as LocalWorkerResponse
+    return mapLocalResponse(data)
   }
 
   supportsStreaming(): boolean {
@@ -192,7 +121,7 @@ export class LocalBackend implements ConversionBackend {
   }
 
   getStreamUrl(jobId: string): string {
-    const { baseUrl, rawJobId } = this.parseJobId(jobId)
+    const { baseUrl, rawJobId } = this.getWorkerUrl(jobId)
     // Note: LightOnOCR doesn't support streaming, but this returns the URL anyway
     // The frontend should check for stream availability
     return `${baseUrl}/jobs/${rawJobId}/stream`
@@ -203,7 +132,7 @@ export class LocalBackend implements ConversionBackend {
   }
 
   async cancelJob(jobId: string): Promise<boolean> {
-    const { baseUrl, rawJobId } = this.parseJobId(jobId)
+    const { baseUrl, rawJobId } = this.getWorkerUrl(jobId)
     try {
       const response = await fetch(`${baseUrl}/cancel/${rawJobId}`, {
         method: "POST",

@@ -1,10 +1,8 @@
 import type { ConversionBackend } from "./interface"
-import type {
-  ChunkOutput,
-  ConversionInput,
-  ConversionJob,
-  JobStatus,
-} from "../types"
+import type { ConversionInput, ConversionJob } from "../types"
+import { parseJobId, prefixJobId } from "./job-id"
+import { workerNotConfiguredError } from "./errors"
+import { mapRunpodResponse, type RunpodResponse } from "./response-mapper"
 
 const TIMEOUT_MS = 30_000
 
@@ -36,9 +34,7 @@ class RunpodBackend implements ConversionBackend {
 
     // Validate LightOnOCR endpoint if needed
     if (useLightOnOCR && !this.lightonocrBaseUrl) {
-      throw new Error(
-        "Accurate mode requires RUNPOD_LIGHTONOCR_ENDPOINT_ID to be configured",
-      )
+      throw workerNotConfiguredError("runpod", "LightOnOCR")
     }
 
     // Build payload based on endpoint
@@ -69,24 +65,22 @@ class RunpodBackend implements ConversionBackend {
 
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(
-        `Runpod submission failed (${response.status}): ${error}`,
-      )
+      throw new Error(`[runpod] Submit failed (${response.status}): ${error}`)
     }
 
     const data = (await response.json()) as { id?: string }
     if (typeof data.id !== "string" || data.id.trim() === "") {
       throw new Error(
-        `Runpod returned invalid job ID (${response.status}): ${JSON.stringify(data)}`,
+        `[runpod] Invalid job ID returned: ${JSON.stringify(data)}`,
       )
     }
 
     // Prefix job ID to track which endpoint it belongs to
-    return useLightOnOCR ? `lightonocr:${data.id}` : `marker:${data.id}`
+    return prefixJobId(data.id, useLightOnOCR ? "lightonocr" : "marker")
   }
 
   async getJobStatus(jobId: string): Promise<ConversionJob> {
-    const { baseUrl, rawJobId } = this.parseJobId(jobId)
+    const { baseUrl, rawJobId } = this.getWorkerUrl(jobId)
     const response = await fetch(`${baseUrl}/status/${rawJobId}`, {
       headers: {
         Authorization: `Bearer ${this.config.apiKey}`,
@@ -96,51 +90,11 @@ class RunpodBackend implements ConversionBackend {
 
     if (!response.ok) {
       const body = await response.text()
-      throw new Error(`Failed to get job status (${response.status}): ${body}`)
+      throw new Error(`[runpod] Failed to get job status (${response.status}): ${body}`)
     }
 
-    const data = (await response.json()) as {
-      id: string
-      status: string
-      output?: {
-        content: string
-        metadata: Record<string, unknown>
-        formats?: {
-          html: string
-          markdown: string
-          json: unknown
-          chunks?: ChunkOutput
-        }
-        images?: Record<string, string>
-      }
-      error?: string
-    }
-
-    const isComplete = data.status === "COMPLETED"
-    const output = data.output
-
-    return {
-      jobId: data.id,
-      status: this.mapStatus(data.status),
-      htmlContent: isComplete ? output?.formats?.html : undefined,
-      result:
-        isComplete && output
-          ? {
-              content: output.content,
-              metadata: output.metadata,
-              formats: output.formats
-                ? {
-                    html: output.formats.html,
-                    markdown: output.formats.markdown,
-                    json: output.formats.json,
-                    chunks: output.formats.chunks,
-                  }
-                : undefined,
-              images: output.images,
-            }
-          : undefined,
-      error: data.error,
-    }
+    const data = (await response.json()) as RunpodResponse
+    return mapRunpodResponse(data)
   }
 
   supportsStreaming(): boolean {
@@ -152,7 +106,7 @@ class RunpodBackend implements ConversionBackend {
   }
 
   async cancelJob(jobId: string): Promise<boolean> {
-    const { baseUrl, rawJobId } = this.parseJobId(jobId)
+    const { baseUrl, rawJobId } = this.getWorkerUrl(jobId)
     try {
       const response = await fetch(`${baseUrl}/cancel/${rawJobId}`, {
         method: "POST",
@@ -171,31 +125,19 @@ class RunpodBackend implements ConversionBackend {
   // Private helpers
 
   /**
-   * Parse prefixed job ID to get base URL and raw job ID.
-   * Format: "lightonocr:abc123" or "marker:abc123" or just "abc123" (legacy)
+   * Get base URL and raw job ID from a prefixed job ID.
    */
-  private parseJobId(jobId: string): { baseUrl: string; rawJobId: string } {
-    if (jobId.startsWith("lightonocr:")) {
-      if (!this.lightonocrBaseUrl) {
-        throw new Error("LightOnOCR endpoint not configured but job ID indicates LightOnOCR")
-      }
-      return { baseUrl: this.lightonocrBaseUrl, rawJobId: jobId.slice(11) }
-    }
-    if (jobId.startsWith("marker:")) {
-      return { baseUrl: this.markerBaseUrl, rawJobId: jobId.slice(7) }
-    }
-    // Legacy: no prefix, assume Marker
-    return { baseUrl: this.markerBaseUrl, rawJobId: jobId }
-  }
+  private getWorkerUrl(jobId: string): { baseUrl: string; rawJobId: string } {
+    const { worker, rawId } = parseJobId(jobId)
 
-  private mapStatus(status: string): JobStatus {
-    const STATUS_MAP: Record<string, JobStatus> = {
-      IN_QUEUE: "pending",
-      IN_PROGRESS: "processing",
-      COMPLETED: "completed",
-      FAILED: "failed",
+    if (worker === "lightonocr") {
+      if (!this.lightonocrBaseUrl) {
+        throw workerNotConfiguredError("runpod", "LightOnOCR")
+      }
+      return { baseUrl: this.lightonocrBaseUrl, rawJobId: rawId }
     }
-    return STATUS_MAP[status] ?? "failed"
+
+    return { baseUrl: this.markerBaseUrl, rawJobId: rawId }
   }
 }
 

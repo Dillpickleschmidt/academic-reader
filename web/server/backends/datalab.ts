@@ -1,27 +1,11 @@
 import type { ConversionBackend } from "./interface"
-import type {
-  ChunkOutput,
-  ConversionInput,
-  ConversionJob,
-  JobStatus,
-} from "../types"
+import type { ConversionInput, ConversionJob } from "../types"
+import { mapDatalabResponse, type DatalabResponse } from "./response-mapper"
 
 const TIMEOUT_MS = 300_000 // 5 minutes per request
 
 interface DatalabConfig {
   apiKey: string
-}
-
-interface DatalabResponse {
-  request_id: string
-  status: string
-  success?: boolean
-  markdown?: string
-  html?: string
-  json?: unknown
-  chunks?: ChunkOutput
-  error?: string
-  images?: Record<string, string>
 }
 
 /**
@@ -42,7 +26,7 @@ class DatalabBackend implements ConversionBackend {
 
     // Direct file upload - Datalab accepts file as multipart form data
     if (!input.fileData) {
-      throw new Error("Datalab backend requires fileData for direct upload")
+      throw new Error("[datalab] fileData is required for direct upload")
     }
 
     // Convert Buffer to Uint8Array if needed (Blob accepts Uint8Array but not Buffer)
@@ -74,7 +58,7 @@ class DatalabBackend implements ConversionBackend {
 
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(`Datalab submission failed: ${error}`)
+      throw new Error(`[datalab] Submit failed: ${error}`)
     }
 
     const data = (await response.json()) as {
@@ -94,11 +78,11 @@ class DatalabBackend implements ConversionBackend {
 
     if (!response.ok) {
       const body = await response.text()
-      throw new Error(`Failed to get job status (${response.status}): ${body}`)
+      throw new Error(`[datalab] Failed to get job status (${response.status}): ${body}`)
     }
 
     const data = (await response.json()) as DatalabResponse
-    return this.parseResponse(data)
+    return mapDatalabResponse(data)
   }
 
   supportsStreaming(): boolean {
@@ -107,46 +91,6 @@ class DatalabBackend implements ConversionBackend {
 
   supportsCancellation(): boolean {
     return false
-  }
-
-  // Private helpers
-
-  private mapStatus(status: string, success?: boolean): JobStatus {
-    if (status === "complete" && !success) return "failed"
-    const STATUS_MAP: Record<string, JobStatus> = {
-      pending: "pending",
-      processing: "processing",
-      complete: "completed",
-      failed: "failed",
-    }
-    return STATUS_MAP[status] ?? "failed"
-  }
-
-  private parseResponse(data: DatalabResponse): ConversionJob {
-    const rawHtml = data.html ?? ""
-
-    return {
-      jobId: data.request_id,
-      status: this.mapStatus(data.status, data.success),
-      // Raw HTML for early display (progressive loading with shimmer placeholders)
-      htmlContent:
-        data.status === "complete" && data.success ? rawHtml : undefined,
-      result:
-        data.status === "complete" && data.success
-          ? {
-              content: rawHtml,
-              metadata: {},
-              formats: {
-                html: rawHtml,
-                markdown: data.markdown ?? "",
-                json: data.json,
-                chunks: data.chunks,
-              },
-              images: data.images,
-            }
-          : undefined,
-      error: data.error,
-    }
   }
 }
 

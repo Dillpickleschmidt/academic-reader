@@ -46,7 +46,7 @@ def convert_file(file_path: Path, page_range: str | None = None) -> dict:
     if suffix == ".pdf":
         return _convert_pdf(file_path, page_range)
     elif suffix in IMAGE_EXTENSIONS:
-        return _convert_image(file_path)
+        return convert_image(file_path)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
@@ -111,7 +111,7 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
     }
 
 
-def _convert_image(image_path: Path) -> dict:
+def convert_image(image_path: Path) -> dict:
     """Convert a single image file."""
     # Load and resize image
     img = Image.open(image_path)
