@@ -65,6 +65,7 @@ upload.post("/upload", async (c) => {
     file_id: fileId,
     filename,
     size: arrayBufferResult.data.byteLength,
+    content_type: file.type,
   })
 })
 
@@ -181,6 +182,7 @@ upload.post("/fetch-url", async (c) => {
     file_id: fileId,
     filename,
     size: arrayBufferResult.data.byteLength,
+    content_type: event.contentType,
   })
 })
 

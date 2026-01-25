@@ -37,6 +37,7 @@ export function useConversion() {
   // File state
   const [fileId, setFileId] = useState("")
   const [fileName, setFileName] = useState("")
+  const [fileMimeType, setFileMimeType] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadComplete, setUploadComplete] = useState(false)
   const [url, setUrl] = useState("")
@@ -94,6 +95,7 @@ export function useConversion() {
     setPage("upload")
     setFileId("")
     setFileName("")
+    setFileMimeType("")
     setUploadProgress(0)
     setUploadComplete(false)
     setUrl("")
@@ -113,6 +115,7 @@ export function useConversion() {
 
   const uploadFile = async (file: File) => {
     setFileName(file.name)
+    setFileMimeType(file.type)
     setPage("configure")
     setUploadProgress(0)
     setUploadComplete(false)
@@ -160,6 +163,7 @@ export function useConversion() {
 
       setFileId(data.file_id)
       setFileName(data.filename)
+      setFileMimeType(data.content_type)
       setUploadProgress(100)
       setUploadComplete(true)
     } catch (err) {
@@ -319,6 +323,7 @@ export function useConversion() {
     page,
     fileId,
     fileName,
+    fileMimeType,
     uploadProgress,
     uploadComplete,
     url,

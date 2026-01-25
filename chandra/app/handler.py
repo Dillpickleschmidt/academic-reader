@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 import httpx
 import runpod
-from .conversion import convert_pdf
+from .conversion import convert_file
 
 # Pre-warm model on worker startup
 from .models import get_or_create_manager
@@ -32,7 +32,7 @@ def handler(job: dict) -> dict:
         temp_path = Path(f.name)
 
     try:
-        return convert_pdf(temp_path, page_range)
+        return convert_file(temp_path, page_range)
     except Exception as e:
         import traceback
         traceback.print_exc()

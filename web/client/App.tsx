@@ -74,6 +74,7 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <ConfigureProcessingPage
             fileName={conversion.fileName}
+            fileMimeType={conversion.fileMimeType}
             uploadProgress={conversion.uploadProgress}
             uploadComplete={conversion.uploadComplete}
             outputFormat={conversion.outputFormat}

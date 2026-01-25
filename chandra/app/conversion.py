@@ -4,8 +4,10 @@ import io
 from pathlib import Path
 import pypdfium2 as pdfium
 from chandra.model import BatchInputItem
-from chandra.input import load_pdf_images
+from chandra.input import load_pdf_images, load_image, parse_range_str
 from .models import get_or_create_manager
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tiff", ".tif", ".bmp"}
 
 
 def get_page_count(file_path: Path) -> int:
@@ -23,20 +25,22 @@ def pil_to_base64(img) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def convert_pdf(file_path: Path, page_range: str | None = None) -> dict:
-    """Convert PDF using Chandra OCR."""
+def convert_file(file_path: Path, page_range: str | None = None) -> dict:
+    """Convert PDF or image file using Chandra OCR."""
     manager = get_or_create_manager()
 
-    # Determine pages to process
-    page_count = get_page_count(file_path)
-    if page_range:
-        from chandra.input import parse_range_str
-        pages = parse_range_str(page_range)
-    else:
-        pages = list(range(page_count))
+    suffix = file_path.suffix.lower()
 
-    # Load PDF pages as images
-    images = load_pdf_images(str(file_path), page_range=pages)
+    if suffix == ".pdf":
+        page_count = get_page_count(file_path)
+        pages = parse_range_str(page_range) if page_range else list(range(page_count))
+        images = load_pdf_images(str(file_path), page_range=pages)
+    elif suffix in IMAGE_EXTENSIONS:
+        images = [load_image(str(file_path))]
+        pages = [0]
+        page_count = 1
+    else:
+        raise ValueError(f"Unsupported file type: {suffix}")
 
     # Create batch input for all pages (ocr_layout includes bboxes and labels)
     batch_input = [

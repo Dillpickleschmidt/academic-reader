@@ -23,7 +23,8 @@ export function HtmlResultPage({
 }: Props) {
   const documentContext = useDocumentContext()
   const chunks = documentContext?.chunks ?? []
-  const { menuState, setMenuOpen, handleContentClick } = useTTSChunkDetection(chunks)
+  const { menuState, setMenuOpen, handleContentClick } =
+    useTTSChunkDetection(chunks)
 
   // Enable word-level highlighting during TTS playback
   useWordHighlighting()
@@ -64,20 +65,25 @@ export function HtmlResultPage({
       const container = el.parentElement
       if (!container) return
       const hasOverflow = el.scrollWidth > el.clientWidth
-      container.classList.toggle('has-overflow-left', hasOverflow && el.scrollLeft > 0)
-      container.classList.toggle('has-overflow-right',
-        hasOverflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+      container.classList.toggle(
+        "has-overflow-left",
+        hasOverflow && el.scrollLeft > 0,
+      )
+      container.classList.toggle(
+        "has-overflow-right",
+        hasOverflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+      )
     }
 
-    contentRef.current.querySelectorAll('.table-scroll').forEach(el => {
+    contentRef.current.querySelectorAll(".table-scroll").forEach((el) => {
       // Compact wide tables (reduce padding + zoom)
       if (el.scrollWidth > el.clientWidth) {
-        const table = el.querySelector('table')
-        if (table) table.classList.add('table-compact')
+        const table = el.querySelector("table")
+        if (table) table.classList.add("table-compact")
       }
 
       updateShadows(el)
-      el.addEventListener('scroll', () => updateShadows(el), { passive: true })
+      el.addEventListener("scroll", () => updateShadows(el), { passive: true })
     })
   }, [content])
 

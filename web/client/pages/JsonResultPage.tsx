@@ -16,7 +16,7 @@ export function JsonResultPage({ content, onDownload, onReset }: Props) {
     try {
       return JSON.stringify(JSON.parse(content), null, 2)
     } catch (error) {
-      console.warn('Failed to parse JSON content:', error)
+      console.warn("Failed to parse JSON content:", error)
       return content
     }
   })()

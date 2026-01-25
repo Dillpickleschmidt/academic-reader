@@ -60,6 +60,15 @@ const PROCESSING_STEPS = [
   { id: "text", label: "Recognizing Text" },
 ]
 
+const CHANDRA_SUPPORTED_TYPES = [
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/tiff",
+]
+
 const MODE_OPTIONS: {
   value: ProcessingMode
   label: string
@@ -87,6 +96,7 @@ const MODE_OPTIONS: {
 
 interface Props {
   fileName: string
+  fileMimeType: string
   uploadProgress: number
   uploadComplete: boolean
   outputFormat: OutputFormat
@@ -293,6 +303,7 @@ function ProcessingView({ stages }: { stages: StageInfo[] }) {
 
 export function ConfigureProcessingPage({
   fileName,
+  fileMimeType,
   uploadProgress,
   uploadComplete,
   outputFormat,
@@ -333,7 +344,7 @@ export function ConfigureProcessingPage({
             <div className="pb-4 border-b border-border">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <FileText className="w-4 h-4 shrink-0" strokeWidth={1.5} />
-                <span className="truncate max-w-[180px] text-foreground font-medium">
+                <span className="truncate max-w-45 text-foreground font-medium">
                   {fileName}
                 </span>
                 {uploadComplete && (
@@ -501,32 +512,60 @@ export function ConfigureProcessingPage({
                     }
                     className="grid grid-cols-3 gap-3"
                   >
-                    {MODE_OPTIONS.filter((opt) => {
+                    {MODE_OPTIONS.map((opt) => {
                       // Hide "balanced" for non-datalab backends
-                      if (opt.value === "balanced" && backendMode !== "datalab") {
-                        return false
+                      if (
+                        opt.value === "balanced" &&
+                        backendMode !== "datalab"
+                      ) {
+                        return null
                       }
                       // Hide "accurate" for local backend (no Chandra support)
                       if (opt.value === "accurate" && backendMode === "local") {
-                        return false
+                        return null
                       }
-                      return true
-                    }).map((opt) => (
-                      <FieldLabel key={opt.value} htmlFor={opt.value}>
-                        <Field
-                          orientation="horizontal"
-                          className="p-4 cursor-pointer"
+
+                      // Disable "accurate" for non-PDF/image files
+                      const isDisabled =
+                        opt.value === "accurate" &&
+                        !CHANDRA_SUPPORTED_TYPES.includes(fileMimeType)
+
+                      return (
+                        <div
+                          key={opt.value}
+                          title={
+                            isDisabled
+                              ? "Accurate mode is only needed for PDFs and images (uses OCR)"
+                              : undefined
+                          }
+                          className={cn(isDisabled && "opacity-50")}
                         >
-                          <FieldContent>
-                            <FieldTitle>{opt.label}</FieldTitle>
-                            <FieldDescription>
-                              {opt.description}
-                            </FieldDescription>
-                          </FieldContent>
-                          <RadioGroupItem value={opt.value} id={opt.value} />
-                        </Field>
-                      </FieldLabel>
-                    ))}
+                          <FieldLabel htmlFor={opt.value}>
+                            <Field
+                              orientation="horizontal"
+                              className={cn(
+                                "p-4",
+                                isDisabled
+                                  ? "cursor-not-allowed"
+                                  : "cursor-pointer",
+                              )}
+                            >
+                              <FieldContent>
+                                <FieldTitle>{opt.label}</FieldTitle>
+                                <FieldDescription>
+                                  {opt.description}
+                                </FieldDescription>
+                              </FieldContent>
+                              <RadioGroupItem
+                                value={opt.value}
+                                id={opt.value}
+                                disabled={isDisabled}
+                              />
+                            </Field>
+                          </FieldLabel>
+                        </div>
+                      )
+                    })}
                   </RadioGroup>
                 </div>
 

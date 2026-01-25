@@ -265,58 +265,61 @@ export function UploadPage({
             </div>
           )}
 
-          {user && onViewDocument && recentDocuments && recentDocuments.length > 0 && (
-            <div className="mt-4">
-              <div className="text-sm text-muted-foreground mb-3">
-                Recently Viewed
-              </div>
-              <div className="flex flex-col gap-2">
-                {recentDocuments.map((doc) => (
-                  <div
-                    key={doc._id}
-                    className="flex items-center gap-2 py-2 px-3 rounded-lg border border-border bg-card"
-                  >
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-2"
-                      disabled
-                      title="PDF viewing coming soon"
+          {user &&
+            onViewDocument &&
+            recentDocuments &&
+            recentDocuments.length > 0 && (
+              <div className="mt-4">
+                <div className="text-sm text-muted-foreground mb-3">
+                  Recently Viewed
+                </div>
+                <div className="flex flex-col gap-2">
+                  {recentDocuments.map((doc) => (
+                    <div
+                      key={doc._id}
+                      className="flex items-center gap-2 py-2 px-3 rounded-lg border border-border bg-card"
                     >
-                      <FileText className="w-4 h-4" strokeWidth={1.5} />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 px-2"
-                      onClick={() => onViewDocument(doc._id)}
-                      title="View HTML"
-                    >
-                      <Code className="w-4 h-4" strokeWidth={1.5} />
-                    </Button>
-                    <span
-                      className="text-sm text-foreground truncate"
-                      style={{ maxWidth: "20ch" }}
-                      title={doc.filename}
-                    >
-                      {doc.filename}
-                    </span>
-                    {onDeleteDocument && (
                       <Button
                         size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 ml-auto text-muted-foreground hover:text-destructive"
-                        onClick={() => onDeleteDocument(doc._id)}
-                        title="Remove"
+                        variant="outline"
+                        className="h-8 px-2"
+                        disabled
+                        title="PDF viewing coming soon"
                       >
-                        <X className="w-4 h-4" strokeWidth={1.5} />
+                        <FileText className="w-4 h-4" strokeWidth={1.5} />
                       </Button>
-                    )}
-                  </div>
-                ))}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 px-2"
+                        onClick={() => onViewDocument(doc._id)}
+                        title="View HTML"
+                      >
+                        <Code className="w-4 h-4" strokeWidth={1.5} />
+                      </Button>
+                      <span
+                        className="text-sm text-foreground truncate"
+                        style={{ maxWidth: "20ch" }}
+                        title={doc.filename}
+                      >
+                        {doc.filename}
+                      </span>
+                      {onDeleteDocument && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 ml-auto text-muted-foreground hover:text-destructive"
+                          onClick={() => onDeleteDocument(doc._id)}
+                          title="Remove"
+                        >
+                          <X className="w-4 h-4" strokeWidth={1.5} />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
         </div>
       </main>
     </div>

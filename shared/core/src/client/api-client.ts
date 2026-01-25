@@ -12,6 +12,7 @@ export interface UploadResponse {
   file_id: string
   filename: string
   size: number
+  content_type: string
 }
 
 export interface ConversionOptions {
