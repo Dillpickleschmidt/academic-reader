@@ -146,6 +146,7 @@ export function injectLinks(
         sourceText,
         href,
         isExternal,
+        targetText ?? undefined,
       )
       if (wrapped) {
         linkCount++
@@ -466,12 +467,18 @@ function wrapWithLink(
   text: string,
   href: string,
   isExternal: boolean,
+  title?: string,
 ): boolean {
   const $el = $(element)
-  const attrs = isExternal ? ' target="_blank" rel="noopener noreferrer"' : ""
+  const externalAttrs = isExternal ? ' target="_blank" rel="noopener noreferrer"' : ""
+  const titleAttr = title ? ` title="${escapeAttr(title)}"` : ""
   return wrapTextInElement($, $el, text, (matchedText) => {
-    return `<a href="${href}"${attrs} class="pdf-link">${matchedText}</a>`
+    return `<a href="${href}"${externalAttrs}${titleAttr} class="pdf-link">${matchedText}</a>`
   })
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
 /**
