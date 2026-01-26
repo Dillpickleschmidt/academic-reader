@@ -7,6 +7,12 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   envDir: "../",
+  define: {
+    // Expose BACKEND_MODE as VITE_BACKEND_MODE for client code
+    "import.meta.env.VITE_BACKEND_MODE": JSON.stringify(
+      process.env.BACKEND_MODE || "datalab",
+    ),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./client"),
