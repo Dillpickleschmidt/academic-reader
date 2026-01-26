@@ -1,24 +1,9 @@
 """vLLM client for LightOnOCR inference."""
-import time
 import httpx
+from .vllm_manager import ensure_vllm_ready
 
 VLLM_BASE_URL = "http://localhost:8000/v1"
-MODEL_NAME = "lightonocr"  # As configured in entrypoint.sh --served-model-name
-
-
-def wait_for_vllm_server(timeout: int = 300) -> None:
-    """Wait for vLLM server to be ready."""
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            resp = httpx.get(f"{VLLM_BASE_URL}/models", timeout=5)
-            if resp.status_code == 200:
-                print("[vllm_client] Server ready")
-                return
-        except httpx.RequestError:
-            pass
-        time.sleep(2)
-    raise RuntimeError("vLLM server did not start in time")
+MODEL_NAME = "lightonocr"
 
 
 def run_inference(image_base64: str) -> str:
@@ -32,6 +17,9 @@ def run_inference(image_base64: str) -> str:
         Markdown text with optional bbox annotations like:
         ![image](image_1.png)123,456,789,012
     """
+    # Ensure vLLM is running (no-op if already running)
+    ensure_vllm_ready()
+
     response = httpx.post(
         f"{VLLM_BASE_URL}/chat/completions",
         json={

@@ -99,10 +99,6 @@ export async function startConversion(
   return res.json()
 }
 
-export async function warmModels(): Promise<void> {
-  fetch("/api/warm-models", { method: "POST" }).catch(() => {})
-}
-
 export async function cancelJob(jobId: string): Promise<{ status: string }> {
   const res = await fetch(`/api/jobs/${jobId}/cancel`, {
     method: "POST",

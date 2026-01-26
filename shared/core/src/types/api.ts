@@ -25,7 +25,6 @@ export interface ConversionProgress {
   stage: string
   current: number
   total: number
-  elapsed: number
 }
 
 // Chunk output from Marker's ChunkRenderer

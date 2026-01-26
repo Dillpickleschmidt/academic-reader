@@ -6,9 +6,10 @@ import { createAuthenticatedConvexClient } from "../services/convex"
 import { requireAuth } from "../middleware/auth"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { createTTSBackend } from "../backends/tts/factory"
-import { listAvailableVoiceSummaries, ensureEngineReady } from "../backends/tts/registry"
+import { listAvailableVoiceSummaries, getEngineForVoice } from "../backends/tts/registry"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
 import { env } from "../env"
+import { activateWorker, WORKERS } from "../workers/registry"
 
 interface TTSChunkRequest {
   documentId: string
@@ -150,8 +151,9 @@ tts.post("/tts/chunk", async (c) => {
 
   const doc = docResult.data
 
-  // Ensure correct engine is loaded (unloads previous engine in local mode if needed)
-  await ensureEngineReady(voiceId)
+  // Activate TTS worker (unloads all others, loads target)
+  const engine = getEngineForVoice(voiceId)
+  await activateWorker(engine)
 
   // Create TTS backend for this voice
   let backend
@@ -350,19 +352,15 @@ tts.post("/tts/unload", async (c) => {
     return c.json({ unloaded: false, reason: "not local mode" })
   }
 
+  const ttsWorkers = Object.entries(WORKERS).filter(([, w]) => w.category === "tts")
   const results: Record<string, boolean> = {}
 
-  // Unload Chatterbox
-  const chatterboxResult = await tryCatch(
-    fetch(`${env.CHATTERBOX_TTS_WORKER_URL}/unload`, { method: "POST" }),
+  await Promise.all(
+    ttsWorkers.map(async ([name, { url }]) => {
+      const result = await tryCatch(fetch(`${url}/unload`, { method: "POST" }))
+      results[name] = result.success && result.data.ok
+    }),
   )
-  results.chatterbox = chatterboxResult.success && chatterboxResult.data.ok
-
-  // Unload Qwen3
-  const qwen3Result = await tryCatch(
-    fetch(`${env.QWEN3_TTS_WORKER_URL}/unload`, { method: "POST" }),
-  )
-  results.qwen3 = qwen3Result.success && qwen3Result.data.ok
 
   return c.json({ unloaded: results })
 })

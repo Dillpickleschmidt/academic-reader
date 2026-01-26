@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
 from .conversion import convert_image
-from .vllm_client import wait_for_vllm_server
 
 
 class JobStatus(str, Enum):
@@ -48,8 +47,8 @@ app = FastAPI(title="LightOnOCR Worker")
 
 @app.on_event("startup")
 async def startup():
-    """Wait for vLLM server on startup."""
-    wait_for_vllm_server()
+    """Startup hook - vLLM is now started lazily on first request."""
+    print("[lightonocr] FastAPI server starting (vLLM will start on-demand)", flush=True)
 
 
 @app.get("/health")
@@ -327,7 +326,21 @@ async def cancel_job(job_id: str):
     return JSONResponse(content={"cancelled": True})
 
 
-@app.get("/warm-models")
-async def warm_models():
-    """Pre-warm the model (vLLM handles this automatically, but this confirms readiness)."""
-    return {"status": "ready", "model": "lightonai/LightOnOCR-2-1B-bbox-soup"}
+@app.post("/load")
+async def load():
+    """Start vLLM server. Blocks until ready (~25 seconds). Idempotent."""
+    from .vllm_manager import is_vllm_running, start_vllm
+
+    if is_vllm_running():
+        return {"status": "already_loaded"}
+    start_vllm()
+    return {"status": "ok"}
+
+
+@app.post("/unload")
+async def unload():
+    """Stop vLLM server to free GPU memory. Idempotent."""
+    from .vllm_manager import stop_vllm
+
+    unloaded = stop_vllm()
+    return {"unloaded": unloaded}

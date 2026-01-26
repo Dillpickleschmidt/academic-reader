@@ -94,14 +94,6 @@ convert.post("/convert/:fileId", async (c) => {
     return c.json({ error: `Unknown backend: ${backendType}` }, { status: 400 })
   }
 
-  // Free TTS VRAM before conversion (local mode only)
-  if (backendType === "local") {
-    await Promise.all([
-      fetch(`${env.CHATTERBOX_TTS_WORKER_URL}/unload`, { method: "POST" }).catch(() => {}),
-      fetch(`${env.QWEN3_TTS_WORKER_URL}/unload`, { method: "POST" }).catch(() => {}),
-    ])
-  }
-
   const jobResult = await tryCatch(backend.submitJob(input))
   if (!jobResult.success) {
     event.error = {
@@ -114,52 +106,13 @@ convert.post("/convert/:fileId", async (c) => {
 
   event.jobId = jobResult.data
 
-  // Track job-file association for results saving and cleanup
-  jobFileMap.set(jobResult.data, docPath, fileId, filename, backendType as BackendType)
+  // Track job-file association for results saving, cleanup, and worker activation
+  const processingMode = (query.mode as ProcessingMode) || "fast"
+  // Only track worker for local mode (used by stream-proxy for model activation)
+  const worker = backendType === "local"
+    ? processingMode === "accurate" ? "lightonocr" : "marker"
+    : undefined
+  jobFileMap.set(jobResult.data, docPath, fileId, filename, backendType as BackendType, worker)
 
   return c.json({ job_id: jobResult.data })
-})
-
-// Warm models (passthrough for local only)
-convert.post("/warm-models", async (c) => {
-  const event = c.get("event")
-  const backendType = env.BACKEND_MODE
-  event.backend = backendType as BackendType
-
-  if (backendType !== "local") {
-    return c.json({
-      status: "skipped",
-      reason: "Not applicable for cloud backends",
-    })
-  }
-
-  const warmResult = await tryCatch(
-    fetch("http://marker:8000/warm-models", {
-      method: "POST",
-      signal: AbortSignal.timeout(30_000),
-    }),
-  )
-  if (!warmResult.success) {
-    const isTimeout =
-      warmResult.error instanceof Error &&
-      (warmResult.error.name === "TimeoutError" ||
-        warmResult.error.name === "AbortError")
-    event.error = {
-      category: isTimeout ? "timeout" : "network",
-      message: getErrorMessage(warmResult.error),
-      code: isTimeout ? "WARM_MODELS_TIMEOUT" : "WARM_MODELS_ERROR",
-    }
-    return c.json({ status: "error" })
-  }
-
-  if (!warmResult.data.ok) {
-    event.error = {
-      category: "backend",
-      message: `Worker returned ${warmResult.data.status}`,
-      code: "WARM_MODELS_FAILED",
-    }
-    return c.json({ status: "error" })
-  }
-
-  return c.json({ status: "ok" })
 })

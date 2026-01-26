@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from "react"
 import {
-  warmModels,
   uploadFile as apiUploadFile,
   startConversion as apiStartConversion,
   cancelJob as apiCancelJob,
@@ -22,7 +21,6 @@ export interface StageInfo {
   stage: string
   current: number
   total: number
-  elapsed: number
   completed: boolean
 }
 
@@ -117,9 +115,6 @@ export function useConversion() {
     setUploadProgress(0)
     setUploadComplete(false)
     setError("")
-
-    // Pre-warm models when upload starts (fire-and-forget)
-    warmModels()
 
     const progressInterval = setInterval(() => {
       setUploadProgress((prev) => Math.min(prev + 10, 90))

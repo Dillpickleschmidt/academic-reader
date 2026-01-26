@@ -51,10 +51,13 @@ export interface JobResultInput {
   images?: Record<string, string>
 }
 
+import type { WorkerName } from "../../workers/registry"
+
 export interface FileInfo {
   filename: string
   fileId: string
   documentPath: string
+  worker?: WorkerName
 }
 
 export interface ProcessedJobResult {

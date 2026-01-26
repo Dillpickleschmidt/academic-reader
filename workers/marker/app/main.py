@@ -7,7 +7,7 @@ from pathlib import Path
 from queue import Empty
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 
@@ -52,11 +52,24 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/warm-models")
-async def warm_models(background_tasks: BackgroundTasks):
-    """Pre-warm models in background. Called when user selects a file."""
-    background_tasks.add_task(get_or_create_models)
-    return {"status": "warming"}
+@app.post("/load")
+async def load():
+    """Load marker models. Idempotent - instant if already loaded."""
+    from .models import is_loaded
+
+    if is_loaded():
+        return {"status": "already_loaded"}
+    get_or_create_models()
+    return {"status": "ok"}
+
+
+@app.post("/unload")
+async def unload():
+    """Unload marker models to free GPU memory. Idempotent."""
+    from .models import unload_models
+
+    unloaded = unload_models()
+    return {"unloaded": unloaded}
 
 
 @app.post("/upload")

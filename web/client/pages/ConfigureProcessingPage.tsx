@@ -53,12 +53,6 @@ const FORMAT_OPTIONS: {
   { value: "json", icon: Braces, label: "JSON" },
 ]
 
-const PROCESSING_STEPS = [
-  { id: "layout", label: "Recognizing layout" },
-  { id: "ocr-error", label: "Running OCR Error Detection" },
-  { id: "bboxes", label: "Detecting bboxes" },
-  { id: "text", label: "Recognizing Text" },
-]
 
 const ACCURATE_MODE_SUPPORTED_TYPES = [
   "application/pdf",
@@ -171,9 +165,10 @@ function ProcessingStepItem({
 }: {
   label: string
   status: "pending" | "active" | "completed"
-  progress: { current: number; total: number; elapsed: number } | null
+  progress: { current: number; total: number } | null
 }) {
-  const isExpanded = status === "active" && progress
+  const isIndeterminate = progress && progress.total === 0
+  const isExpanded = status === "active" && progress && !isIndeterminate
   const percentage = progress
     ? progress.total > 0
       ? Math.round((progress.current / progress.total) * 100)
@@ -183,58 +178,52 @@ function ProcessingStepItem({
   return (
     <div className="py-2">
       {/* Header row */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          {status === "completed" ? (
-            <Check className="w-4 h-4 text-green-600 dark:text-green-500" />
-          ) : status === "active" ? (
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-          ) : (
-            <Circle className="w-4 h-4 text-muted-foreground/40" />
-          )}
-          <span
-            className={cn(
-              "text-sm transition-colors",
-              status === "pending"
-                ? "text-muted-foreground/60"
-                : "text-foreground",
-            )}
-          >
-            {label}
-          </span>
-        </div>
-        {status === "completed" && progress && (
-          <span className="text-sm tabular-nums text-muted-foreground">
-            {progress.elapsed.toFixed(1)}s
-          </span>
+      <div className="flex items-center gap-2.5">
+        {status === "completed" ? (
+          <Check className="w-4 h-4 text-green-600 dark:text-green-500" />
+        ) : status === "active" ? (
+          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+        ) : (
+          <Circle className="w-4 h-4 text-muted-foreground/40" />
         )}
+        <span
+          className={cn(
+            "text-sm transition-colors",
+            status === "pending"
+              ? "text-muted-foreground/60"
+              : "text-foreground",
+          )}
+        >
+          {label}
+        </span>
       </div>
 
-      {/* Expandable progress section */}
+      {/* Indeterminate progress bar (for model loading) */}
+      {status === "active" && isIndeterminate && (
+        <div className="ml-6.5 mt-2">
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div className="h-full w-1/3 bg-primary rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]" />
+          </div>
+        </div>
+      )}
+
+      {/* Determinate progress bar */}
       <div
         className={cn(
           "overflow-hidden transition-all duration-300 ease-out ml-6.5",
-          isExpanded ? "max-h-20 opacity-100 mt-2" : "max-h-0 opacity-0",
+          isExpanded ? "max-h-12 opacity-100 mt-2" : "max-h-0 opacity-0",
         )}
       >
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${percentage}%` }}
-              />
-            </div>
-            <span className="text-xs tabular-nums text-muted-foreground w-10">
-              {progress?.elapsed.toFixed(1)}s
-            </span>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${percentage}%` }}
+            />
           </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>
-              {progress?.current} / {progress?.total}
-            </span>
-            <span className="mr-13">{percentage}%</span>
-          </div>
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {progress?.current}/{progress?.total}
+          </span>
         </div>
       </div>
     </div>
@@ -242,58 +231,40 @@ function ProcessingStepItem({
 }
 
 function ProcessingView({ stages }: { stages: StageInfo[] }) {
-  // Map stage names to our known steps
-  const getStepStatus = (
-    stepLabel: string,
-  ): {
-    status: "pending" | "active" | "completed"
-    progress: { current: number; total: number; elapsed: number } | null
-  } => {
-    const stage = stages.find((s) => s.stage === stepLabel)
-    if (!stage) {
-      // Check if any later step is active/completed (meaning this one is done)
-      const stepIndex = PROCESSING_STEPS.findIndex((s) => s.label === stepLabel)
-      const laterStageActive = stages.some((s) => {
-        const sIndex = PROCESSING_STEPS.findIndex((ps) => ps.label === s.stage)
-        return sIndex > stepIndex
-      })
-      if (laterStageActive) {
-        return { status: "completed", progress: null }
-      }
-      return { status: "pending", progress: null }
-    }
-
-    if (stage.completed) {
-      return {
-        status: "completed",
-        progress: {
-          current: stage.total,
-          total: stage.total,
-          elapsed: stage.elapsed,
-        },
-      }
-    }
-
-    return {
-      status: "active",
-      progress: {
-        current: stage.current,
-        total: stage.total,
-        elapsed: stage.elapsed,
-      },
-    }
+  // Display stages dynamically as they arrive from SSE
+  // Each stage can be pending, active, or completed
+  if (stages.length === 0) {
+    // No stages yet - show initial loading
+    return (
+      <div className="flex flex-col">
+        <ProcessingStepItem
+          label="Starting..."
+          status="active"
+          progress={{ current: 0, total: 0 }}
+        />
+      </div>
+    )
   }
 
   return (
     <div className="flex flex-col">
-      {PROCESSING_STEPS.map((step) => {
-        const { status, progress } = getStepStatus(step.label)
+      {stages.map((stage, index) => {
+        const isLast = index === stages.length - 1
+        const status = stage.completed
+          ? "completed"
+          : isLast
+            ? "active"
+            : "completed"
+
         return (
           <ProcessingStepItem
-            key={step.id}
-            label={step.label}
+            key={stage.stage}
+            label={stage.stage}
             status={status}
-            progress={progress}
+            progress={{
+              current: stage.current,
+              total: stage.total,
+            }}
           />
         )
       })}

@@ -1,4 +1,5 @@
 import type { BackendType } from "@repo/core/types/api"
+import type { WorkerName } from "../workers/registry"
 
 interface JobFileEntry {
   /** Document storage path (e.g., "documents/{userId}/{fileId}" or "temp_documents/{fileId}") */
@@ -7,6 +8,8 @@ interface JobFileEntry {
   fileId: string
   filename: string
   backendType: BackendType
+  /** Worker to use for this job (local mode only) */
+  worker?: WorkerName
   createdAt: number
 }
 
@@ -23,9 +26,17 @@ class JobFileMap {
    * Register a job -> file association.
    * @param documentPath Full document path (e.g., "documents/{userId}/{fileId}" or "temp_documents/{fileId}")
    * @param fileId The fileId for this document
+   * @param worker Optional worker name for local mode model activation
    */
-  set(jobId: string, documentPath: string, fileId: string, filename: string, backendType: BackendType): void {
-    this.map.set(jobId, { documentPath, fileId, filename, backendType, createdAt: Date.now() })
+  set(
+    jobId: string,
+    documentPath: string,
+    fileId: string,
+    filename: string,
+    backendType: BackendType,
+    worker?: WorkerName,
+  ): void {
+    this.map.set(jobId, { documentPath, fileId, filename, backendType, worker, createdAt: Date.now() })
   }
 
   /**

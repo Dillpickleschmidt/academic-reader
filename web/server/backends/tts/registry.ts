@@ -97,32 +97,3 @@ export function listAvailableVoiceSummaries(): Array<{
     displayName: voice.displayName,
   }))
 }
-
-// ═══════════════════════════════════════════════════════════════
-// ENGINE SWITCHING (local mode only)
-// ═══════════════════════════════════════════════════════════════
-let currentEngine: TTSEngine | null = null
-
-/**
- * Ensure the correct engine is ready, unloading the previous one if needed.
- * Only applies to local mode - cloud mode handles this per-request.
- */
-export async function ensureEngineReady(voiceId: string): Promise<void> {
-  if (env.BACKEND_MODE !== "local") return
-
-  const newEngine = getEngineForVoice(voiceId)
-
-  // If switching engines, unload the previous one first
-  if (currentEngine && currentEngine !== newEngine) {
-    const prevConfig = ENGINE_REGISTRY[currentEngine]
-    const prevUrl = prevConfig.getLocalUrl()
-    try {
-      await fetch(`${prevUrl}/unload`, { method: "POST" })
-      console.log(`[tts] Unloaded ${currentEngine} engine`)
-    } catch {
-      // Ignore errors - engine might not have model loaded
-    }
-  }
-
-  currentEngine = newEngine
-}

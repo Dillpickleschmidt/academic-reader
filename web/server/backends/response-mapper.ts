@@ -133,9 +133,7 @@ export function mapLocalResponse(data: LocalWorkerResponse): ConversionJob {
           }
         : undefined,
     error: data.error,
-    progress: data.progress
-      ? { ...data.progress, elapsed: data.progress.elapsed ?? 0 }
-      : undefined,
+    progress: data.progress,
   }
 }
 

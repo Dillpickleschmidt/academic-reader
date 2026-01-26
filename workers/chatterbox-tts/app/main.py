@@ -79,13 +79,15 @@ async def synthesize_endpoint(request: SynthesizeRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/warm")
-async def warm_models():
-    """Pre-load models for faster first synthesis."""
-    from .models import get_or_create_model
+@app.post("/load")
+async def load():
+    """Load TTS model. Idempotent - instant if already loaded."""
+    from .models import get_or_create_model, _model_cache
 
+    if _model_cache is not None:
+        return {"status": "already_loaded"}
     get_or_create_model()
-    return {"status": "ok", "message": "Model loaded"}
+    return {"status": "ok"}
 
 
 @app.post("/unload")
