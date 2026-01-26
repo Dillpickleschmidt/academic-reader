@@ -2,8 +2,6 @@
  * SSE stream transformation utilities.
  */
 
-const MAX_BUFFER_SIZE = 1024 * 1024 // 1MB
-
 /**
  * Format data as an SSE event.
  */
@@ -51,12 +49,6 @@ export function transformSSEStream(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         buffer += new TextDecoder().decode(chunk, { stream: true })
-
-        if (buffer.length > MAX_BUFFER_SIZE) {
-          controller.error(new Error("SSE buffer overflow - malformed stream"))
-          return
-        }
-
         buffer = buffer.replace(/\r\n/g, "\n")
 
         const blocks = buffer.split("\n\n")

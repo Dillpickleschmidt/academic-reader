@@ -121,7 +121,7 @@ const devCommand: Command = {
     }
 
     const convexEnv = getConvexEnv(env.CONVEX_SELF_HOSTED_ADMIN_KEY!)
-    await syncConvexEnv(env, convexEnv)
+    await syncConvexEnv(env, convexEnv, env.SITE_URL)
 
     processes.push(
       await runProcess(
