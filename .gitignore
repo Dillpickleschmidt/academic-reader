@@ -2,7 +2,6 @@
 node_modules/
 venv/
 __pycache__/
-*.lock
 !bun.lock
 
 # Environment
