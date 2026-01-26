@@ -1,13 +1,13 @@
-import { lazy, Suspense, useCallback } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef } from "react"
 import { Loader2 } from "lucide-react"
 import { useQuery } from "convex/react"
 import { api } from "@repo/convex/convex/_generated/api"
-import { useConversion } from "./hooks/use-conversion"
+import { useConversion, type Page } from "./hooks/use-conversion"
 import { useAppConfig } from "./hooks/use-app-config"
 import { useColorAnimation } from "./hooks/use-color-animation"
 import { DocumentProvider } from "./context/DocumentContext"
 import { AudioProvider } from "./context/AudioContext"
-import { UploadPage } from "./pages/UploadPage"
+import { LandingPage } from "./pages/LandingPage"
 import { resultPageImport } from "./utils/preload"
 
 const PageLoader = () => (
@@ -29,10 +29,48 @@ const backendMode = import.meta.env.VITE_BACKEND_MODE
 function App() {
   const conversion = useConversion()
   const { user } = useAppConfig()
+  const prevPageRef = useRef<Page>(conversion.page)
 
   // Initialize color cycling animation
   useColorAnimation()
 
+  // History API for back button support
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      const page = e.state?.page as Page | undefined
+      if (page) {
+        conversion.setPage(page)
+      } else {
+        // No state = landing page
+        conversion.setPage("landing")
+      }
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [conversion])
+
+  // Push history state when page changes (but not on popstate)
+  useEffect(() => {
+    const prevPage = prevPageRef.current
+    prevPageRef.current = conversion.page
+
+    // Don't push if we're at the same page
+    if (prevPage === conversion.page) return
+
+    // Push state when leaving landing for app (enables back button)
+    if (prevPage === "landing" && conversion.page !== "landing") {
+      history.pushState({ page: conversion.page }, "")
+    }
+    // Replace state for internal app navigation (configure/processing/result)
+    else if (prevPage !== "landing" && conversion.page !== "landing") {
+      history.replaceState({ page: conversion.page }, "")
+    }
+    // Going back to landing
+    else if (conversion.page === "landing") {
+      history.replaceState({ page: "landing" }, "")
+    }
+  }, [conversion.page])
 
   const recentDocuments = useQuery(
     api.api.documents.listPersisted,
@@ -54,14 +92,10 @@ function App() {
   }, [])
 
   switch (conversion.page) {
-    case "upload":
+    case "landing":
       return (
-        <UploadPage
-          url={conversion.url}
-          error={conversion.error}
-          onUrlChange={conversion.setUrl}
+        <LandingPage
           onFileSelect={conversion.uploadFile}
-          onFetchUrl={conversion.fetchFromUrl}
           recentDocuments={recentDocuments}
           onViewDocument={handleViewDocument}
           onDeleteDocument={handleDeleteDocument}

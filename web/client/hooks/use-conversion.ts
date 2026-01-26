@@ -2,7 +2,6 @@ import { useState, useRef, useCallback } from "react"
 import {
   warmModels,
   uploadFile as apiUploadFile,
-  fetchFromUrl as apiFetchFromUrl,
   startConversion as apiStartConversion,
   cancelJob as apiCancelJob,
   persistDocument as apiPersistDocument,
@@ -16,7 +15,7 @@ import { downloadFile, downloadContent } from "@repo/core/client/download"
 import { useAppConfig } from "./use-app-config"
 import { preloadResultPage } from "../utils/preload"
 
-export type Page = "upload" | "configure" | "processing" | "result"
+export type Page = "landing" | "configure" | "processing" | "result"
 export type { OutputFormat, ProcessingMode, ChunkBlock }
 
 export interface StageInfo {
@@ -32,7 +31,7 @@ export function useConversion() {
   const { user } = useAppConfig()
 
   // Navigation
-  const [page, setPage] = useState<Page>("upload")
+  const [page, setPage] = useState<Page>("landing")
 
   // File state
   const [fileId, setFileId] = useState("")
@@ -40,7 +39,6 @@ export function useConversion() {
   const [fileMimeType, setFileMimeType] = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadComplete, setUploadComplete] = useState(false)
-  const [url, setUrl] = useState("")
 
   // Config options
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("html")
@@ -92,13 +90,12 @@ export function useConversion() {
       sseCleanupRef.current = null
     }
 
-    setPage("upload")
+    setPage("landing")
     setFileId("")
     setFileName("")
     setFileMimeType("")
     setUploadProgress(0)
     setUploadComplete(false)
-    setUrl("")
     setOutputFormat("html")
     setProcessingMode("fast")
     setUseLlm(false)
@@ -136,39 +133,7 @@ export function useConversion() {
       setUploadComplete(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed")
-      setPage("upload")
-    } finally {
-      clearInterval(progressInterval)
-    }
-  }
-
-  const fetchFromUrl = async () => {
-    if (!url.trim()) return
-
-    setFileName(url.split("/").pop()?.split("?")[0] || "document")
-    setPage("configure")
-    setUploadProgress(0)
-    setUploadComplete(false)
-    setError("")
-
-    // Pre-warm models when fetch starts (fire-and-forget)
-    warmModels()
-
-    const progressInterval = setInterval(() => {
-      setUploadProgress((prev) => Math.min(prev + 5, 90))
-    }, 300)
-
-    try {
-      const data = await apiFetchFromUrl(url)
-
-      setFileId(data.file_id)
-      setFileName(data.filename)
-      setFileMimeType(data.content_type)
-      setUploadProgress(100)
-      setUploadComplete(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch URL")
-      setPage("upload")
+      setPage("landing")
     } finally {
       clearInterval(progressInterval)
     }
@@ -326,7 +291,6 @@ export function useConversion() {
     fileMimeType,
     uploadProgress,
     uploadComplete,
-    url,
     outputFormat,
     processingMode,
     useLlm,
@@ -342,7 +306,7 @@ export function useConversion() {
     markdown,
 
     // Setters
-    setUrl,
+    setPage,
     setOutputFormat,
     setProcessingMode,
     setUseLlm,
@@ -351,7 +315,6 @@ export function useConversion() {
     // Actions
     reset,
     uploadFile,
-    fetchFromUrl,
     startConversion,
     cancelConversion,
     downloadResult: handleDownload,
