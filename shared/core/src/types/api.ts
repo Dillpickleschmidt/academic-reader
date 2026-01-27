@@ -48,7 +48,6 @@ export interface ChunkOutput {
 export interface AllFormats {
   html: string
   markdown: string
-  json: unknown
   chunks?: ChunkOutput
 }
 

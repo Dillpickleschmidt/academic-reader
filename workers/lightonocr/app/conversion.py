@@ -35,7 +35,6 @@ def convert_file(file_path: Path, page_range: str | None = None) -> dict:
             "formats": {
                 "html": html_content,
                 "markdown": markdown_content,
-                "json": None,
                 "chunks": None,  # Not implemented yet
             },
             "images": {"image_N.png": "base64...", ...}
@@ -104,8 +103,7 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
         "formats": {
             "html": html_content,
             "markdown": markdown_content,
-            "json": None,
-            "chunks": None,  # To be implemented later
+            "chunks": None,
         },
         "images": all_images if all_images else None,
     }
@@ -161,7 +159,6 @@ def convert_image(image_path: Path) -> dict:
         "formats": {
             "html": html_content,
             "markdown": cleaned_md,
-            "json": None,
             "chunks": None,
         },
         "images": all_images if all_images else None,

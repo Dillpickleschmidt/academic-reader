@@ -38,12 +38,23 @@ export class S3Storage implements Storage {
 
   /**
    * Get a presigned URL for uploading to a specific key.
+   * In runpod mode, uses tunnel URL so external workers can reach MinIO.
    */
   async getPresignedUploadUrl(key: string): Promise<PresignedUrlResult> {
-    const url = this.getObjectUrl(key)
     const expiresInSeconds = 3600 // 1 hour
 
-    // Add expiration to URL before signing (aws4fetch includes it in signature)
+    // In runpod mode, use tunnel URL for external worker access
+    const tunnelUrl = await this.waitForTunnelUrl()
+    if (tunnelUrl) {
+      const uploadUrl = `${tunnelUrl}/${this.config.bucket}/${key}`
+      return {
+        uploadUrl,
+        expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+      }
+    }
+
+    // Production: use presigned S3 URL
+    const url = this.getObjectUrl(key)
     url.searchParams.set("X-Amz-Expires", String(expiresInSeconds))
 
     const signedRequest = await this.client.sign(

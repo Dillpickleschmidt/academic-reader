@@ -30,6 +30,8 @@ convert.post("/convert/:fileId", async (c) => {
   const docPath = getDocumentPath(fileId, auth?.userId)
   const originalFilePath = `${docPath}/original.pdf`
 
+  const storage = c.get("storage")
+
   event.fileId = fileId
   event.backend = backendType as BackendType
   event.filename = filename
@@ -58,7 +60,6 @@ convert.post("/convert/:fileId", async (c) => {
   }
 
   let input: ConversionInput
-  const storage = c.get("storage")
 
   if (backendType === "datalab") {
     // Datalab is an external API that can't access MinIO, so send bytes directly

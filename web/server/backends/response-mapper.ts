@@ -23,7 +23,6 @@ export interface LocalWorkerResponse {
     formats?: {
       html: string
       markdown: string
-      json: unknown
       chunks?: ChunkOutput
     }
     images?: Record<string, string>
@@ -51,7 +50,6 @@ export interface RunpodResponse {
     formats?: {
       html: string
       markdown: string
-      json: unknown
       chunks?: ChunkOutput
     }
     images?: Record<string, string>
@@ -126,7 +124,6 @@ export function mapLocalResponse(data: LocalWorkerResponse): ConversionJob {
               ? {
                   html: result.formats.html,
                   markdown: result.formats.markdown,
-                  json: result.formats.json,
                   chunks: result.formats.chunks,
                 }
               : undefined,
@@ -169,7 +166,6 @@ export function mapRunpodResponse(data: RunpodResponse): ConversionJob {
               ? {
                   html: output.formats.html,
                   markdown: output.formats.markdown,
-                  json: output.formats.json,
                   chunks: output.formats.chunks,
                 }
               : undefined,
@@ -201,7 +197,6 @@ export function mapDatalabResponse(data: DatalabResponse): ConversionJob {
           formats: {
             html: rawHtml,
             markdown: data.markdown ?? "",
-            json: data.json,
             chunks: data.chunks,
           },
           images: data.images,

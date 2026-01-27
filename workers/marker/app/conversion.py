@@ -43,11 +43,9 @@ def _render_all_formats(document: Any) -> dict:
     """Run all renderers on the document and return all formats."""
     from marker.renderers.html import HTMLRenderer
     from marker.renderers.markdown import MarkdownRenderer
-    from marker.renderers.json import JSONRenderer
 
     html_output = HTMLRenderer({"add_block_ids": True})(document)
     markdown_output = MarkdownRenderer()(document)
-    json_output = JSONRenderer()(document)
 
     # Try to import ChunkRenderer (may not exist in older versions)
     try:
@@ -61,15 +59,9 @@ def _render_all_formats(document: Any) -> dict:
     except ImportError:
         chunks = None
 
-    # Convert JSON output children to plain dicts for serialization
-    json_children = None
-    if hasattr(json_output, 'children') and json_output.children:
-        json_children = [_to_dict(c) for c in json_output.children]
-
     return {
         "html": html_output.html,
         "markdown": markdown_output.markdown,
-        "json": json_children,
         "chunks": chunks,
         "images": html_output.images,
         "metadata": html_output.metadata,
@@ -105,11 +97,8 @@ def _build_and_render_all(
     # Render to all formats (cheap part)
     all_formats = _render_all_formats(document)
 
-    # Log non-HTML formats for future use
     if all_formats["chunks"]:
         print(f"[conversion] Got {len(all_formats['chunks']['blocks'])} chunks")
-    if all_formats["json"]:
-        print(f"[conversion] Got JSON with {len(all_formats['json'])} pages")
 
     return all_formats
 
@@ -127,11 +116,7 @@ def run_conversion_sync(
     html_content, images = _process_html(all_formats["html"], all_formats["images"])
 
     # Return requested format as content
-    if output_format == "html":
-        content = html_content
-    elif output_format == "json":
-        content = all_formats["json"]
-    elif output_format == "markdown":
+    if output_format == "markdown":
         content = all_formats["markdown"]
     else:
         content = html_content
@@ -142,7 +127,6 @@ def run_conversion_sync(
         "formats": {
             "html": html_content,
             "markdown": all_formats["markdown"],
-            "json": all_formats["json"],
             "chunks": all_formats["chunks"],
         },
         "images": images_to_base64(images) if images else None,
