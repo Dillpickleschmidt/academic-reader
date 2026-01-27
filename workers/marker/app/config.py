@@ -13,7 +13,7 @@ _site_url = os.getenv("SITE_URL", "")
 CORS_ORIGINS = [_site_url] if _site_url else ["http://localhost:5173"]
 
 # Marker batch sizes - set MARKER_BATCH_SIZES=h100 for Runpod H100 optimization
-BATCH_SIZE_OVERRIDES = {}
+# Local mode: disable pdftext multiprocessing (daemon processes can't have children)
 if os.getenv("MARKER_BATCH_SIZES") == "h100":
     BATCH_SIZE_OVERRIDES = {
         "layout_batch_size": 12,
@@ -24,6 +24,10 @@ if os.getenv("MARKER_BATCH_SIZES") == "h100":
         "equation_batch_size": 16,
         "pdftext_workers": 16,
         "detector_postprocessing_cpu_workers": 8,
+    }
+else:
+    BATCH_SIZE_OVERRIDES = {
+        "pdftext_workers": 1,
     }
 
 # Supported file types

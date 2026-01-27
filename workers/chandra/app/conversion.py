@@ -95,9 +95,16 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
     image_counter = 0
 
     for idx, result in enumerate(results):
+        # Check for errors
+        if hasattr(result, "error") and result.error:
+            print(f"[chandra] Warning: Page {idx + 1} had an error during processing", flush=True)
+
         # CHANDRA returns HTML with proper table structure (rowspan/colspan)
         page_html = result.html if hasattr(result, "html") else ""
         page_markdown = result.markdown if hasattr(result, "markdown") else ""
+
+        if not page_html.strip():
+            print(f"[chandra] Warning: Page {idx + 1} returned empty HTML", flush=True)
 
         html_parts.append(page_html)
         markdown_parts.append(page_markdown)
