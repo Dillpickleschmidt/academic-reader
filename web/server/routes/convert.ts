@@ -36,7 +36,7 @@ convert.post("/convert/:fileId", async (c) => {
   event.processingMode = (query.mode as ProcessingMode) || "fast"
   event.useLlm = query.use_llm === "true"
 
-  const backendResult = await tryCatch(async () => createBackend())
+  const backendResult = await tryCatch(async () => createBackend(storage))
   if (!backendResult.success) {
     event.error = {
       category: "backend",
@@ -83,7 +83,7 @@ convert.post("/convert/:fileId", async (c) => {
       }
       return c.json({ error: "Failed to get file URL" }, { status: 500 })
     }
-    input = { ...baseInput, fileUrl: fileUrlResult.data, mimeType }
+    input = { ...baseInput, fileUrl: fileUrlResult.data, mimeType, documentPath: docPath }
   } else {
     event.error = {
       category: "validation",

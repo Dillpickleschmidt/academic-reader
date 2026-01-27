@@ -113,10 +113,34 @@ export async function handlePollingJob(
           case "completed": {
             const fileInfo = getJobFileInfo(jobId)
 
+            // Check if result was uploaded to S3
+            let resultData = job.result
+
+            if (job.s3Result && fileInfo?.documentPath) {
+              // Fetch result from S3
+              const resultKey = `${fileInfo.documentPath}/result.json`
+              try {
+                const resultJson = await storage.readFileAsString(resultKey)
+                resultData = JSON.parse(resultJson)
+                // Clean up the temporary result file
+                await storage.deleteFile(resultKey)
+              } catch (err) {
+                sendEvent("error", { message: "Failed to fetch conversion result" })
+                finalStatus = "failed"
+                event.error = {
+                  category: "storage",
+                  message: getErrorMessage(err),
+                  code: "S3_FETCH_ERROR",
+                }
+                completed = true
+                break
+              }
+            }
+
             // Use result content, falling back to htmlContent
             const resultToProcess = {
-              ...job.result,
-              content: job.result?.content || job.htmlContent,
+              ...resultData,
+              content: resultData?.content || job.htmlContent,
             }
 
             // Emit TOC extraction progress
@@ -137,8 +161,8 @@ export async function handlePollingJob(
             }
 
             // Strip markdown from client payload (saved to S3, not needed by client)
-            const resultForClient = { ...job.result }
-            if (resultForClient.formats?.markdown) {
+            const resultForClient = { ...resultData }
+            if (resultForClient?.formats?.markdown) {
               const { markdown: _, ...formatsWithoutMarkdown } = resultForClient.formats
               resultForClient.formats = formatsWithoutMarkdown as typeof resultForClient.formats
             }

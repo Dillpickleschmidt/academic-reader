@@ -72,8 +72,29 @@ export class S3Storage implements Storage {
     return undefined
   }
 
+  /**
+   * Wait for tunnel URL to be available (runpod mode only).
+   * Polls every 500ms for up to 30 seconds.
+   */
+  private async waitForTunnelUrl(): Promise<string | undefined> {
+    if (env.BACKEND_MODE !== "runpod") return undefined
+
+    const maxWaitMs = 30_000
+    const pollIntervalMs = 500
+    const startTime = Date.now()
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const url = this.getTunnelUrl()
+      if (url) return url
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+    }
+
+    return undefined
+  }
+
   async getFileUrl(uploadKey: string, internal?: boolean): Promise<string> {
-    const tunnelUrl = this.getTunnelUrl()
+    // In runpod mode, wait for tunnel URL (cloudflared may still be starting)
+    const tunnelUrl = await this.waitForTunnelUrl()
     if (tunnelUrl) {
       return `${tunnelUrl}/${this.config.bucket}/${uploadKey}`
     }

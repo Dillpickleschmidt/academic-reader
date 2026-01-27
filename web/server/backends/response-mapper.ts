@@ -45,8 +45,9 @@ export interface RunpodResponse {
   id: string
   status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED" | "FAILED"
   output?: {
-    content: string
-    metadata: Record<string, unknown>
+    s3_result?: boolean // When true, result was uploaded to S3
+    content?: string
+    metadata?: Record<string, unknown>
     formats?: {
       html: string
       markdown: string
@@ -139,11 +140,21 @@ export function mapLocalResponse(data: LocalWorkerResponse): ConversionJob {
 
 /**
  * Map a Runpod response to ConversionJob.
+ * When output.s3_result is true, the actual result is in S3 and must be fetched separately.
  */
 export function mapRunpodResponse(data: RunpodResponse): ConversionJob {
   const status = RUNPOD_STATUS_MAP[data.status] ?? "failed"
   const isComplete = status === "completed"
   const output = data.output
+
+  // If worker uploaded to S3, return minimal response with flag
+  if (isComplete && output?.s3_result) {
+    return {
+      jobId: data.id,
+      status,
+      s3Result: true,
+    }
+  }
 
   return {
     jobId: data.id,
@@ -152,8 +163,8 @@ export function mapRunpodResponse(data: RunpodResponse): ConversionJob {
     result:
       isComplete && output
         ? {
-            content: output.content,
-            metadata: output.metadata,
+            content: output.content || "",
+            metadata: output.metadata || {},
             formats: output.formats
               ? {
                   html: output.formats.html,

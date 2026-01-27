@@ -15,6 +15,12 @@ export interface SaveFileOptions {
   cacheControl?: string
 }
 
+/** Result from presigned upload URL generation */
+export interface PresignedUploadResult {
+  uploadUrl: string
+  expiresAt: string
+}
+
 /** Storage interface for all file operations */
 export interface Storage {
   /** Save a file to storage */
@@ -36,6 +42,9 @@ export interface Storage {
    * @param internal - If true, returns internal Docker network URL (for worker access)
    */
   getFileUrl(key: string, internal?: boolean): Promise<string>
+
+  /** Get a presigned URL for uploading a file */
+  getPresignedUploadUrl(key: string): Promise<PresignedUploadResult>
 
   /** Upload images to {docPath}/images/ and return public URLs */
   uploadImages(

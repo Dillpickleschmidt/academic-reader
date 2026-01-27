@@ -18,6 +18,7 @@ export interface ConversionInput {
   processingMode: ProcessingMode
   useLlm: boolean // fast mode only, non-datalab
   pageRange: string // empty string = all pages
+  documentPath?: string // For Runpod S3 result upload
 }
 
 export interface ConversionProgress {
@@ -78,6 +79,7 @@ export interface ConversionJob {
   htmlContent?: string
   error?: string
   progress?: ConversionProgress
+  s3Result?: boolean // When true, result was uploaded to S3 (Runpod only)
 }
 
 export interface UploadResult {

@@ -37,7 +37,7 @@ jobs.get("/:jobId/stream", async (c) => {
   event.jobId = jobId
   event.backend = backendType as BackendType
 
-  const backendResult = await tryCatch(async () => createBackend())
+  const backendResult = await tryCatch(async () => createBackend(storage))
   if (!backendResult.success) {
     event.error = {
       category: "backend",
@@ -78,11 +78,12 @@ jobs.post("/:jobId/cancel", async (c) => {
   const event = c.get("event")
   const jobId = c.req.param("jobId")
   const backendType = env.BACKEND_MODE
+  const storage = c.get("storage")
 
   event.jobId = jobId
   event.backend = backendType as BackendType
 
-  const backendResult = await tryCatch(async () => createBackend())
+  const backendResult = await tryCatch(async () => createBackend(storage))
   if (!backendResult.success) {
     event.error = {
       category: "backend",

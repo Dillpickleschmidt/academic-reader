@@ -1,5 +1,6 @@
 import type { ConversionBackend } from "./interface"
 import type { ConversionInput, ConversionJob } from "../types"
+import type { Storage } from "../storage/types"
 import { parseJobId, prefixJobId } from "./job-id"
 import { workerNotConfiguredError } from "./errors"
 import { mapRunpodResponse, type RunpodResponse } from "./response-mapper"
@@ -11,6 +12,7 @@ interface RunpodConfig {
   lightOnOcrEndpointId?: string
   chandraEndpointId?: string
   apiKey: string
+  storage: Storage
 }
 
 /**
@@ -19,12 +21,14 @@ interface RunpodConfig {
 class RunpodBackend implements ConversionBackend {
   readonly name = "runpod"
   private config: RunpodConfig
+  private storage: Storage
   private markerBaseUrl: string
   private lightOnOcrBaseUrl: string | null
   private chandraBaseUrl: string | null
 
   constructor(config: RunpodConfig) {
     this.config = config
+    this.storage = config.storage
     this.markerBaseUrl = `https://api.runpod.ai/v2/${config.markerEndpointId}`
     this.lightOnOcrBaseUrl = config.lightOnOcrEndpointId
       ? `https://api.runpod.ai/v2/${config.lightOnOcrEndpointId}`
@@ -46,6 +50,13 @@ class RunpodBackend implements ConversionBackend {
       throw workerNotConfiguredError("runpod", "LightOnOCR")
     }
 
+    // Generate presigned URL for result upload (required for workers)
+    if (!input.documentPath) {
+      throw new Error("[runpod] documentPath is required for result upload")
+    }
+    const resultKey = `${input.documentPath}/result.json`
+    const { uploadUrl: resultUploadUrl } = await this.storage.getPresignedUploadUrl(resultKey)
+
     // Build payload based on endpoint
     let inputPayload: Record<string, unknown>
     let baseUrl: string
@@ -56,6 +67,7 @@ class RunpodBackend implements ConversionBackend {
         file_url: input.fileUrl,
         mime_type: input.mimeType,
         page_range: input.pageRange || undefined,
+        result_upload_url: resultUploadUrl,
       }
       baseUrl = this.chandraBaseUrl!
       workerType = "chandra"
@@ -64,6 +76,7 @@ class RunpodBackend implements ConversionBackend {
         file_url: input.fileUrl,
         mime_type: input.mimeType,
         page_range: input.pageRange || undefined,
+        result_upload_url: resultUploadUrl,
       }
       baseUrl = this.lightOnOcrBaseUrl!
       workerType = "lightonocr"
@@ -72,6 +85,7 @@ class RunpodBackend implements ConversionBackend {
         file_url: input.fileUrl,
         use_llm: input.useLlm,
         page_range: input.pageRange,
+        result_upload_url: resultUploadUrl,
       }
       baseUrl = this.markerBaseUrl
       workerType = "marker"
@@ -177,22 +191,24 @@ class RunpodBackend implements ConversionBackend {
 /**
  * Create Runpod backend from environment.
  */
-export function createRunpodBackend(env: {
+export function createRunpodBackend(config: {
   RUNPOD_MARKER_ENDPOINT_ID?: string
   RUNPOD_LIGHTONOCR_ENDPOINT_ID?: string
   RUNPOD_CHANDRA_ENDPOINT_ID?: string
   RUNPOD_API_KEY?: string
+  storage: Storage
 }): RunpodBackend {
-  if (!env.RUNPOD_MARKER_ENDPOINT_ID || !env.RUNPOD_API_KEY) {
+  if (!config.RUNPOD_MARKER_ENDPOINT_ID || !config.RUNPOD_API_KEY) {
     throw new Error(
       "Runpod backend requires RUNPOD_MARKER_ENDPOINT_ID and RUNPOD_API_KEY",
     )
   }
 
   return new RunpodBackend({
-    markerEndpointId: env.RUNPOD_MARKER_ENDPOINT_ID,
-    lightOnOcrEndpointId: env.RUNPOD_LIGHTONOCR_ENDPOINT_ID,
-    chandraEndpointId: env.RUNPOD_CHANDRA_ENDPOINT_ID,
-    apiKey: env.RUNPOD_API_KEY,
+    markerEndpointId: config.RUNPOD_MARKER_ENDPOINT_ID,
+    lightOnOcrEndpointId: config.RUNPOD_LIGHTONOCR_ENDPOINT_ID,
+    chandraEndpointId: config.RUNPOD_CHANDRA_ENDPOINT_ID,
+    apiKey: config.RUNPOD_API_KEY,
+    storage: config.storage,
   })
 }

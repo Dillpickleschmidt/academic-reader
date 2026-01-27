@@ -283,6 +283,12 @@ export async function processCompletedJob(
         code: "S3_SAVE_FAILED",
       }
     }
+  } else if (fileInfo?.documentPath) {
+    event.error = {
+      category: "backend",
+      message: "No formats data in result - content not saved",
+      code: "MISSING_FORMATS",
+    }
   }
 
   // Cache for persistence
