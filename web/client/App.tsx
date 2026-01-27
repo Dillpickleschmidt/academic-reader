@@ -109,6 +109,7 @@ function App() {
           <ConfigureProcessingPage
             fileName={conversion.fileName}
             fileMimeType={conversion.fileMimeType}
+            pageCount={conversion.pageCount}
             uploadProgress={conversion.uploadProgress}
             uploadComplete={conversion.uploadComplete}
             backendMode={backendMode}

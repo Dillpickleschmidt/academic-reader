@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import * as mupdf from "mupdf"
 import type { BackendType } from "../types"
 import type { Storage } from "../storage/types"
 import { getDocumentPath } from "../storage/types"
@@ -60,12 +61,25 @@ upload.post("/upload", async (c) => {
     return c.json({ error: "Upload failed" }, { status: 500 })
   }
 
+  // Extract page count for PDFs
+  let pageCount: number | undefined
+  if (file.type === "application/pdf") {
+    try {
+      const doc = mupdf.Document.openDocument(Buffer.from(arrayBufferResult.data), "application/pdf")
+      pageCount = doc.countPages()
+      doc.destroy()
+    } catch {
+      // Ignore errors - page count is optional
+    }
+  }
+
   event.fileId = fileId
   return c.json({
     file_id: fileId,
     filename,
     size: arrayBufferResult.data.byteLength,
     content_type: file.type,
+    page_count: pageCount,
   })
 })
 
@@ -177,12 +191,25 @@ upload.post("/fetch-url", async (c) => {
     return c.json({ error: "Failed to store file" }, { status: 500 })
   }
 
+  // Extract page count for PDFs
+  let pageCount: number | undefined
+  if (event.contentType === "application/pdf") {
+    try {
+      const doc = mupdf.Document.openDocument(Buffer.from(arrayBufferResult.data), "application/pdf")
+      pageCount = doc.countPages()
+      doc.destroy()
+    } catch {
+      // Ignore errors - page count is optional
+    }
+  }
+
   event.fileId = fileId
   return c.json({
     file_id: fileId,
     filename,
     size: arrayBufferResult.data.byteLength,
     content_type: event.contentType,
+    page_count: pageCount,
   })
 })
 

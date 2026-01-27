@@ -34,12 +34,13 @@ export function useConversion() {
   const [fileId, setFileId] = useState("")
   const [fileName, setFileName] = useState("")
   const [fileMimeType, setFileMimeType] = useState("")
+  const [pageCount, setPageCount] = useState<number | undefined>()
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadComplete, setUploadComplete] = useState(false)
 
   // Config options
   const [processingMode, setProcessingMode] = useState<ProcessingMode>("fast")
-  const [useLlm, setUseLlm] = useState(false)
+  const [useLlm, setUseLlm] = useState(true)
   const [pageRange, setPageRange] = useState("")
 
   // Processing state
@@ -89,6 +90,7 @@ export function useConversion() {
     setFileId("")
     setFileName("")
     setFileMimeType("")
+    setPageCount(undefined)
     setUploadProgress(0)
     setUploadComplete(false)
     setProcessingMode("fast")
@@ -119,6 +121,7 @@ export function useConversion() {
       const data = await apiUploadFile(file)
 
       setFileId(data.file_id)
+      setPageCount(data.page_count)
       setUploadProgress(100)
       setUploadComplete(true)
     } catch (err) {
@@ -273,6 +276,7 @@ export function useConversion() {
     fileId,
     fileName,
     fileMimeType,
+    pageCount,
     uploadProgress,
     uploadComplete,
     processingMode,

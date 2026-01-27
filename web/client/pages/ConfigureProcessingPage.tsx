@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   FileText,
   Check,
@@ -7,6 +8,7 @@ import {
   Sparkles,
   Circle,
   X,
+  ChevronDown,
 } from "lucide-react"
 import { cn } from "@repo/core/lib/utils"
 import { Button } from "@repo/core/ui/primitives/button"
@@ -51,19 +53,20 @@ const MODE_OPTIONS: {
     value: "balanced",
     label: "Balanced",
     description:
-      "Slightly slower and more agressive at converting diagrms to plain text instead of images. YMMV",
+      "Slightly slower and more agressive at converting diagrms to plain text instead of images. Your mileage may vary.",
   },
   {
     value: "aggressive",
     label: "Aggressive",
     description:
-      "Even slower and more agressive at converting diagrams to plain text instead of images. YMMV",
+      "Even slower and more agressive at converting diagrams to plain text instead of images. Your mileage may vary.",
   },
 ]
 
 interface Props {
   fileName: string
   fileMimeType: string
+  pageCount?: number
   uploadProgress: number
   uploadComplete: boolean
   backendMode: BackendType
@@ -243,9 +246,135 @@ function ProcessingView({ stages }: { stages: StageInfo[] }) {
   )
 }
 
+function ProcessingModeSelector({
+  processingMode,
+  onProcessingModeChange,
+  fileMimeType,
+  backendMode,
+}: {
+  processingMode: ProcessingMode
+  onProcessingModeChange: (mode: ProcessingMode) => void
+  fileMimeType: string
+  backendMode: BackendType
+}) {
+  const [isExpanded, setIsExpanded] = useState(processingMode !== "fast")
+  const currentMode = MODE_OPTIONS.find((m) => m.value === processingMode)
+
+  // When user selects a non-fast mode, keep expanded
+  // When they select fast, allow collapsing
+  const handleModeChange = (value: ProcessingMode) => {
+    onProcessingModeChange(value)
+    if (value !== "fast") {
+      setIsExpanded(true)
+    }
+  }
+
+  if (!isExpanded) {
+    // Collapsed view - show current mode with expand button
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-foreground">
+            Processing Mode
+          </label>
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+          >
+            More options
+            <ChevronDown className="w-3 h-3" />
+          </button>
+        </div>
+        <div className="p-4 rounded-lg border border-border bg-muted/30">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-primary" />
+            <div>
+              <div className="text-sm font-medium text-foreground">
+                {currentMode?.label}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {currentMode?.description}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Expanded view - show all options
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <label className="text-sm font-medium text-foreground">
+          Processing Mode
+        </label>
+        {processingMode === "fast" && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded(false)}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Collapse
+          </button>
+        )}
+      </div>
+      <RadioGroup
+        value={processingMode}
+        onValueChange={(value) => handleModeChange(value as ProcessingMode)}
+        className="flex flex-col gap-2"
+      >
+        {MODE_OPTIONS.map((opt) => {
+          // Disable "aggressive" for non-PDF/image files or local backend
+          const isDisabled =
+            opt.value === "aggressive" &&
+            (!AGGRESSIVE_MODE_SUPPORTED_TYPES.includes(fileMimeType) ||
+              backendMode === "local")
+
+          return (
+            <div
+              key={opt.value}
+              title={
+                isDisabled
+                  ? backendMode === "local"
+                    ? "Aggressive mode requires cloud GPU (CHANDRA needs >16GB VRAM)"
+                    : "Aggressive mode is only needed for PDFs and images (uses OCR)"
+                  : undefined
+              }
+              className={cn(isDisabled && "opacity-50")}
+            >
+              <FieldLabel htmlFor={opt.value}>
+                <Field
+                  orientation="horizontal"
+                  className={cn(
+                    "p-4",
+                    isDisabled ? "cursor-not-allowed" : "cursor-pointer",
+                  )}
+                >
+                  <FieldContent>
+                    <FieldTitle>{opt.label}</FieldTitle>
+                    <FieldDescription>{opt.description}</FieldDescription>
+                  </FieldContent>
+                  <RadioGroupItem
+                    value={opt.value}
+                    id={opt.value}
+                    disabled={isDisabled}
+                  />
+                </Field>
+              </FieldLabel>
+            </div>
+          )
+        })}
+      </RadioGroup>
+    </div>
+  )
+}
+
 export function ConfigureProcessingPage({
   fileName,
   fileMimeType,
+  pageCount,
   uploadProgress,
   uploadComplete,
   backendMode,
@@ -272,7 +401,7 @@ export function ConfigureProcessingPage({
       </div>
 
       <main className="flex flex-col items-center justify-center flex-1 pb-16">
-        <div className="w-full max-w-230 grid gap-8 grid-cols-[240px_1fr] max-sm:grid-cols-1">
+        <div className="w-full max-w-210 grid gap-8 grid-cols-[240px_1fr] max-sm:grid-cols-1">
           {/* Steps Panel */}
           <div
             className={cn(
@@ -363,15 +492,22 @@ export function ConfigureProcessingPage({
               <>
                 {/* Page Range */}
                 <div>
-                  <label
-                    htmlFor="page-range"
-                    className="block text-sm font-medium text-foreground mb-2"
-                  >
-                    Page Range{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (optional)
-                    </span>
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label
+                      htmlFor="page-range"
+                      className="text-sm font-medium text-foreground"
+                    >
+                      Page Range{" "}
+                      <span className="font-normal text-muted-foreground">
+                        (optional)
+                      </span>
+                    </label>
+                    {pageCount !== undefined && (
+                      <span className="text-sm text-muted-foreground">
+                        {pageCount} {pageCount === 1 ? "page" : "pages"}
+                      </span>
+                    )}
+                  </div>
                   <Input
                     id="page-range"
                     type="text"
@@ -383,66 +519,12 @@ export function ConfigureProcessingPage({
                 </div>
 
                 {/* Processing Mode */}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-3">
-                    Processing Mode
-                  </label>
-                  <RadioGroup
-                    value={processingMode}
-                    onValueChange={(value) =>
-                      onProcessingModeChange(value as ProcessingMode)
-                    }
-                    className="grid grid-cols-3 gap-3"
-                  >
-                    {MODE_OPTIONS.map((opt) => {
-                      // Disable "aggressive" for non-PDF/image files or local backend
-                      const isDisabled =
-                        opt.value === "aggressive" &&
-                        (!AGGRESSIVE_MODE_SUPPORTED_TYPES.includes(
-                          fileMimeType,
-                        ) ||
-                          backendMode === "local")
-
-                      return (
-                        <div
-                          key={opt.value}
-                          title={
-                            isDisabled
-                              ? backendMode === "local"
-                                ? "Aggressive mode requires cloud GPU (CHANDRA needs >16GB VRAM)"
-                                : "Aggressive mode is only needed for PDFs and images (uses OCR)"
-                              : undefined
-                          }
-                          className={cn(isDisabled && "opacity-50")}
-                        >
-                          <FieldLabel htmlFor={opt.value}>
-                            <Field
-                              orientation="horizontal"
-                              className={cn(
-                                "p-4",
-                                isDisabled
-                                  ? "cursor-not-allowed"
-                                  : "cursor-pointer",
-                              )}
-                            >
-                              <FieldContent>
-                                <FieldTitle>{opt.label}</FieldTitle>
-                                <FieldDescription>
-                                  {opt.description}
-                                </FieldDescription>
-                              </FieldContent>
-                              <RadioGroupItem
-                                value={opt.value}
-                                id={opt.value}
-                                disabled={isDisabled}
-                              />
-                            </Field>
-                          </FieldLabel>
-                        </div>
-                      )
-                    })}
-                  </RadioGroup>
-                </div>
+                <ProcessingModeSelector
+                  processingMode={processingMode}
+                  onProcessingModeChange={onProcessingModeChange}
+                  fileMimeType={fileMimeType}
+                  backendMode={backendMode}
+                />
 
                 {/* Enhanced Detection - only for fast mode on non-datalab backends */}
                 {processingMode === "fast" && backendMode !== "datalab" && (

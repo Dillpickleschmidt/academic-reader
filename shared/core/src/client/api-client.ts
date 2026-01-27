@@ -12,6 +12,7 @@ export interface UploadResponse {
   filename: string
   size: number
   content_type: string
+  page_count?: number
 }
 
 export interface ConversionOptions {
