@@ -10,7 +10,9 @@ vllm serve datalab-to/chandra \
     --limit-mm-per-prompt '{"image": 1}' \
     --gpu-memory-utilization 0.9 \
     --served-model-name chandra \
-    --mm-processor-cache-gb 0 --port 8000 &
+    --mm-processor-cache-gb 0 \
+    --max-num-seqs 16 \
+    --port 8000 &
 
 echo "[chandra] Waiting for vLLM to be ready..."
 until curl -sf http://localhost:8000/v1/models > /dev/null 2>&1; do sleep 2; done

@@ -9,6 +9,11 @@ from .models import get_or_create_manager
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tiff", ".tif", ".bmp"}
 
+# Parallel processing settings (tuned for H100 80GB)
+# SDK uses ThreadPoolExecutor internally with max_workers
+MAX_WORKERS = 32  # Concurrent inference threads (SDK default: min(64, batch_size))
+BATCH_SIZE = 32   # Pages per batch (CLI default for vllm: 28)
+
 
 def pil_to_base64(img: Image.Image, format: str = "PNG") -> str:
     """Convert PIL Image to base64 string."""
@@ -50,26 +55,37 @@ def convert_file(file_path: Path, page_range: str | None = None) -> dict:
 
 
 def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
-    """Convert a PDF file using CHANDRA."""
+    """Convert a PDF file using CHANDRA with parallel batch processing."""
     from chandra.model import BatchInputItem
     from chandra.input import load_pdf_images, parse_range_str
 
     # Load images from PDF for specified pages
-    # CHANDRA's load_pdf_images handles page_range directly
     pdf_images = load_pdf_images(str(pdf_path), page_range=page_range)
+    total_pages = len(pdf_images)
 
     # Parse page range to get page indices for metadata
-    pages = parse_range_str(page_range, len(pdf_images)) if page_range else list(range(len(pdf_images)))
+    pages = parse_range_str(page_range, total_pages) if page_range else list(range(total_pages))
 
-    # Create batch items for each page
-    batch_items = [
-        BatchInputItem(image=img, prompt_type="ocr_layout")
-        for img in pdf_images
-    ]
-
-    # Run inference
+    # Get inference manager
     manager = get_or_create_manager()
-    results = manager.generate(batch_items)
+
+    # Process in batches (SDK handles parallelization internally via ThreadPoolExecutor)
+    results = []
+    for batch_start in range(0, total_pages, BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, total_pages)
+        batch_images = pdf_images[batch_start:batch_end]
+
+        # Create batch items
+        batch_items = [
+            BatchInputItem(image=img, prompt_type="ocr_layout")
+            for img in batch_images
+        ]
+
+        print(f"[chandra] Processing pages {batch_start + 1}-{batch_end} of {total_pages} (max_workers={MAX_WORKERS})", flush=True)
+
+        # SDK's generate() uses ThreadPoolExecutor internally with max_workers
+        batch_results = manager.generate(batch_items, max_workers=MAX_WORKERS)
+        results.extend(batch_results)
 
     # Combine results from all pages
     html_parts: list[str] = []
@@ -112,7 +128,7 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
 
     return {
         "content": html_content,
-        "metadata": {"page_count": len(pdf_images), "processor": "chandra"},
+        "metadata": {"page_count": total_pages, "processor": "chandra"},
         "formats": {
             "html": html_content,
             "markdown": markdown_content,
