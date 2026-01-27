@@ -5,12 +5,14 @@ import { mapLocalResponse, type LocalWorkerResponse } from "./response-mapper"
 
 const TIMEOUT_MS = 30_000
 
-// Docker service URL (hardcoded - local mode always uses docker-compose)
+// Docker service URLs (hardcoded - local mode always uses docker-compose)
 const MARKER_URL = "http://marker:8000"
+const LIGHTONOCR_URL = "http://lightonocr:8001"
 
 /**
- * Local backend - passes through to Marker worker running in Docker.
- * Only supports "fast" mode. Accurate mode requires runpod backend (CHANDRA needs >16GB VRAM).
+ * Local backend - passes through to Marker or LightOnOCR workers running in Docker.
+ * Supports "fast" (Marker) and "balanced" (LightOnOCR) modes.
+ * Accurate mode requires runpod backend (CHANDRA needs >16GB VRAM).
  */
 export class LocalBackend implements ConversionBackend {
   readonly name = "local"
@@ -19,8 +21,9 @@ export class LocalBackend implements ConversionBackend {
    * Get base URL and raw job ID from a prefixed job ID.
    */
   private getWorkerUrl(jobId: string): { baseUrl: string; rawJobId: string } {
-    const { rawId } = parseJobId(jobId)
-    return { baseUrl: MARKER_URL, rawJobId: rawId }
+    const { worker, rawId } = parseJobId(jobId)
+    const baseUrl = worker === "lightonocr" ? LIGHTONOCR_URL : MARKER_URL
+    return { baseUrl, rawJobId: rawId }
   }
 
   async submitJob(input: ConversionInput): Promise<string> {
@@ -29,7 +32,15 @@ export class LocalBackend implements ConversionBackend {
       throw new Error("[local] Accurate mode requires runpod backend (CHANDRA needs >16GB VRAM)")
     }
 
-    // Marker: existing API with file_id path param
+    // Route to appropriate worker based on processing mode
+    if (input.processingMode === "balanced") {
+      return this.submitToLightOnOCR(input)
+    }
+
+    return this.submitToMarker(input)
+  }
+
+  private async submitToMarker(input: ConversionInput): Promise<string> {
     const params = new URLSearchParams({
       use_llm: String(input.useLlm),
     })
@@ -54,6 +65,35 @@ export class LocalBackend implements ConversionBackend {
 
     const data = (await response.json()) as { job_id: string }
     return prefixJobId(data.job_id, "marker")
+  }
+
+  private async submitToLightOnOCR(input: ConversionInput): Promise<string> {
+    const params = new URLSearchParams()
+
+    if (input.fileUrl) {
+      params.set("file_url", input.fileUrl)
+    }
+
+    if (input.mimeType) {
+      params.set("mime_type", input.mimeType)
+    }
+
+    if (input.pageRange) {
+      params.set("page_range", input.pageRange)
+    }
+
+    const response = await fetch(
+      `${LIGHTONOCR_URL}/convert?${params}`,
+      { method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS) },
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`[local] LightOnOCR submit failed: ${error}`)
+    }
+
+    const data = (await response.json()) as { job_id: string }
+    return prefixJobId(data.job_id, "lightonocr")
   }
 
   async getJobStatus(jobId: string): Promise<ConversionJob> {

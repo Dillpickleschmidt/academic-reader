@@ -15,14 +15,25 @@ import * as Documents from "../model/documents"
 // ===== Mutations =====
 
 /**
- * Create a document with chunks (no embeddings).
- * Called at persist time for authenticated users.
+ * Create a document without chunks.
+ * Chunks should be added separately using addChunks mutation.
  */
 export const create = mutation({
   args: {
     filename: v.string(),
     storageId: v.string(),
     pageCount: v.optional(v.number()),
+  },
+  handler: (ctx, args) => Documents.createDocument(ctx, args),
+})
+
+/**
+ * Add chunks to an existing document (batched).
+ * Called multiple times for large documents to avoid Convex limits.
+ */
+export const addChunks = mutation({
+  args: {
+    documentId: v.id("documents"),
     chunks: v.array(
       v.object({
         blockId: v.string(),
@@ -33,13 +44,7 @@ export const create = mutation({
       }),
     ),
   },
-  handler: (ctx, args) =>
-    Documents.createDocumentWithChunks(ctx, {
-      filename: args.filename,
-      storageId: args.storageId,
-      pageCount: args.pageCount,
-      chunks: args.chunks,
-    }),
+  handler: (ctx, args) => Documents.addChunksToDocument(ctx, args.documentId, args.chunks),
 })
 
 /**

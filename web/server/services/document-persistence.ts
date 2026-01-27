@@ -39,20 +39,34 @@ export interface PersistDocumentInput {
   chunks: ChunkInput[]
 }
 
+// Batch size for chunk insertions (stay well under Convex's 8192 write limit and 1MB arg limit)
+const CHUNK_BATCH_SIZE = 200
+
 /**
  * Create Convex record with chunks.
  * Files are stored at documents/{userId}/{storageId}/.
+ * Chunks are inserted in batches to avoid Convex transaction limits.
  */
 export async function persistDocument(
   convex: ConvexHttpClient,
   input: PersistDocumentInput,
 ): Promise<string> {
+  // Create document first (without chunks)
   const { documentId } = await convex.mutation(api.api.documents.create, {
     filename: input.filename,
     storageId: input.fileId,
     pageCount: input.pageCount,
-    chunks: input.chunks,
   })
+
+  // Add chunks in batches to avoid Convex limits (1MB arg size, 8192 writes/tx)
+  const chunks = input.chunks
+  for (let i = 0; i < chunks.length; i += CHUNK_BATCH_SIZE) {
+    const batch = chunks.slice(i, i + CHUNK_BATCH_SIZE)
+    await convex.mutation(api.api.documents.addChunks, {
+      documentId: documentId as any, // Type narrowing for Id<"documents">
+      chunks: batch,
+    })
+  }
 
   return documentId
 }

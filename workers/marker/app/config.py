@@ -14,16 +14,15 @@ CORS_ORIGINS = [_site_url] if _site_url else ["http://localhost:5173"]
 
 # Marker batch sizes - set MARKER_BATCH_SIZES=h100 for Runpod H100 optimization
 # Local mode: disable pdftext multiprocessing (daemon processes can't have children)
+# H100 batch sizes match official surya defaults (designed for ~16-20GB VRAM per model)
 if os.getenv("MARKER_BATCH_SIZES") == "h100":
     BATCH_SIZE_OVERRIDES = {
-        "layout_batch_size": 12,
-        "detection_batch_size": 8,
-        "table_rec_batch_size": 12,
-        "ocr_error_batch_size": 12,
-        "recognition_batch_size": 64,
-        "equation_batch_size": 16,
-        "pdftext_workers": 16,
-        "detector_postprocessing_cpu_workers": 8,
+        "layout_batch_size": 32,  # surya default: 32 (220MB/item, ~7GB)
+        "detection_batch_size": 36,  # surya default: 36 (440MB/item, ~16GB)
+        "table_rec_batch_size": 64,  # surya default: 64 (150MB/item, ~10GB)
+        "ocr_error_batch_size": 32,
+        "recognition_batch_size": 512,  # surya default: 512 (40MB/item, ~20GB)
+        "equation_batch_size": 32,
     }
 else:
     BATCH_SIZE_OVERRIDES = {

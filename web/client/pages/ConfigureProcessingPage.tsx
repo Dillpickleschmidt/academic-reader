@@ -395,14 +395,6 @@ export function ConfigureProcessingPage({
                     className="grid grid-cols-3 gap-3"
                   >
                     {MODE_OPTIONS.map((opt) => {
-                      // Hide "balanced" for non-datalab backends
-                      if (
-                        opt.value === "balanced" &&
-                        backendMode !== "datalab"
-                      ) {
-                        return null
-                      }
-
                       // Disable "accurate" for non-PDF/image files or local backend
                       const isDisabled =
                         opt.value === "accurate" &&

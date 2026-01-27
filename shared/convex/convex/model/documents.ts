@@ -28,13 +28,12 @@ export interface CreateDocumentInput {
 // ===== Mutation Helpers =====
 
 /**
- * Create a document with chunks (no embeddings).
- * Called at persist time for authenticated users.
- * Embeddings are added later when AI chat opens.
+ * Create a document without chunks.
+ * Chunks are added separately via addChunksToDocument to handle large documents.
  */
-export async function createDocumentWithChunks(
+export async function createDocument(
   ctx: MutationCtx,
-  input: CreateDocumentInput,
+  input: Omit<CreateDocumentInput, "chunks">,
 ) {
   const user = await requireAuth(ctx)
 
@@ -46,9 +45,30 @@ export async function createDocumentWithChunks(
     createdAt: Date.now(),
   })
 
+  return {
+    documentId,
+    storageId: input.storageId,
+  }
+}
+
+/**
+ * Add chunks to an existing document.
+ * Called in batches for large documents to avoid Convex transaction limits.
+ */
+export async function addChunksToDocument(
+  ctx: MutationCtx,
+  documentId: Id<"documents">,
+  chunks: ChunkInput[],
+) {
+  const user = await requireAuth(ctx)
+  const doc = await ctx.db.get(documentId)
+
+  if (!doc) throw new Error("Document not found")
+  if (doc.userId !== user._id) throw new Error("Unauthorized")
+
   // Store chunks without embeddings
   await Promise.all(
-    input.chunks.map((chunk) =>
+    chunks.map((chunk) =>
       ctx.db.insert("chunks", {
         documentId,
         blockId: chunk.blockId,
@@ -60,11 +80,7 @@ export async function createDocumentWithChunks(
     ),
   )
 
-  return {
-    documentId,
-    storageId: input.storageId,
-    chunkCount: input.chunks.length,
-  }
+  return { added: chunks.length }
 }
 
 /**

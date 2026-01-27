@@ -8,6 +8,7 @@ const TIMEOUT_MS = 30_000
 
 interface RunpodConfig {
   markerEndpointId: string
+  lightOnOcrEndpointId?: string
   chandraEndpointId?: string
   apiKey: string
 }
@@ -19,11 +20,15 @@ class RunpodBackend implements ConversionBackend {
   readonly name = "runpod"
   private config: RunpodConfig
   private markerBaseUrl: string
+  private lightOnOcrBaseUrl: string | null
   private chandraBaseUrl: string | null
 
   constructor(config: RunpodConfig) {
     this.config = config
     this.markerBaseUrl = `https://api.runpod.ai/v2/${config.markerEndpointId}`
+    this.lightOnOcrBaseUrl = config.lightOnOcrEndpointId
+      ? `https://api.runpod.ai/v2/${config.lightOnOcrEndpointId}`
+      : null
     this.chandraBaseUrl = config.chandraEndpointId
       ? `https://api.runpod.ai/v2/${config.chandraEndpointId}`
       : null
@@ -31,27 +36,48 @@ class RunpodBackend implements ConversionBackend {
 
   async submitJob(input: ConversionInput): Promise<string> {
     const useChandra = input.processingMode === "accurate"
+    const useLightOnOcr = input.processingMode === "balanced"
 
-    // Validate CHANDRA endpoint if needed
+    // Validate endpoint availability
     if (useChandra && !this.chandraBaseUrl) {
       throw workerNotConfiguredError("runpod", "CHANDRA")
     }
+    if (useLightOnOcr && !this.lightOnOcrBaseUrl) {
+      throw workerNotConfiguredError("runpod", "LightOnOCR")
+    }
 
     // Build payload based on endpoint
-    const inputPayload: Record<string, unknown> = useChandra
-      ? {
-          file_url: input.fileUrl,
-          mime_type: input.mimeType,
-          page_range: input.pageRange || undefined,
-        }
-      : {
-          file_url: input.fileUrl,
-          use_llm: input.useLlm,
-          page_range: input.pageRange,
-        }
+    let inputPayload: Record<string, unknown>
+    let baseUrl: string
+    let workerType: "marker" | "lightonocr" | "chandra"
+
+    if (useChandra) {
+      inputPayload = {
+        file_url: input.fileUrl,
+        mime_type: input.mimeType,
+        page_range: input.pageRange || undefined,
+      }
+      baseUrl = this.chandraBaseUrl!
+      workerType = "chandra"
+    } else if (useLightOnOcr) {
+      inputPayload = {
+        file_url: input.fileUrl,
+        mime_type: input.mimeType,
+        page_range: input.pageRange || undefined,
+      }
+      baseUrl = this.lightOnOcrBaseUrl!
+      workerType = "lightonocr"
+    } else {
+      inputPayload = {
+        file_url: input.fileUrl,
+        use_llm: input.useLlm,
+        page_range: input.pageRange,
+      }
+      baseUrl = this.markerBaseUrl
+      workerType = "marker"
+    }
 
     const body: Record<string, unknown> = { input: inputPayload }
-    const baseUrl = useChandra ? this.chandraBaseUrl! : this.markerBaseUrl
 
     const response = await fetch(`${baseUrl}/run`, {
       method: "POST",
@@ -76,7 +102,7 @@ class RunpodBackend implements ConversionBackend {
     }
 
     // Prefix job ID to track which endpoint it belongs to
-    return prefixJobId(data.id, useChandra ? "chandra" : "marker")
+    return prefixJobId(data.id, workerType)
   }
 
   async getJobStatus(jobId: string): Promise<ConversionJob> {
@@ -137,6 +163,13 @@ class RunpodBackend implements ConversionBackend {
       return { baseUrl: this.chandraBaseUrl, rawJobId: rawId }
     }
 
+    if (worker === "lightonocr") {
+      if (!this.lightOnOcrBaseUrl) {
+        throw workerNotConfiguredError("runpod", "LightOnOCR")
+      }
+      return { baseUrl: this.lightOnOcrBaseUrl, rawJobId: rawId }
+    }
+
     return { baseUrl: this.markerBaseUrl, rawJobId: rawId }
   }
 }
@@ -146,6 +179,7 @@ class RunpodBackend implements ConversionBackend {
  */
 export function createRunpodBackend(env: {
   RUNPOD_MARKER_ENDPOINT_ID?: string
+  RUNPOD_LIGHTONOCR_ENDPOINT_ID?: string
   RUNPOD_CHANDRA_ENDPOINT_ID?: string
   RUNPOD_API_KEY?: string
 }): RunpodBackend {
@@ -157,6 +191,7 @@ export function createRunpodBackend(env: {
 
   return new RunpodBackend({
     markerEndpointId: env.RUNPOD_MARKER_ENDPOINT_ID,
+    lightOnOcrEndpointId: env.RUNPOD_LIGHTONOCR_ENDPOINT_ID,
     chandraEndpointId: env.RUNPOD_CHANDRA_ENDPOINT_ID,
     apiKey: env.RUNPOD_API_KEY,
   })

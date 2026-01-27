@@ -18,6 +18,23 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # GPU worker for local LightOnOCR processing (balanced mode)
+  # Profile: local
+  lightonocr:
+    build: ./workers/lightonocr
+    profiles: ["local"]
+    environment:
+      - MODE=local
+    volumes:
+      - ./workers/lightonocr/app:/app/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   # GPU worker for local Chatterbox TTS (male_2, female_1)
   # Profile: local
   chatterbox-tts:
@@ -86,6 +103,9 @@ services:
       convex-backend:
         condition: service_healthy
       marker:
+        condition: service_started
+        required: false
+      lightonocr:
         condition: service_started
         required: false
       chatterbox-tts:
