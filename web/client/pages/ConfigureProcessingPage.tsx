@@ -403,12 +403,11 @@ export function ConfigureProcessingPage({
                         return null
                       }
 
-                      // Disable "accurate" for non-PDF/image files, local backend, or runpod backend (prod only)
+                      // Disable "accurate" for non-PDF/image files or local backend
                       const isDisabled =
                         opt.value === "accurate" &&
                         (!ACCURATE_MODE_SUPPORTED_TYPES.includes(fileMimeType) ||
-                          backendMode === "local" ||
-                          (backendMode === "runpod" && import.meta.env.PROD))
+                          backendMode === "local")
 
                       return (
                         <div
@@ -417,9 +416,7 @@ export function ConfigureProcessingPage({
                             isDisabled
                               ? backendMode === "local"
                                 ? "Accurate mode requires cloud GPU (CHANDRA needs >16GB VRAM)"
-                                : backendMode === "runpod" && import.meta.env.PROD
-                                  ? "Accurate mode is temporarily unavailable"
-                                  : "Accurate mode is only needed for PDFs and images (uses OCR)"
+                                : "Accurate mode is only needed for PDFs and images (uses OCR)"
                               : undefined
                           }
                           className={cn(isDisabled && "opacity-50")}
