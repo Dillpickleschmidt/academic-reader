@@ -27,7 +27,7 @@ import { InfoTooltip } from "@repo/core/ui/info-tooltip"
 import type { ProcessingMode, StageInfo } from "../hooks/use-conversion"
 import type { BackendType } from "@repo/core/types/api"
 
-const ACCURATE_MODE_SUPPORTED_TYPES = [
+const AGGRESSIVE_MODE_SUPPORTED_TYPES = [
   "application/pdf",
   "image/png",
   "image/jpeg",
@@ -43,21 +43,21 @@ const MODE_OPTIONS: {
 }[] = [
   {
     value: "fast",
-    label: "Fast",
+    label: "Fast (preferred)",
     description:
-      "Faster results, though complex, scanned documents may have inconsistencies.",
+      "Works well with books and handles multi-span tables well with llm support.",
   },
   {
     value: "balanced",
     label: "Balanced",
     description:
-      "Balanced accuracy and latency, works well with most documents.",
+      "Slightly slower and more agressive at converting diagrms to plain text instead of images. YMMV",
   },
   {
-    value: "accurate",
-    label: "Accurate",
+    value: "aggressive",
+    label: "Aggressive",
     description:
-      "Highest accuracy and latency. Good for complex math and/or scanned documents.",
+      "Even slower and more agressive at converting diagrams to plain text instead of images. YMMV",
   },
 ]
 
@@ -272,7 +272,7 @@ export function ConfigureProcessingPage({
       </div>
 
       <main className="flex flex-col items-center justify-center flex-1 pb-16">
-        <div className="w-full max-w-210 grid gap-8 grid-cols-[240px_1fr] max-sm:grid-cols-1">
+        <div className="w-full max-w-230 grid gap-8 grid-cols-[240px_1fr] max-sm:grid-cols-1">
           {/* Steps Panel */}
           <div
             className={cn(
@@ -395,10 +395,12 @@ export function ConfigureProcessingPage({
                     className="grid grid-cols-3 gap-3"
                   >
                     {MODE_OPTIONS.map((opt) => {
-                      // Disable "accurate" for non-PDF/image files or local backend
+                      // Disable "aggressive" for non-PDF/image files or local backend
                       const isDisabled =
-                        opt.value === "accurate" &&
-                        (!ACCURATE_MODE_SUPPORTED_TYPES.includes(fileMimeType) ||
+                        opt.value === "aggressive" &&
+                        (!AGGRESSIVE_MODE_SUPPORTED_TYPES.includes(
+                          fileMimeType,
+                        ) ||
                           backendMode === "local")
 
                       return (
@@ -407,8 +409,8 @@ export function ConfigureProcessingPage({
                           title={
                             isDisabled
                               ? backendMode === "local"
-                                ? "Accurate mode requires cloud GPU (CHANDRA needs >16GB VRAM)"
-                                : "Accurate mode is only needed for PDFs and images (uses OCR)"
+                                ? "Aggressive mode requires cloud GPU (CHANDRA needs >16GB VRAM)"
+                                : "Aggressive mode is only needed for PDFs and images (uses OCR)"
                               : undefined
                           }
                           className={cn(isDisabled && "opacity-50")}

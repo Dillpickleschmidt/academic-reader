@@ -4,7 +4,7 @@
  * Job IDs are prefixed to identify which worker to query:
  * - "marker:abc123" → Marker worker (fast mode)
  * - "lightonocr:abc123" → LightOnOCR worker (balanced mode)
- * - "chandra:abc123" → CHANDRA worker (accurate mode)
+ * - "chandra:abc123" → CHANDRA worker (aggressive mode)
  * - "abc123" → Legacy format, assumed to be Marker
  */
 
@@ -40,7 +40,7 @@ export function parseJobId(jobId: string): { worker: WorkerType; rawId: string }
 export function getWorkerFromProcessingMode(
   processingMode: string | undefined,
 ): WorkerType {
-  if (processingMode === "accurate") return "chandra"
+  if (processingMode === "aggressive") return "chandra"
   if (processingMode === "balanced") return "lightonocr"
   return "marker"
 }

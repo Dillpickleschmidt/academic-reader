@@ -35,7 +35,7 @@ class RunpodBackend implements ConversionBackend {
   }
 
   async submitJob(input: ConversionInput): Promise<string> {
-    const useChandra = input.processingMode === "accurate"
+    const useChandra = input.processingMode === "aggressive"
     const useLightOnOcr = input.processingMode === "balanced"
 
     // Validate endpoint availability

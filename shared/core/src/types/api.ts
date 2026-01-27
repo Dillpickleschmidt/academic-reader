@@ -1,7 +1,7 @@
 // Shared type definitions between frontend and API
 
 export type BackendType = "local" | "runpod" | "datalab"
-export type ProcessingMode = "fast" | "balanced" | "accurate"
+export type ProcessingMode = "fast" | "balanced" | "aggressive"
 export type JobStatus =
   | "pending"
   | "processing"

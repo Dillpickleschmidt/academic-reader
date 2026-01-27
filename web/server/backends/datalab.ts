@@ -40,7 +40,7 @@ class DatalabBackend implements ConversionBackend {
     formData.append("output_format", "html,markdown,json,chunks")
     formData.append("add_block_ids", "true")
 
-    // Processing mode: fast, balanced, or accurate
+    // Processing mode: fast, balanced, or aggressive
     formData.append("mode", input.processingMode)
 
     if (input.pageRange) {

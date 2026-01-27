@@ -107,8 +107,10 @@ convert.post("/convert/:fileId", async (c) => {
 
   // Track job-file association for results saving, cleanup, and worker activation
   // Only track worker for local mode (used by stream-proxy for model activation)
-  // Local mode only supports marker (accurate mode throws before reaching here)
-  const worker = backendType === "local" ? "marker" : undefined
+  const processingMode = (query.mode as ProcessingMode) || "fast"
+  const worker = backendType === "local"
+    ? (processingMode === "balanced" ? "lightonocr" : "marker")
+    : undefined
   jobFileMap.set(jobResult.data, docPath, fileId, filename, backendType as BackendType, worker)
 
   return c.json({ job_id: jobResult.data })

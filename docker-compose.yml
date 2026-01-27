@@ -27,6 +27,9 @@ services:
       - MODE=local
     volumes:
       - ./workers/lightonocr/app:/app/app
+    depends_on:
+      minio:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
