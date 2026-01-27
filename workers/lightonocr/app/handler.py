@@ -6,11 +6,6 @@ import httpx
 import runpod
 
 from .conversion import convert_file
-from .vllm_client import wait_for_vllm_server
-
-
-# Wait for vLLM server on startup
-wait_for_vllm_server()
 
 
 def handler(job: dict) -> dict:

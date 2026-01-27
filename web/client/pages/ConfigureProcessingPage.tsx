@@ -403,18 +403,18 @@ export function ConfigureProcessingPage({
                         return null
                       }
 
-                      // Disable "accurate" for non-PDF/image files or runpod backend
+                      // Disable "accurate" for non-PDF/image files or runpod backend (prod only)
                       const isDisabled =
                         opt.value === "accurate" &&
                         (!ACCURATE_MODE_SUPPORTED_TYPES.includes(fileMimeType) ||
-                          backendMode === "runpod")
+                          (backendMode === "runpod" && import.meta.env.PROD))
 
                       return (
                         <div
                           key={opt.value}
                           title={
                             isDisabled
-                              ? backendMode === "runpod"
+                              ? backendMode === "runpod" && import.meta.env.PROD
                                 ? "Accurate mode is temporarily unavailable"
                                 : "Accurate mode is only needed for PDFs and images (uses OCR)"
                               : undefined
