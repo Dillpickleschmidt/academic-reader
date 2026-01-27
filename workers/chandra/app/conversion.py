@@ -54,15 +54,21 @@ def convert_file(file_path: Path, page_range: str | None = None) -> dict:
 
 def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
     """Convert a PDF file using CHANDRA with parallel batch processing."""
+    import pypdfium2 as pdfium
     from chandra.model import BatchInputItem
     from chandra.input import load_pdf_images, parse_range_str
 
-    # Load images from PDF for specified pages
-    pdf_images = load_pdf_images(str(pdf_path), page_range=page_range)
-    total_pages = len(pdf_images)
+    # Get total page count first
+    pdf = pdfium.PdfDocument(str(pdf_path))
+    page_count = len(pdf)
+    pdf.close()
 
-    # Parse page range to get page indices for metadata
-    pages = parse_range_str(page_range, total_pages) if page_range else list(range(total_pages))
+    # Parse page range (1-indexed from user) or default to all pages (0-indexed)
+    pages = parse_range_str(page_range) if page_range else list(range(page_count))
+
+    # Load images from PDF for specified pages
+    pdf_images = load_pdf_images(str(pdf_path), page_range=pages)
+    total_pages = len(pdf_images)
 
     # Get inference manager
     manager = get_or_create_manager()
@@ -102,11 +108,11 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
         if result.markdown:
             markdown_parts.append(result.markdown)
 
-        # Extract chunks if available (chunks is a dict with bbox/label/content)
+        # Extract chunks if available (chunks is a list of dicts with bbox/label/content)
         if result.chunks:
             for chunk in result.chunks:
-                chunk_with_page = dict(chunk) if isinstance(chunk, dict) else {"content": str(chunk)}
-                chunk_with_page["page"] = pages[idx] + 1 if idx < len(pages) else idx + 1
+                chunk_with_page = dict(chunk)
+                chunk_with_page["page"] = pages[idx]
                 all_chunks.append(chunk_with_page)
 
         if result.images:
