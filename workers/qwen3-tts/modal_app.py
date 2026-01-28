@@ -143,13 +143,13 @@ class Qwen3TTS:
         with torch.inference_mode():
             emissions, _ = self.align_model(audio_16k.unsqueeze(0).to(self.device))
 
-        # Tokenize text
+        # Tokenize text (MMS labels are lowercase)
         words = text.split()
-        transcript = "".join(words).upper()
+        transcript = "".join(words).lower()
 
-        # Create token indices
-        dictionary = {c: i for i, c in enumerate(self.align_labels)}
-        tokens = [dictionary.get(c, dictionary.get("<unk>", 0)) for c in transcript]
+        # Create token indices, filtering out unknown chars (to avoid blank index 0)
+        dictionary = {c: i for i, c in enumerate(self.align_labels) if i > 0}
+        tokens = [dictionary[c] for c in transcript if c in dictionary]
 
         if not tokens:
             return []
@@ -162,19 +162,18 @@ class Qwen3TTS:
         frame_duration_ms = 1000 * 320 / 16000  # MMS frame duration
 
         timestamps = []
-        char_idx = 0
+        token_idx = 0
         for word in words:
-            word_chars = word.upper()
             start_frame = None
             end_frame = None
 
-            for c in word_chars:
-                if char_idx < len(alignments[0]):
-                    frame = alignments[0][char_idx].item()
+            for c in word.lower():
+                if c in dictionary and token_idx < len(alignments[0]):
+                    frame = alignments[0][token_idx].item()
                     if start_frame is None:
                         start_frame = frame
                     end_frame = frame
-                char_idx += 1
+                    token_idx += 1
 
             if start_frame is not None and end_frame is not None:
                 timestamps.append({
