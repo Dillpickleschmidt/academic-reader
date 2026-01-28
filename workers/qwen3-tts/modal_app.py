@@ -13,6 +13,7 @@ image = (
         "scipy",
         "pydantic",
         "fastapi[standard]",
+        "huggingface_hub[hf_transfer]",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
     .run_commands(
@@ -21,15 +22,13 @@ image = (
         # Pre-download MMS alignment model
         "python -c \"from torchaudio.pipelines import MMS_FA; MMS_FA.get_model()\"",
     )
+    .add_local_dir(VOICES_DIR, remote_path="/voices")
 )
 
 app = modal.App("qwen3-tts", image=image)
 
-# Mount voice files from local directory
-voices_mount = modal.Mount.from_local_dir(VOICES_DIR, remote_path="/voices")
 
-
-@app.cls(gpu="A10G", cpu=2.0, memory=8192, timeout=300, mounts=[voices_mount])
+@app.cls(gpu="A10G", cpu=2.0, memory=8192, timeout=300)
 class Qwen3TTS:
     """Qwen3-TTS worker with persistent model."""
 
