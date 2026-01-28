@@ -9,6 +9,7 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("build-essential", "ffmpeg", "libsndfile1", "sox")
     .pip_install(
+        "flash-attn",
         "qwen-tts",
         "scipy",
         "pydantic",
@@ -18,7 +19,7 @@ image = (
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
     .run_commands(
         # Pre-download Qwen3-TTS model
-        "python -c \"from qwen_tts import Qwen3TTSModel; Qwen3TTSModel.from_pretrained('Qwen/Qwen3-TTS-12Hz-1.7B-Base', device_map='cpu')\"",
+        "python -c \"import torch; from qwen_tts import Qwen3TTSModel; Qwen3TTSModel.from_pretrained('Qwen/Qwen3-TTS-12Hz-1.7B-Base', device_map='cpu', dtype=torch.bfloat16)\"",
         # Pre-download MMS alignment model
         "python -c \"from torchaudio.pipelines import MMS_FA; MMS_FA.get_model()\"",
     )
@@ -43,6 +44,8 @@ class Qwen3TTS:
         self.model = Qwen3TTSModel.from_pretrained(
             "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
             device_map=device,
+            dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
         )
         print(f"[qwen3-tts] Model loaded on {device}", flush=True)
 

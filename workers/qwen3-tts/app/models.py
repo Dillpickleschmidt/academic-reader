@@ -38,6 +38,8 @@ def get_or_create_model() -> "Qwen3TTSModel":
             _model_cache = Qwen3TTSModel.from_pretrained(
                 "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
                 device_map=device,
+                dtype=torch.bfloat16,
+                attn_implementation="flash_attention_2",
             )
             print(f"[models] Model loaded in {time.time() - start:.1f}s", flush=True)
         else:

@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sox \
     && rm -rf /var/lib/apt/lists/*
 
+# Install flash-attn for optimized attention (pre-built wheel for faster install)
+RUN pip install --no-cache-dir flash-attn --no-build-isolation
+
 # Install qwen-tts
 RUN pip install --no-cache-dir qwen-tts
 
@@ -24,7 +27,7 @@ from qwen_tts import Qwen3TTSModel; \
 import torch; \
 device = 'cuda' if torch.cuda.is_available() else 'cpu'; \
 print(f'Loading model on {device}...'); \
-Qwen3TTSModel.from_pretrained('Qwen/Qwen3-TTS-12Hz-1.7B-Base', device_map=device); \
+Qwen3TTSModel.from_pretrained('Qwen/Qwen3-TTS-12Hz-1.7B-Base', device_map=device, dtype=torch.bfloat16, attn_implementation='flash_attention_2'); \
 print('Model cached successfully')"
 
 # Pre-download MMS alignment model for word-level timestamps
