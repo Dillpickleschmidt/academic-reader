@@ -17,82 +17,39 @@ function formatTime(seconds: number): string {
 
 export function TTSPlaybackBar() {
   const isPlaying = useAudioSelector((s) => s.playback.isPlaying)
-  const isSynthesizing = useAudioSelector((s) => s.playback.isSynthesizing)
   const isLoading = useAudioSelector((s) => s.playback.isLoading)
   const currentVoice = useAudioSelector((s) => s.narrator.voice)
-  const segments = useAudioSelector((s) => s.playback.segments)
-  const currentSegmentIndex = useAudioSelector((s) => s.playback.currentSegmentIndex)
+  const audioUrl = useAudioSelector((s) => s.playback.audioUrl)
   const currentTime = useAudioSelector((s) => s.playback.currentTime)
-  const totalDuration = useAudioSelector((s) => s.playback.totalDuration)
+  const durationMs = useAudioSelector((s) => s.playback.durationMs)
 
   const { togglePlayPause, skip, setVoice } = useAudioActions()
   const { voices } = useVoiceSelection(currentVoice, setVoice)
 
-  const hasSegments = segments.length > 0
-  if (!hasSegments) return null
-  const currentSegment = segments[currentSegmentIndex]
-  const hasAudio = currentSegment?.status === "ready"
+  const hasAudio = !!audioUrl
+  if (!hasAudio) return null
 
-  // Calculate progress percentage
-  const progressPercent =
-    totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
+  const totalDuration = durationMs / 1000
+  const progressPercent = totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0
 
   return (
     <div className="shrink-0 bg-(--reader-code-bg) border-t border-(--reader-border)">
       {/* Progress bar */}
-      {hasSegments && (
-        <div className="relative h-1 bg-(--reader-border)">
-          <div
-            className="absolute inset-y-0 left-0 bg-(--reader-accent) transition-[width] duration-100"
-            style={{ width: `${progressPercent}%` }}
-          />
-          {/* Segment markers */}
-          {segments.length > 1 && (
-            <div className="absolute inset-0 flex">
-              {segments.map((_, i) => {
-                if (i === 0) return null
-                // Calculate position of this segment boundary
-                let position = 0
-                for (let j = 0; j < i; j++) {
-                  position += segments[j].durationMs || 0
-                }
-                const percent =
-                  totalDuration > 0
-                    ? (position / 1000 / totalDuration) * 100
-                    : 0
-                return (
-                  <div
-                    key={i}
-                    className="absolute top-0 bottom-0 w-px bg-(--reader-text-muted)/30"
-                    style={{ left: `${percent}%` }}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
+      <div className="relative h-1 bg-(--reader-border)">
+        <div
+          className="absolute inset-y-0 left-0 bg-(--reader-accent) transition-[width] duration-100"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
 
       <div className="relative flex items-center justify-center py-2 md:pr-12">
         {/* Time display - left side */}
-        {hasSegments && (
-          <div className="absolute left-4 flex items-center gap-2 text-xs text-(--reader-text-muted)">
-            <span>{formatTime(currentTime)}</span>
-            <span>/</span>
-            <span>{formatTime(totalDuration)}</span>
-            {segments.length > 1 && (
-              <>
-                <span className="mx-1">•</span>
-                <span>
-                  {currentSegmentIndex + 1}/{segments.length}
-                </span>
-              </>
-            )}
-            {isSynthesizing && (
-              <Loader2 size={12} className="ml-1 animate-spin" />
-            )}
-          </div>
-        )}
+        <div className="absolute left-4 flex items-center gap-2 text-xs text-(--reader-text-muted)">
+          <span>{formatTime(currentTime)}</span>
+          <span>/</span>
+          <span>{formatTime(totalDuration)}</span>
+          {isLoading && <Loader2 size={12} className="ml-1 animate-spin" />}
+        </div>
 
         {/* Centered playback controls */}
         <div className="flex items-center gap-1">

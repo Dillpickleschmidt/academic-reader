@@ -25,9 +25,10 @@ export function getStoragePaths(userId: string, documentId: string) {
 export interface ChunkInput {
   blockId: string
   blockType: string
-  content: string
+  html: string
   page: number
   section?: string
+  bbox: number[]
 }
 
 /** Input for persisting a document */

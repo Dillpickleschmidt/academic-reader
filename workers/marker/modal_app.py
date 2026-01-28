@@ -6,6 +6,7 @@ image = (
     .apt_install("build-essential")
     .pip_install("marker-pdf==1.9.2", "httpx", "pydantic", "fastapi[standard]")
     .run_commands("python -c 'from marker.models import create_model_dict; create_model_dict()'")
+    .add_local_file("shared.py", "/root/shared.py")
 )
 
 app = modal.App("marker", image=image)
@@ -20,8 +21,12 @@ def convert(
 ) -> dict:
     """Download file, convert with Marker, upload result to S3."""
     import json
+    import sys
     import tempfile
     from pathlib import Path
+
+    sys.path.insert(0, "/root")
+    from shared import extract_chunks, encode_images
 
     import httpx
     from marker.config.parser import ConfigParser
@@ -54,12 +59,13 @@ def convert(
 
         html = HTMLRenderer({"add_block_ids": True})(doc)
         md = MarkdownRenderer()(doc)
+        chunks = extract_chunks(doc)
 
         result = {
             "content": html.html,
             "metadata": html.metadata,
-            "formats": {"html": html.html, "markdown": md.markdown},
-            "images": _encode_images(html.images) if html.images else None,
+            "formats": {"html": html.html, "markdown": md.markdown, "chunks": chunks},
+            "images": encode_images(html.images) if html.images else None,
         }
 
         # Upload to S3
@@ -72,19 +78,6 @@ def convert(
         return {"s3_result": True}
     finally:
         path.unlink(missing_ok=True)
-
-
-def _encode_images(images: dict) -> dict[str, str]:
-    """Convert PIL images to base64 strings."""
-    import base64
-    import io
-
-    encoded = {}
-    for name, img in images.items():
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        encoded[name] = base64.b64encode(buf.getvalue()).decode()
-    return encoded
 
 
 # HTTP API for job submission and polling

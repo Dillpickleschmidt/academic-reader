@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { generateText } from "ai"
 import type { Id } from "@repo/convex/convex/_generated/dataModel"
 import { api } from "@repo/convex/convex/_generated/api"
 import type { Storage } from "../storage/types"
@@ -8,26 +9,51 @@ import { tryCatch, getErrorMessage } from "../utils/try-catch"
 import { createTTSBackend } from "../backends/tts/factory"
 import { listAvailableVoiceSummaries, getEngineForVoice } from "../backends/tts/registry"
 import { emitStreamingEvent } from "../middleware/wide-event-middleware"
+import { createChatModel } from "../providers/models"
+import { stripHtmlForEmbedding } from "../services/embeddings"
 import { env } from "../env"
 import { activateWorker, WORKERS } from "../workers/registry"
 
-interface TTSChunkRequest {
+const TTS_SYSTEM_PROMPT = `**Role & Output Rule**
+You are an audio-preparation editor.
+Your goal is to make the following be worded naturally for the read-aloud style of a TTS model, but with <10% being altered. Generally, you should return the text **word-for-word** except for the **four passes** below.
+No summaries, no comments.
+
+**Pass 1 – Remove Inline Citations**
+\`[Author et al. 20XX]\` → \`\`
+
+**Pass 2 – Read Aloud Math**
+Convert LaTeX into plain English spoken equivalents. **Leave out no important variables and leave out no details that would change the meaning of the math**. Additionally, clarify the difference between uppercase and lowercase variables of the same letter if both are present in the same paragraph. To do this, use a "type descriptor" (such as "the set," "the graph," or "the matrix") and the word "capital" immediately before the variable name for uppercase versions. Use a type descriptor for the lowercase version as well.
+Example 1: We provide a set of module prototypes $S=\{G_1, G_2, \\dots, G_{|S|}\}$ -> We provide a set of module prototypes, S, which contains elements G sub-one, G sub-two, and so on, up to the total number of items in the set.
+*note that no descriptors are added because there are no lowercase s or g variables present.
+Example 2: Each edge $e\\in E$ connects two nodes $n_1, n_2 \\in N$ and represents an individual branch segment $e=(n_1, n_2)$ -> Each edge e, which is an element of the edge set capital E, connects two nodes n sub-one and n sub-two, which are elements of the node set capital N, and represents an individual branch segment e equals the pair n sub-one and n sub-two.
+*note that "edge e" and "edge set capital E" are used to clearly contrast the specific items against the collections.
+
+**Pass 3 – Sentence Slicing**
+If a sentence exceeds ~40 words, break it at an existing comma or conjunction; keep original punctuation.
+
+**Pass 4 – Micro-Glue (mandatory)**
+You should perform **glue word changes** wherever the cadence feels stilted **when read aloud**; do **as many or as few** as needed—no quota, no ceiling.
+Never change verbs, adjectives, or technical nouns.
+
+After these four passes, output the text only.
+
+An example sentence:
+Before:
+A branch module is defined as a connected acyclic graph $G=(N,E)$ , where $N$ and $E$ are sets of nodes and edges (referred to as branch segments).
+After:
+A branch module is defined as a connected acyclic graph, G equals the set containing N and E, where N and E are sets of nodes and edges, referred to as branch segments.
+`
+
+interface TTSSynthesizeRequest {
   documentId: string
   blockId: string
-  variation?: string
+  chunkHtml: string
   voiceId?: string
-  prioritySegmentIndex?: number
 }
 
-/** Segment data returned from Convex query */
-interface SegmentData {
-  index: number
+interface CachedAudio {
   text: string
-}
-
-/** Audio record from Convex */
-interface AudioRecord {
-  segmentIndex: number
   storagePath: string
   durationMs: number
   sampleRate: number
@@ -44,15 +70,15 @@ export const tts = new Hono<{ Variables: Variables }>()
 tts.use("/tts/*", requireAuth)
 
 /**
- * Synthesize audio for all segments in a chunk via SSE.
- * Streams results back as each segment completes.
+ * Synthesize audio for a chunk via SSE.
+ * Combines rewrite + synthesis into a single endpoint.
+ * Caches both variation text (reused across voices) and audio (per voice).
  */
-tts.post("/tts/chunk", async (c) => {
+tts.post("/tts/synthesize", async (c) => {
   const event = c.get("event")
   const storage = c.get("storage")
   const userId = c.get("userId")
 
-  // Create authenticated Convex client
   const convex = await createAuthenticatedConvexClient(c.req.raw.headers)
   if (!convex) {
     event.error = {
@@ -63,7 +89,7 @@ tts.post("/tts/chunk", async (c) => {
     return c.json({ error: "Authentication failed" }, 401)
   }
 
-  const bodyResult = await tryCatch(c.req.json<TTSChunkRequest>())
+  const bodyResult = await tryCatch(c.req.json<TTSSynthesizeRequest>())
   if (!bodyResult.success) {
     event.error = {
       category: "validation",
@@ -73,67 +99,17 @@ tts.post("/tts/chunk", async (c) => {
     return c.json({ error: "Invalid request body" }, 400)
   }
 
-  const {
-    documentId,
-    blockId,
-    variation = "default",
-    voiceId = "male_1",
-    prioritySegmentIndex,
-  } = bodyResult.data
+  const { documentId, blockId, chunkHtml, voiceId = "male_1" } = bodyResult.data
 
-  if (!documentId || !blockId) {
+  if (!documentId || !blockId || !chunkHtml) {
     event.error = {
       category: "validation",
-      message: "Missing required fields: documentId, blockId",
+      message: "Missing required fields: documentId, blockId, chunkHtml",
       code: "MISSING_FIELDS",
     }
     return c.json({ error: "Missing required fields" }, 400)
   }
 
-  // Get all segments for this block
-  const segmentsResult = await tryCatch(
-    convex.query(api.api.ttsSegments.getSegments, {
-      documentId: documentId as Id<"documents">,
-      blockId,
-      variation,
-    }),
-  )
-
-  if (!segmentsResult.success) {
-    event.error = {
-      category: "backend",
-      message: getErrorMessage(segmentsResult.error),
-      code: "SEGMENTS_QUERY_ERROR",
-    }
-    return c.json({ error: "Failed to query segments" }, 500)
-  }
-
-  const segments = segmentsResult.data as SegmentData[]
-  if (segments.length === 0) {
-    event.error = {
-      category: "validation",
-      message: "No segments found for block",
-      code: "NO_SEGMENTS",
-    }
-    return c.json({ error: "No segments found. Call /api/tts/rewrite first." }, 404)
-  }
-
-  // Get cached audio for this block/voice
-  const cachedAudioResult = await tryCatch(
-    convex.query(api.api.ttsSegments.getBlockAudio, {
-      documentId: documentId as Id<"documents">,
-      blockId,
-      variation,
-      voiceId,
-    }),
-  )
-
-  const cachedAudio = cachedAudioResult.success
-    ? (cachedAudioResult.data as AudioRecord[])
-    : []
-  const cachedIndices = new Set(cachedAudio.map((a) => a.segmentIndex))
-
-  // Get document for storage path
   const docResult = await tryCatch(
     convex.query(api.api.documents.get, {
       documentId: documentId as Id<"documents">,
@@ -151,51 +127,30 @@ tts.post("/tts/chunk", async (c) => {
 
   const doc = docResult.data
 
-  // Activate TTS worker (unloads all others, loads target)
-  const engine = getEngineForVoice(voiceId)
-  await activateWorker(engine)
+  const cachedAudioResult = await tryCatch(
+    convex.query(api.api.ttsAudio.getBlockAudio, {
+      documentId: documentId as Id<"documents">,
+      blockId,
+      voiceId,
+    }),
+  )
 
-  // Create TTS backend for this voice
-  let backend
-  try {
-    backend = createTTSBackend(voiceId)
-  } catch (error) {
-    event.error = {
-      category: "configuration",
-      message: getErrorMessage(error),
-      code: "TTS_BACKEND_CONFIG_ERROR",
-    }
-    return c.json({ error: "TTS backend configuration error" }, 500)
+  const cachedAudio = cachedAudioResult.success
+    ? (cachedAudioResult.data as CachedAudio | null)
+    : null
+
+  if (cachedAudio) {
+    const audioUrl = await storage.getFileUrl(cachedAudio.storagePath)
+    return c.json({
+      audioUrl,
+      text: cachedAudio.text,
+      durationMs: cachedAudio.durationMs,
+      sampleRate: cachedAudio.sampleRate,
+      wordTimestamps: cachedAudio.wordTimestamps,
+      cached: true,
+    })
   }
 
-  // Segments that need synthesis
-  const segmentsToSynthesize = segments.filter((s) => !cachedIndices.has(s.index))
-
-  // Reorder based on priority segment for local backend (sequential processing)
-  // Priority order: [clicked segment] → [forward segments] → [backward segments]
-  let orderedSegments = segmentsToSynthesize
-
-  if (prioritySegmentIndex !== undefined) {
-    const prioritySegment = segmentsToSynthesize.find(
-      (s) => s.index === prioritySegmentIndex,
-    )
-
-    const forwardSegments = segmentsToSynthesize
-      .filter((s) => s.index > prioritySegmentIndex)
-      .sort((a, b) => a.index - b.index)
-
-    const backwardSegments = segmentsToSynthesize
-      .filter((s) => s.index < prioritySegmentIndex)
-      .sort((a, b) => b.index - a.index)
-
-    orderedSegments = [
-      ...(prioritySegment ? [prioritySegment] : []),
-      ...forwardSegments,
-      ...backwardSegments,
-    ]
-  }
-
-  // Create SSE stream
   const streamStart = performance.now()
   const stream = new ReadableStream({
     async start(controller) {
@@ -205,109 +160,159 @@ tts.post("/tts/chunk", async (c) => {
       }
 
       try {
-        // 1. Emit cached segments immediately
-        for (const cached of cachedAudio) {
-          const audioUrl = await storage.getFileUrl(cached.storagePath)
-          sendEvent({
-            type: "segment",
-            segmentIndex: cached.segmentIndex,
-            audioUrl,
-            durationMs: cached.durationMs,
-            sampleRate: cached.sampleRate,
-            wordTimestamps: cached.wordTimestamps,
-            cached: true,
-          })
-        }
+        let variationText: string | null = null
 
-        // 2. If nothing to synthesize, we're done
-        if (segmentsToSynthesize.length === 0) {
-          sendEvent({ type: "done" })
-          controller.close()
-          emitStreamingEvent(event, {
-            durationMs: Math.round(performance.now() - streamStart),
-            status: 200,
-          })
-          return
-        }
+        const existingTextResult = await tryCatch(
+          convex.query(api.api.ttsAudio.getBlockVariationText, {
+            documentId: documentId as Id<"documents">,
+            blockId,
+          }),
+        )
 
-        // 3. Stream synthesis results
-        const batchInput = orderedSegments.map((s) => ({
-          index: s.index,
-          text: s.text,
-        }))
+        if (existingTextResult.success && existingTextResult.data) {
+          variationText = existingTextResult.data
+        } else {
+          sendEvent({ type: "progress", stage: "rewriting" })
 
-        for await (const result of backend.synthesizeBatch(batchInput, voiceId)) {
-          if (result.error) {
-            sendEvent({
-              type: "error",
-              segmentIndex: result.segmentIndex,
-              error: result.error,
-            })
-            continue
+          const plainText = stripHtmlForEmbedding(chunkHtml)
+
+          if (!plainText.trim()) {
+            sendEvent({ type: "error", error: "No text content to synthesize" })
+            controller.close()
+            return
           }
 
-          // Save audio to S3
-          const safeBlockId = blockId.replace(/\//g, "_")
-          const storagePath = `documents/${userId}/${doc.storageId}/audio/${variation}/${voiceId}/${safeBlockId}-${result.segmentIndex}.wav`
-          const audioBuffer = Buffer.from(result.audio!, "base64")
+          let model
+          try {
+            model = createChatModel()
+          } catch (error) {
+            event.error = {
+              category: "configuration",
+              message: getErrorMessage(error),
+              code: "MODEL_CONFIG_ERROR",
+            }
+            sendEvent({ type: "error", error: "Server configuration error" })
+            controller.close()
+            return
+          }
 
-          const saveResult = await tryCatch(
-            storage.saveFile(storagePath, audioBuffer, {
-              contentType: "audio/wav",
-              cacheControl: "public, max-age=31536000, immutable",
+          const generateResult = await tryCatch(
+            generateText({
+              model,
+              system: TTS_SYSTEM_PROMPT,
+              prompt: plainText,
+              providerOptions: {
+                google: {
+                  thinkingConfig: {
+                    thinkingLevel: "minimal",
+                  },
+                },
+              },
             }),
           )
 
-          if (!saveResult.success) {
-            sendEvent({
-              type: "error",
-              segmentIndex: result.segmentIndex,
-              error: "Failed to save audio",
-            })
-            continue
-          }
-
-          // Create audio record in Convex (fire and forget)
-          if (!result.wordTimestamps) {
-            event.warning = {
-              message: `Missing wordTimestamps for segment ${result.segmentIndex} - skipping cache`,
-              code: "TTS_MISSING_TIMESTAMPS",
+          if (!generateResult.success) {
+            event.error = {
+              category: "backend",
+              message: getErrorMessage(generateResult.error),
+              code: "AI_GENERATE_ERROR",
             }
-          } else {
-            convex
-              .mutation(api.api.ttsSegments.createAudio, {
-                documentId: documentId as Id<"documents">,
-                blockId,
-                variation,
-                segmentIndex: result.segmentIndex,
-                voiceId,
-                storagePath,
-                durationMs: result.durationMs!,
-                sampleRate: result.sampleRate!,
-                wordTimestamps: result.wordTimestamps,
-              })
-              .catch((e) => {
-                event.warning = {
-                  message: getErrorMessage(e),
-                  code: "TTS_AUDIO_CACHE_FAILED",
-                }
-              })
+            sendEvent({ type: "error", error: "Failed to prepare text for speech" })
+            controller.close()
+            return
           }
 
-          // Get presigned URL and emit
-          const audioUrl = await storage.getFileUrl(storagePath)
-          sendEvent({
-            type: "segment",
-            segmentIndex: result.segmentIndex,
-            audioUrl,
-            durationMs: result.durationMs,
-            sampleRate: result.sampleRate,
-            wordTimestamps: result.wordTimestamps,
-            cached: false,
-          })
+          variationText = generateResult.data.text
         }
 
-        sendEvent({ type: "done" })
+        sendEvent({ type: "progress", stage: "synthesizing" })
+
+        const engine = getEngineForVoice(voiceId)
+        await activateWorker(engine)
+
+        let backend
+        try {
+          backend = createTTSBackend(voiceId)
+        } catch (error) {
+          event.error = {
+            category: "configuration",
+            message: getErrorMessage(error),
+            code: "TTS_BACKEND_CONFIG_ERROR",
+          }
+          sendEvent({ type: "error", error: "TTS backend configuration error" })
+          controller.close()
+          return
+        }
+
+        const synthesisResult = await tryCatch(backend.synthesize(variationText!, voiceId))
+
+        if (!synthesisResult.success || synthesisResult.data.error) {
+          const errorMsg = synthesisResult.success
+            ? synthesisResult.data.error
+            : getErrorMessage(synthesisResult.error)
+          event.error = {
+            category: "backend",
+            message: errorMsg!,
+            code: "TTS_SYNTHESIS_ERROR",
+          }
+          sendEvent({ type: "error", error: errorMsg })
+          controller.close()
+          return
+        }
+
+        const result = synthesisResult.data
+
+        const storagePath = `documents/${userId}/${doc.storageId}/audio/${voiceId}/${blockId.replace(/\//g, "_")}.wav`
+        const audioBuffer = Buffer.from(result.audio!, "base64")
+
+        const saveResult = await tryCatch(
+          storage.saveFile(storagePath, audioBuffer, {
+            contentType: "audio/wav",
+            cacheControl: "public, max-age=31536000, immutable",
+          }),
+        )
+
+        if (!saveResult.success) {
+          event.error = {
+            category: "storage",
+            message: getErrorMessage(saveResult.error),
+            code: "STORAGE_SAVE_ERROR",
+          }
+          sendEvent({ type: "error", error: "Failed to save audio" })
+          controller.close()
+          return
+        }
+
+        if (result.wordTimestamps) {
+          convex
+            .mutation(api.api.ttsAudio.createAudio, {
+              documentId: documentId as Id<"documents">,
+              blockId,
+              voiceId,
+              text: variationText!,
+              storagePath,
+              durationMs: result.durationMs!,
+              sampleRate: result.sampleRate!,
+              wordTimestamps: result.wordTimestamps,
+            })
+            .catch((e) => {
+              event.warning = {
+                message: getErrorMessage(e),
+                code: "TTS_AUDIO_CACHE_FAILED",
+              }
+            })
+        }
+
+        const audioUrl = await storage.getFileUrl(storagePath)
+        sendEvent({
+          type: "complete",
+          audioUrl,
+          text: variationText,
+          durationMs: result.durationMs,
+          sampleRate: result.sampleRate,
+          wordTimestamps: result.wordTimestamps,
+          cached: false,
+        })
       } catch (e) {
         const errorMessage = getErrorMessage(e)
         event.error = {
@@ -315,10 +320,7 @@ tts.post("/tts/chunk", async (c) => {
           message: errorMessage,
           code: "TTS_STREAMING_ERROR",
         }
-        sendEvent({
-          type: "fatal",
-          error: errorMessage,
-        })
+        sendEvent({ type: "error", error: errorMessage })
       }
 
       controller.close()
@@ -329,7 +331,7 @@ tts.post("/tts/chunk", async (c) => {
     },
   })
 
-  event.metadata = { blockId, voiceId, segmentCount: segments.length, prioritySegmentIndex }
+  event.metadata = { blockId, voiceId }
 
   return new Response(stream, {
     headers: {
@@ -340,13 +342,11 @@ tts.post("/tts/chunk", async (c) => {
   })
 })
 
-// Endpoint to list available voices (from registry)
 tts.get("/tts/voices", async (c) => {
   const voices = listAvailableVoiceSummaries()
   return c.json({ voices })
 })
 
-// Unload all TTS models to free GPU memory (local mode only)
 tts.post("/tts/unload", async (c) => {
   if (env.BACKEND_MODE !== "local") {
     return c.json({ unloaded: false, reason: "not local mode" })

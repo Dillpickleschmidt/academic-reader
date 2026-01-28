@@ -4,9 +4,9 @@
  */
 import { Hono } from "hono"
 import { z } from "zod"
-import { resultCache } from "../storage/result-cache"
+import { resultCache, type NormalizedChunk } from "../storage/result-cache"
 import { requireAuth } from "../middleware/auth"
-import { persistDocument } from "../services/document-persistence"
+import { persistDocument, type ChunkInput } from "../services/document-persistence"
 import { createAuthenticatedConvexClient } from "../services/convex"
 import { tryCatch, getErrorMessage } from "../utils/try-catch"
 
@@ -72,13 +72,16 @@ persist.post("/documents/persist", requireAuth, async (c) => {
     return c.json({ error: "Authentication failed" }, 401)
   }
 
+  // Transform normalized chunks to ChunkInput for Convex storage
+  const chunksForPersistence = transformChunks(cachedResult.chunks)
+
   // Create Convex record with chunks (files are at documents/{userId}/{fileId}/)
   const persistResult = await tryCatch(
     persistDocument(convex, {
       fileId: cachedResult.fileId,
       filename: cachedResult.filename,
       pageCount: cachedResult.metadata.pages,
-      chunks: cachedResult.chunks,
+      chunks: chunksForPersistence,
     }),
   )
 
@@ -101,3 +104,19 @@ persist.post("/documents/persist", requireAuth, async (c) => {
 
   return c.json({ documentId })
 })
+
+/**
+ * Transform normalized chunks to ChunkInput for Convex storage.
+ */
+function transformChunks(chunks: NormalizedChunk[]): ChunkInput[] {
+  return chunks.map((chunk) => ({
+    blockId: chunk.id,
+    blockType: chunk.blockType,
+    html: chunk.html,
+    page: chunk.page,
+    section: chunk.sectionHierarchy
+      ? Object.values(chunk.sectionHierarchy).filter(Boolean).join(" > ")
+      : undefined,
+    bbox: chunk.bbox,
+  }))
+}

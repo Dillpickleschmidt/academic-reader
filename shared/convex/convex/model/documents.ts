@@ -8,13 +8,13 @@ import type { Id } from "../_generated/dataModel"
 import { internal } from "../_generated/api"
 import { requireAuth } from "./auth"
 
-// Types matching Marker's ChunkBlock (simplified for storage)
 export interface ChunkInput {
   blockId: string
   blockType: string
-  content: string // Already stripped HTML
+  html: string
   page: number
   section?: string
+  bbox: number[] // [x1, y1, x2, y2] bounding box
 }
 
 export interface CreateDocumentInput {
@@ -73,9 +73,10 @@ export async function addChunksToDocument(
         documentId,
         blockId: chunk.blockId,
         blockType: chunk.blockType,
-        content: chunk.content,
+        html: chunk.html,
         page: chunk.page,
         section: chunk.section,
+        bbox: chunk.bbox,
       }),
     ),
   )
@@ -121,7 +122,7 @@ export async function addEmbeddings(
 }
 
 /**
- * Delete a document and all its chunks and TTS data.
+ * Delete a document and all its chunks and cached audio.
  */
 export async function deleteDocument(
   ctx: MutationCtx,
@@ -143,24 +144,15 @@ export async function deleteDocument(
     .withIndex("by_document", (q) => q.eq("documentId", documentId))
     .collect()
 
-  // Delete all TTS segments
-  const ttsSegments = await ctx.db
-    .query("ttsSegments")
-    .withIndex("by_document_block_variation", (q) =>
-      q.eq("documentId", documentId),
-    )
-    .collect()
-
-  // Delete all TTS audio records
-  const ttsAudio = await ctx.db
+  // Delete all cached TTS audio
+  const audioRecords = await ctx.db
     .query("ttsAudio")
-    .withIndex("by_segment_voice", (q) => q.eq("documentId", documentId))
+    .withIndex("by_document_block_voice", (q) => q.eq("documentId", documentId))
     .collect()
 
   await Promise.all([
     ...chunks.map((chunk) => ctx.db.delete(chunk._id)),
-    ...ttsSegments.map((seg) => ctx.db.delete(seg._id)),
-    ...ttsAudio.map((audio) => ctx.db.delete(audio._id)),
+    ...audioRecords.map((audio) => ctx.db.delete(audio._id)),
   ])
 
   // Delete document
@@ -169,8 +161,7 @@ export async function deleteDocument(
   return {
     deleted: true,
     chunkCount: chunks.length,
-    ttsSegmentCount: ttsSegments.length,
-    ttsAudioCount: ttsAudio.length,
+    audioCount: audioRecords.length,
   }
 }
 
@@ -271,7 +262,7 @@ export async function hasEmbeddings(
 // ===== Action Helpers (for vector search) =====
 
 interface ChunkSearchResult {
-  content: string
+  html: string
   blockType: string
   page: number
   section: string | undefined
@@ -327,7 +318,7 @@ export async function searchChunks(
     )
     .slice(0, limit)
     .map((c) => ({
-      content: c.chunk.content,
+      html: c.chunk.html,
       blockType: c.chunk.blockType,
       page: c.chunk.page,
       section: c.chunk.section,

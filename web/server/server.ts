@@ -14,7 +14,6 @@ import { persist } from "./routes/persist"
 import { documentEmbeddings } from "./routes/document-embeddings"
 import { savedDocuments } from "./routes/saved-documents"
 import { chat } from "./routes/chat"
-import { ttsRewrite } from "./routes/tts-rewrite"
 import { tts } from "./routes/tts"
 import type { Storage } from "./storage/types"
 import { createStorage } from "./storage/factory"
@@ -90,7 +89,6 @@ api.route("/", persist)
 api.route("/", documentEmbeddings)
 api.route("/", savedDocuments)
 api.route("/", chat)
-api.route("/", ttsRewrite)
 api.route("/", tts)
 api.get("/health", (c) =>
   c.json({ status: "ok", mode: env.BACKEND_MODE }),

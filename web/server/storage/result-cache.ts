@@ -4,12 +4,19 @@
  * by a separate authenticated request.
  */
 
-import type { ChunkInput } from "../services/document-persistence"
+export interface NormalizedChunk {
+  id: string
+  blockType: string
+  html: string
+  page: number
+  bbox: number[]
+  sectionHierarchy?: Record<string, string>
+}
 
 export interface CachedResult {
   html: string
   markdown: string
-  chunks: ChunkInput[]
+  chunks: NormalizedChunk[]
   metadata: { pages?: number }
   filename: string
   /** The fileId (UUID for unauthenticated, Convex documentId for authenticated) */

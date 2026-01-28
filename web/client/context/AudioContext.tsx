@@ -10,15 +10,12 @@ import {
 import { toast } from "sonner"
 import type {
   AudioState,
-  TTSSegment,
-  SegmentStatus,
   VoiceId,
   MusicTrack,
   AmbientSoundId,
+  WordTimestamp,
 } from "@/audio/types"
 import { AMBIENT_SOUNDS } from "@/audio/constants"
-import { alignWordIndices, buildCombinedMapping } from "@/hooks/use-word-highlighting"
-import { splitWords } from "@/utils/tts-words"
 
 // ============================================================================
 // CrossfadeLooper: Encapsulates seamless audio looping with crossfade
@@ -192,65 +189,6 @@ type AudioStore = {
   subscribe: (listener: () => void) => () => void
 }
 
-type PrioritySelection = {
-  segmentIndex?: number
-  combinedIndex?: number
-  segmentOffsets: number[]
-}
-
-function getPrioritySelection(
-  blockId: string,
-  segments: TTSSegment[],
-  wordIndex: number,
-): PrioritySelection {
-  const empty = { segmentOffsets: [] as number[] }
-  const blockEl = document.querySelector(`[data-block-id="${blockId}"]`)
-  if (!blockEl) return empty
-
-  const originalWords = Array.from(
-    blockEl.querySelectorAll("[data-word-index]"),
-  ).map((s) => s.textContent || "")
-
-  const { mapping, offsets } = buildCombinedMapping(originalWords, segments)
-  const segmentRanges = segments.map((segment, index) => {
-    const offset = offsets[index] ?? 0
-    const count = splitWords(segment.text).length
-    return { offset, count }
-  })
-
-  const findSegmentForCombinedIndex = (combinedIdx: number) => {
-    for (let segIdx = 0; segIdx < segmentRanges.length; segIdx++) {
-      const { offset, count } = segmentRanges[segIdx]
-      const nextOffset = offset + count
-      if (combinedIdx >= offset && combinedIdx < nextOffset) {
-        return segIdx
-      }
-    }
-    return undefined
-  }
-
-  let bestCombinedIndex: number | undefined
-  let bestSegmentIndex: number | undefined
-  let bestOriginalIndex = -1
-
-  for (const [combinedIdx, origIdx] of mapping.entries()) {
-    if (origIdx <= wordIndex && origIdx > bestOriginalIndex) {
-      const segmentIndex = findSegmentForCombinedIndex(combinedIdx)
-      if (segmentIndex !== undefined) {
-        bestOriginalIndex = origIdx
-        bestCombinedIndex = combinedIdx
-        bestSegmentIndex = segmentIndex
-      }
-    }
-  }
-
-  return {
-    segmentIndex: bestSegmentIndex,
-    combinedIndex: bestCombinedIndex,
-    segmentOffsets: offsets,
-  }
-}
-
 function createStore(initial: AudioState): AudioStore {
   let state = initial
   const listeners = new Set<() => void>()
@@ -284,7 +222,7 @@ type AudioActions = {
   pause: () => void
   togglePlayPause: () => void
   skip: (seconds: number) => void
-  goToSegment: (index: number) => void
+  seekToWord: (wordIndex: number) => void
 
   // Music actions
   addTrack: (track: MusicTrack) => void
@@ -325,14 +263,12 @@ function createInitialState(): AudioState {
       isLoading: false,
       currentBlockId: null,
       error: null,
-      segments: [],
-      currentSegmentIndex: 0,
+      audioUrl: null,
+      text: null,
+      durationMs: 0,
+      wordTimestamps: [],
       isPlaying: false,
-      isWaitingForSegment: false,
-      isSynthesizing: false,
-      totalDuration: 0,
       currentTime: 0,
-      segmentCurrentTime: 0,
     },
     music: {
       playlist: [],
@@ -404,31 +340,6 @@ export function AudioProvider({
     return ctx
   }, [])
 
-  // Play a specific segment
-  const playSegment = useCallback(
-    (segmentIndex: number) => {
-      const state = store.getState()
-      const segment = state.playback.segments[segmentIndex]
-      if (!segment) return
-
-      if (segment.status === "ready" && segment.audioUrl && audioRef.current) {
-        store.setState({
-          playback: {
-            ...state.playback,
-            currentSegmentIndex: segmentIndex,
-            isWaitingForSegment: false,
-          },
-        })
-        audioRef.current.src = segment.audioUrl
-        safePlay(audioRef.current)
-        store.setState({
-          playback: { ...store.getState().playback, isPlaying: true },
-        })
-      }
-    },
-    [store, safePlay],
-  )
-
   // === Narrator Actions ===
   const setVoice = useCallback(
     (voiceId: VoiceId) => {
@@ -447,31 +358,18 @@ export function AudioProvider({
         audioRef.current.src = ""
       }
 
-      // Clear all audio and reset to pending
-      const resetSegments = state.playback.segments.map((s) => ({
-        ...s,
-        audioUrl: null,
-        durationMs: null,
-        wordTimestamps: null,
-        status: "pending" as SegmentStatus,
-      }))
-
+      // Clear audio but keep block context for re-synthesis
       store.setState({
         narrator: { ...state.narrator, voice: voiceId },
         playback: {
           ...state.playback,
-          segments: resetSegments,
+          audioUrl: null,
+          durationMs: 0,
+          wordTimestamps: [],
           isPlaying: false,
-          isWaitingForSegment: false,
-          isSynthesizing: false,
-          totalDuration: 0,
           currentTime: 0,
-          segmentCurrentTime: 0,
         },
       })
-
-      // Note: User needs to click again to re-trigger loadBlockTTS with new voice
-      // This is simpler than auto-re-synthesizing and avoids wasted API calls
     },
     [store],
   )
@@ -533,13 +431,12 @@ export function AudioProvider({
         store.setState({
           playback: {
             ...currentState.playback,
-            segments: [],
+            audioUrl: null,
+            text: null,
+            durationMs: 0,
+            wordTimestamps: [],
             isPlaying: false,
-            isWaitingForSegment: false,
-            currentSegmentIndex: 0,
             currentTime: 0,
-            totalDuration: 0,
-            segmentCurrentTime: 0,
           },
         })
       }
@@ -552,96 +449,44 @@ export function AudioProvider({
           currentBlockId: blockId,
         },
       })
-      const toastId = toast.loading("Preparing text for speech...")
+      const toastId = toast.loading("Preparing speech...")
 
       try {
-        // Step 1: Get segments via /tts/rewrite (may be cached)
-        const rewriteResponse = await fetch("/api/tts/rewrite", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "same-origin",
-          body: JSON.stringify({ documentId, blockId, chunkContent }),
-        })
-
-        if (!rewriteResponse.ok) {
-          const data = await rewriteResponse.json().catch(() => ({}))
-          throw new Error(data.error || "Failed to prepare text")
-        }
-
-        const rewriteData = await rewriteResponse.json()
-
-        // Initialize segments with pending status
-        const segments: TTSSegment[] = rewriteData.segments.map(
-          (s: Pick<TTSSegment, "index" | "text">) => ({
-            index: s.index,
-            text: s.text,
-            audioUrl: null,
-            durationMs: null,
-            wordTimestamps: null,
-            status: "pending" as SegmentStatus,
-          }),
-        )
-
-        store.setState({
-          playback: {
-            ...store.getState().playback,
-            segments,
-            isLoading: false,
-            isSynthesizing: true,
-          },
-        })
-        toast.dismiss(toastId)
-
-        if (segments.length === 0) {
-          toast.error("No text to synthesize")
-          store.setState({
-            playback: { ...store.getState().playback, isSynthesizing: false },
-          })
-          return
-        }
-
-        // Step 1.5: Build alignment mapping and find priority segment if wordIndex provided
-        let prioritySegmentIndex: number | undefined
-        let priorityCombinedIdx: number | undefined
-        let prioritySegmentOffsets: number[] = []
-
-        if (wordIndex !== undefined && wordIndex >= 0) {
-          const prioritySelection = getPrioritySelection(blockId, segments, wordIndex)
-          prioritySegmentIndex = prioritySelection.segmentIndex
-          priorityCombinedIdx = prioritySelection.combinedIndex
-          prioritySegmentOffsets = prioritySelection.segmentOffsets
-        }
-
-        toast.loading("Generating speech...", { id: "tts-synth" })
-
-        // Step 2: Open SSE to /tts/chunk for ALL segments
         const abortController = new AbortController()
         sseAbortRef.current = abortController
 
-        const chunkResponse = await fetch("/api/tts/chunk", {
+        const response = await fetch("/api/tts/synthesize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           body: JSON.stringify({
             documentId,
             blockId,
+            chunkHtml: chunkContent,
             voiceId: store.getState().narrator.voice,
-            prioritySegmentIndex,
           }),
           signal: abortController.signal,
         })
 
-        if (!chunkResponse.ok) {
-          const data = await chunkResponse.json().catch(() => ({}))
-          throw new Error(data.error || "Failed to start synthesis")
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(data.error || "Failed to synthesize speech")
         }
 
-        const reader = chunkResponse.body!.getReader()
+        const contentType = response.headers.get("content-type") || ""
+
+        // Cached response - direct JSON
+        if (contentType.includes("application/json")) {
+          const data = await response.json()
+          handleSynthesisComplete(data, wordIndex)
+          toast.success("Speech ready", { id: toastId })
+          return
+        }
+
+        // SSE stream for non-cached synthesis
+        const reader = response.body!.getReader()
         const decoder = new TextDecoder()
         let buffer = ""
-
-        // Track whether we've started playback
-        let playbackStarted = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -655,139 +500,15 @@ export function AudioProvider({
             if (!line.startsWith("data: ")) continue
             const event = JSON.parse(line.slice(6))
 
-            if (event.type === "segment") {
-              const freshState = store.getState()
-              const newSegments = [...freshState.playback.segments]
-              newSegments[event.segmentIndex] = {
-                ...newSegments[event.segmentIndex],
-                audioUrl: event.audioUrl,
-                durationMs: event.durationMs,
-                wordTimestamps: event.wordTimestamps ?? null,
-                status: "ready",
-              }
-
-              const totalDuration =
-                newSegments.reduce((sum, s) => sum + (s.durationMs || 0), 0) /
-                1000
-
-              const stillSynthesizing = newSegments.some(
-                (s) => s.status === "pending",
+            if (event.type === "progress") {
+              toast.loading(
+                event.stage === "rewriting" ? "Preparing text..." : "Generating speech...",
+                { id: toastId },
               )
-
-              store.setState({
-                playback: {
-                  ...freshState.playback,
-                  segments: newSegments,
-                  totalDuration,
-                  isSynthesizing: stillSynthesizing,
-                },
-              })
-
-              // If this is the priority segment, start playback from specific timestamp
-              if (
-                prioritySegmentIndex !== undefined &&
-                event.segmentIndex === prioritySegmentIndex &&
-                !playbackStarted &&
-                priorityCombinedIdx !== undefined &&
-                audioRef.current
-              ) {
-                playbackStarted = true
-
-                // Find the timestamp for the priority word
-                const segment = newSegments[prioritySegmentIndex]
-                if (segment?.wordTimestamps) {
-                  // Calculate which word in the segment corresponds to our combined index
-                  const offset = prioritySegmentOffsets[prioritySegmentIndex] ?? 0
-                  const wordInSegmentIdx = priorityCombinedIdx - offset
-
-                  const segmentTextWords = splitWords(segment.text)
-                  const spokenWords = segment.wordTimestamps.map((t) => t.word)
-                  const alignment = alignWordIndices(spokenWords, segmentTextWords)
-
-                  const directMatch = alignment.get(wordInSegmentIdx)
-                  let alignedIndex = directMatch ?? -1
-
-                  if (alignedIndex === -1) {
-                    for (let i = wordInSegmentIdx; i >= 0; i--) {
-                      const fallback = alignment.get(i)
-                      if (fallback !== undefined) {
-                        alignedIndex = fallback
-                        break
-                      }
-                    }
-                  }
-
-                  const timestamp =
-                    segment.wordTimestamps[alignedIndex]?.startMs ?? 0
-
-                  audioRef.current.src = event.audioUrl
-                  audioRef.current.currentTime = timestamp / 1000
-                  safePlay(audioRef.current)
-                  store.setState({
-                    playback: {
-                      ...store.getState().playback,
-                      isPlaying: true,
-                      currentSegmentIndex: prioritySegmentIndex,
-                    },
-                  })
-                  toast.success("Speech ready", { id: "tts-synth" })
-                }
-              }
-
-              // If no priority segment, auto-play segment 0 when ready (existing behavior)
-              if (
-                prioritySegmentIndex === undefined &&
-                event.segmentIndex === 0 &&
-                !playbackStarted &&
-                audioRef.current
-              ) {
-                playbackStarted = true
-                audioRef.current.src = event.audioUrl
-                safePlay(audioRef.current)
-                store.setState({
-                  playback: {
-                    ...store.getState().playback,
-                    isPlaying: true,
-                    currentSegmentIndex: 0,
-                    isWaitingForSegment: false,
-                  },
-                })
-                toast.success("Speech ready", { id: "tts-synth" })
-              }
-
-              // Auto-resume if we were waiting for this segment
-              const currentState = store.getState()
-              if (
-                currentState.playback.isWaitingForSegment &&
-                event.segmentIndex === currentState.playback.currentSegmentIndex &&
-                audioRef.current
-              ) {
-                audioRef.current.src = event.audioUrl
-                safePlay(audioRef.current)
-                store.setState({
-                  playback: {
-                    ...store.getState().playback,
-                    isPlaying: true,
-                    isWaitingForSegment: false,
-                  },
-                })
-              }
+            } else if (event.type === "complete") {
+              handleSynthesisComplete(event, wordIndex)
+              toast.success("Speech ready", { id: toastId })
             } else if (event.type === "error") {
-              const freshState = store.getState()
-              const newSegments = [...freshState.playback.segments]
-              newSegments[event.segmentIndex] = {
-                ...newSegments[event.segmentIndex],
-                status: "error",
-              }
-              store.setState({
-                playback: { ...freshState.playback, segments: newSegments },
-              })
-              console.error(`Segment ${event.segmentIndex} failed:`, event.error)
-            } else if (event.type === "done") {
-              store.setState({
-                playback: { ...store.getState().playback, isSynthesizing: false },
-              })
-            } else if (event.type === "fatal") {
               throw new Error(event.error)
             }
           }
@@ -800,37 +521,73 @@ export function AudioProvider({
           return
         }
 
-        const errorMsg =
-          err instanceof Error ? err.message : "TTS processing failed"
+        const errorMsg = err instanceof Error ? err.message : "TTS processing failed"
         store.setState({
           playback: {
             ...store.getState().playback,
             error: errorMsg,
             isLoading: false,
-            isSynthesizing: false,
           },
         })
         toast.error(errorMsg, { id: toastId })
       }
     },
-    [store, documentId, safePlay],
+    [store, documentId],
+  )
+
+  const handleSynthesisComplete = useCallback(
+    (
+      data: {
+        audioUrl: string
+        text: string
+        durationMs: number
+        sampleRate: number
+        wordTimestamps: WordTimestamp[]
+      },
+      wordIndex?: number,
+    ) => {
+      const state = store.getState()
+
+      store.setState({
+        playback: {
+          ...state.playback,
+          isLoading: false,
+          audioUrl: data.audioUrl,
+          text: data.text,
+          durationMs: data.durationMs,
+          wordTimestamps: data.wordTimestamps || [],
+        },
+      })
+
+      if (audioRef.current) {
+        audioRef.current.src = data.audioUrl
+
+        // If wordIndex provided, seek to that word's timestamp
+        if (wordIndex !== undefined && wordIndex >= 0 && data.wordTimestamps?.length) {
+          const timestamp = data.wordTimestamps[Math.min(wordIndex, data.wordTimestamps.length - 1)]
+          if (timestamp) {
+            audioRef.current.currentTime = timestamp.startMs / 1000
+          }
+        }
+
+        safePlay(audioRef.current)
+        store.setState({
+          playback: { ...store.getState().playback, isPlaying: true },
+        })
+      }
+    },
+    [store, safePlay],
   )
 
   const play = useCallback(() => {
     const state = store.getState()
-    const segment = state.playback.segments[state.playback.currentSegmentIndex]
-    if (audioRef.current && segment?.audioUrl) {
-      // Ensure correct audio is loaded before playing
-      if (audioRef.current.src !== segment.audioUrl) {
-        audioRef.current.src = segment.audioUrl
+    if (audioRef.current && state.playback.audioUrl) {
+      if (audioRef.current.src !== state.playback.audioUrl) {
+        audioRef.current.src = state.playback.audioUrl
       }
       safePlay(audioRef.current)
       store.setState({
-        playback: {
-          ...state.playback,
-          isPlaying: true,
-          isWaitingForSegment: false,
-        },
+        playback: { ...state.playback, isPlaying: true },
       })
     }
   }, [store, safePlay])
@@ -855,59 +612,28 @@ export function AudioProvider({
   const skip = useCallback(
     (seconds: number) => {
       const state = store.getState()
-      if (!audioRef.current || state.playback.segments.length === 0) return
+      if (!audioRef.current || !state.playback.audioUrl) return
 
-      // Calculate target time across all segments
-      let targetTime = state.playback.currentTime + seconds
-      targetTime = Math.max(
+      const targetTime = Math.max(
         0,
-        Math.min(state.playback.totalDuration, targetTime),
+        Math.min(state.playback.durationMs / 1000, audioRef.current.currentTime + seconds),
       )
-
-      // Find which segment this time falls into
-      let accumulatedTime = 0
-      for (let i = 0; i < state.playback.segments.length; i++) {
-        const segmentDuration =
-          (state.playback.segments[i].durationMs || 0) / 1000
-        if (targetTime <= accumulatedTime + segmentDuration) {
-          // Target is in this segment
-          const segmentTime = targetTime - accumulatedTime
-          if (i === state.playback.currentSegmentIndex) {
-            // Same segment - just seek
-            audioRef.current.currentTime = segmentTime
-          } else {
-            // Different segment - need to switch
-            const segment = state.playback.segments[i]
-            if (segment.status === "ready" && segment.audioUrl) {
-              store.setState({
-                playback: {
-                  ...state.playback,
-                  currentSegmentIndex: i,
-                  isWaitingForSegment: false,
-                },
-              })
-              audioRef.current.src = segment.audioUrl
-              audioRef.current.currentTime = segmentTime
-              if (state.playback.isPlaying) {
-                safePlay(audioRef.current)
-              }
-            }
-          }
-          return
-        }
-        accumulatedTime += segmentDuration
-      }
+      audioRef.current.currentTime = targetTime
     },
-    [store, safePlay],
+    [store],
   )
 
-  const goToSegment = useCallback(
-    (index: number) => {
+  const seekToWord = useCallback(
+    (wordIndex: number) => {
       const state = store.getState()
-      if (index < 0 || index >= state.playback.segments.length) return
-      playSegment(index)
+      if (!audioRef.current || !state.playback.wordTimestamps.length) return
+
+      const timestamp = state.playback.wordTimestamps[Math.min(wordIndex, state.playback.wordTimestamps.length - 1)]
+      if (timestamp) {
+        audioRef.current.currentTime = timestamp.startMs / 1000
+      }
     },
-    [store, playSegment],
+    [store],
   )
 
   // === Music Actions ===
@@ -1283,59 +1009,21 @@ export function AudioProvider({
     if (!audio) return
 
     const handleEnded = () => {
-      const state = store.getState()
-      const nextIndex = state.playback.currentSegmentIndex + 1
-
-      if (nextIndex < state.playback.segments.length) {
-        // Play next segment if ready
-        const nextSegment = state.playback.segments[nextIndex]
-        if (nextSegment.status === "ready" && nextSegment.audioUrl) {
-          store.setState({
-            playback: {
-              ...state.playback,
-              currentSegmentIndex: nextIndex,
-              isWaitingForSegment: false,
-            },
-          })
-          audio.src = nextSegment.audioUrl
-          safePlay(audio)
-        } else {
-          // Next segment not ready yet - pause and wait for SSE to deliver it
-          store.setState({
-            playback: {
-              ...state.playback,
-              currentSegmentIndex: nextIndex,
-              isPlaying: false,
-              isWaitingForSegment: true,
-            },
-          })
-        }
-      } else {
-        // All segments finished
-        store.setState({
-          playback: {
-            ...state.playback,
-            isPlaying: false,
-            isWaitingForSegment: false,
-            segmentCurrentTime: 0,
-          },
-        })
-      }
+      store.setState({
+        playback: {
+          ...store.getState().playback,
+          isPlaying: false,
+          currentTime: 0,
+        },
+      })
     }
 
     const handleTimeUpdate = () => {
-      const state = store.getState()
-      const segmentCurrentTime = audio.currentTime
-
-      // Calculate total time = sum of previous segments + current position
-      let previousDuration = 0
-      for (let i = 0; i < state.playback.currentSegmentIndex; i++) {
-        previousDuration += (state.playback.segments[i]?.durationMs || 0) / 1000
-      }
-      const currentTime = previousDuration + segmentCurrentTime
-
       store.setState({
-        playback: { ...state.playback, currentTime, segmentCurrentTime },
+        playback: {
+          ...store.getState().playback,
+          currentTime: audio.currentTime,
+        },
       })
     }
 
@@ -1362,23 +1050,19 @@ export function AudioProvider({
       audio.removeEventListener("play", handlePlay)
       audio.removeEventListener("pause", handlePause)
     }
-  }, [store, safePlay])
+  }, [store])
 
   // Auto-unload TTS models when synthesis completes
-  const prevSynthesizingRef = useRef<boolean | null>(null)
+  const prevLoadingRef = useRef<boolean | null>(null)
   useEffect(() => {
     const state = store.getState()
-    const { isSynthesizing, segments } = state.playback
+    const { isLoading, audioUrl } = state.playback
 
-    // Only act on transition from synthesizing to not synthesizing
-    const wasSynthesizing = prevSynthesizingRef.current
-    prevSynthesizingRef.current = isSynthesizing
+    // Only act on transition from loading to not loading with audio ready
+    const wasLoading = prevLoadingRef.current
+    prevLoadingRef.current = isLoading
 
-    if (
-      wasSynthesizing === true &&
-      isSynthesizing === false &&
-      segments.length > 0
-    ) {
+    if (wasLoading === true && isLoading === false && audioUrl) {
       // Synthesis complete - unload models to free GPU memory
       fetch("/api/tts/unload", { method: "POST" }).catch(() => {})
     }
@@ -1408,7 +1092,7 @@ export function AudioProvider({
     pause,
     togglePlayPause,
     skip,
-    goToSegment,
+    seekToWord,
     addTrack,
     removeTrack,
     reorderTracks,

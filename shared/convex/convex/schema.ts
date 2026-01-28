@@ -17,11 +17,12 @@ export default defineSchema({
   // Chunks table - document segments with vector embeddings for RAG search
   chunks: defineTable({
     documentId: v.id("documents"),
-    blockId: v.string(), // Original Marker block ID
+    blockId: v.string(),
     blockType: v.string(), // "Text", "Heading", "ListItem", etc.
-    content: v.string(), // Text content (HTML stripped)
+    html: v.string(), // HTML content from Marker/CHANDRA
     page: v.number(),
     section: v.optional(v.string()), // Section hierarchy flattened
+    bbox: v.array(v.number()), // [x1, y1, x2, y2] bounding box coordinates
     embedding: v.optional(v.array(v.float64())), // 768-dim Gemini embedding (added when AI chat opens)
   })
     .index("by_document", ["documentId"])
@@ -31,28 +32,13 @@ export default defineSchema({
       filterFields: ["documentId"], // Scope vector search to specific document
     }),
 
-  // TTS segments - chunked reworded text for speech synthesis (≤300 chars each)
-  ttsSegments: defineTable({
-    documentId: v.id("documents"),
-    blockId: v.string(),
-    variation: v.string(), // "default" for now, future: "read_math", "skip_math"
-    index: v.number(), // Segment order within block
-    text: v.string(), // ≤300 chars, sentence-aware
-    createdAt: v.number(),
-  }).index("by_document_block_variation", [
-    "documentId",
-    "blockId",
-    "variation",
-  ]),
-
-  // TTS audio - references to S3 audio files per segment/voice
+  // TTS audio cache - stores synthesized audio metadata for reuse
   ttsAudio: defineTable({
     documentId: v.id("documents"),
     blockId: v.string(),
-    variation: v.string(),
-    segmentIndex: v.number(),
     voiceId: v.string(),
-    storagePath: v.string(), // S3 key
+    text: v.string(), // Full rewritten variation text
+    storagePath: v.string(),
     durationMs: v.number(),
     sampleRate: v.number(),
     wordTimestamps: v.array(
@@ -62,12 +48,5 @@ export default defineSchema({
         endMs: v.number(),
       }),
     ),
-    createdAt: v.number(),
-  }).index("by_segment_voice", [
-    "documentId",
-    "blockId",
-    "variation",
-    "segmentIndex",
-    "voiceId",
-  ]),
+  }).index("by_document_block_voice", ["documentId", "blockId", "voiceId"]),
 })

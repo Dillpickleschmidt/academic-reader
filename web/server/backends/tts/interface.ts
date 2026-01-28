@@ -1,11 +1,6 @@
 /**
- * Interface for TTS backends with batch streaming support.
+ * Interface for TTS backends.
  */
-
-export interface BatchSegmentInput {
-  index: number
-  text: string
-}
 
 export interface WordTimestamp {
   word: string
@@ -13,13 +8,12 @@ export interface WordTimestamp {
   endMs: number
 }
 
-export interface BatchSegmentResult {
-  segmentIndex: number
+export interface SynthesisResult {
   audio?: string // Base64 encoded WAV
   sampleRate?: number
   durationMs?: number
   wordTimestamps?: WordTimestamp[] // Word-level timing for text highlighting
-  error?: string // Set if this segment failed
+  error?: string // Set if synthesis failed
 }
 
 export interface VoiceInfo {
@@ -34,13 +28,9 @@ export interface TTSBackend {
   readonly name: string
 
   /**
-   * Synthesize multiple segments in a batch.
-   * Yields results as each segment completes (streaming).
+   * Synthesize text to audio.
    */
-  synthesizeBatch(
-    segments: BatchSegmentInput[],
-    voiceId: string,
-  ): AsyncGenerator<BatchSegmentResult>
+  synthesize(text: string, voiceId: string): Promise<SynthesisResult>
 
   /**
    * List available voices.

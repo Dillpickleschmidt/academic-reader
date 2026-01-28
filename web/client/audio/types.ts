@@ -38,22 +38,11 @@ export type AudioPreset = {
   name: string
 }
 
-// TTS Segment types
-export type SegmentStatus = "pending" | "loading" | "ready" | "error"
-
+// TTS types
 export type WordTimestamp = {
   word: string
   startMs: number
   endMs: number
-}
-
-export type TTSSegment = {
-  index: number
-  text: string
-  audioUrl: string | null
-  durationMs: number | null
-  wordTimestamps: WordTimestamp[] | null
-  status: SegmentStatus
 }
 
 // Unified Audio State
@@ -65,19 +54,17 @@ export type AudioState = {
     volume: number // 0 - 1
   }
 
-  // TTS playback state
+  // TTS playback state (simplified - single audio per block)
   playback: {
     isLoading: boolean
     currentBlockId: string | null
     error: string | null
-    segments: TTSSegment[]
-    currentSegmentIndex: number
+    audioUrl: string | null
+    text: string | null
+    durationMs: number
+    wordTimestamps: WordTimestamp[]
     isPlaying: boolean
-    isWaitingForSegment: boolean // True when playback paused waiting for next segment to be ready
-    isSynthesizing: boolean
-    totalDuration: number
     currentTime: number
-    segmentCurrentTime: number
   }
 
   // Music settings

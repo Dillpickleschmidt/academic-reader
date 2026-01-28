@@ -14,6 +14,20 @@ import type { TocSection, TocResult } from "@repo/core/types/api"
 
 export type { TocSection, TocResult }
 
+export type TocStatus =
+  | "success"
+  | "no_toc_text"
+  | "ai_failed"
+  | "empty_sections"
+  | "skipped"        // No chunks or documentPath available
+  | "pdf_read_failed" // Could not read PDF from storage
+  | "error"          // Uncaught exception
+
+export interface TocExtractionMeta {
+  status: TocStatus
+  offsetDetected: boolean
+}
+
 interface RawTocEntry {
   title: string
   page: string
@@ -60,23 +74,40 @@ Rules:
 - Preserve the exact titles from the text
 - If no clear TOC structure is found, return {"sections": []}`
 
+export interface TocExtractionResult {
+  toc: TocResult | null
+  meta: TocExtractionMeta
+}
+
 /**
  * Main entry point - extracts structured TOC from converted text with page offset detection.
  */
 export async function extractTableOfContents(
   convertedText: string,
   pdfBuffer: Buffer | Uint8Array,
-): Promise<TocResult | null> {
+): Promise<TocExtractionResult> {
   // Search for "table of contents" and extract surrounding text
   const tocText = findTocText(convertedText)
   if (!tocText) {
-    return null
+    return {
+      toc: null,
+      meta: { status: "no_toc_text", offsetDetected: false },
+    }
   }
 
   // Generate structured TOC using AI
-  const rawSections = await generateTocWithAI(tocText)
+  const { sections: rawSections, failed: aiFailed } = await generateTocWithAI(tocText)
+  if (aiFailed) {
+    return {
+      toc: null,
+      meta: { status: "ai_failed", offsetDetected: false },
+    }
+  }
   if (!rawSections.length) {
-    return null
+    return {
+      toc: null,
+      meta: { status: "empty_sections", offsetDetected: false },
+    }
   }
 
   // Detect if there are roman numerals (front matter)
@@ -85,15 +116,18 @@ export async function extractTableOfContents(
   )
 
   // Calculate page offset from first Arabic numeral entry
-  const offset = calculatePageOffset(rawSections, pdfBuffer)
+  const { offset, detected: offsetDetected } = calculatePageOffset(rawSections, pdfBuffer)
 
   // Convert raw sections to final format with physical page numbers
   const sections = convertToTocSections(rawSections, offset)
 
   return {
-    sections,
-    offset,
-    hasRomanNumerals,
+    toc: {
+      sections,
+      offset,
+      hasRomanNumerals,
+    },
+    meta: { status: "success", offsetDetected },
   }
 }
 
@@ -122,10 +156,15 @@ function findTocText(text: string): string | null {
   return text.slice(start, end)
 }
 
+interface TocAIResult {
+  sections: RawTocEntry[]
+  failed: boolean
+}
+
 /**
  * Use AI to generate structured TOC from extracted text.
  */
-async function generateTocWithAI(tocText: string): Promise<RawTocEntry[]> {
+async function generateTocWithAI(tocText: string): Promise<TocAIResult> {
   const model = createChatModel()
 
   const result = await tryCatch(
@@ -146,10 +185,10 @@ async function generateTocWithAI(tocText: string): Promise<RawTocEntry[]> {
 
   if (!result.success) {
     console.warn("[toc] AI generation failed:", result.error)
-    return []
+    return { sections: [], failed: true }
   }
 
-  return result.data.object.sections
+  return { sections: result.data.object.sections, failed: false }
 }
 
 /**
@@ -172,6 +211,11 @@ function parsePageNumber(page: string): number | null {
   return isNaN(num) ? null : num
 }
 
+interface OffsetResult {
+  offset: number
+  detected: boolean
+}
+
 /**
  * Calculate page offset by comparing TOC page number with PDF footer.
  *
@@ -184,7 +228,7 @@ function parsePageNumber(page: string): number | null {
 function calculatePageOffset(
   sections: RawTocEntry[],
   pdfBuffer: Buffer | Uint8Array,
-): number {
+): OffsetResult {
   // Find first Arabic numeral page in TOC
   let firstArabicPage: number | null = null
   for (const section of sections) {
@@ -207,7 +251,7 @@ function calculatePageOffset(
   }
 
   if (firstArabicPage === null) {
-    return 0
+    return { offset: 0, detected: false }
   }
 
   // Open PDF and extract footer from the physical page
@@ -230,12 +274,12 @@ function calculatePageOffset(
         // So physicalPage 15 = displayPage 5, offset = 15 - 5 = 10
         const offset = physicalPage - footerPageNum + 1 // +1 because physicalPage is 0-indexed
         if (offset >= 0) {
-          return offset
+          return { offset, detected: true }
         }
       }
     }
 
-    return 0
+    return { offset: 0, detected: false }
   } finally {
     doc.destroy()
   }

@@ -23,10 +23,9 @@ import {
   extractTableOfContents,
   type TocResult,
 } from "../../services/toc-extraction"
-import { stripHtmlForEmbedding } from "../../services/embeddings"
 import { extractLinkMappings, injectLinks } from "../../services/link-extraction"
 import { tryCatch, getErrorMessage } from "../../utils/try-catch"
-import type { ChunkInput } from "../../services/document-persistence"
+import type { NormalizedChunk } from "../../storage/result-cache"
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -34,18 +33,31 @@ import type { ChunkInput } from "../../services/document-persistence"
 
 export type CleanupReason = "cancelled" | "failed" | "timeout" | "client_disconnect"
 
+/** Marker chunk format */
+interface MarkerChunkBlock {
+  id: string
+  block_type: string
+  html: string
+  page: number
+  bbox: number[]
+  section_hierarchy?: Record<string, string>
+}
+
+/** CHANDRA chunk format */
+interface ChandraChunkBlock {
+  label: string
+  content: string
+  bbox: number[]
+  page: number
+}
+
+type WorkerChunkBlock = MarkerChunkBlock | ChandraChunkBlock
+
 export interface JobResultFormats {
   html?: string
   markdown?: string
   chunks?: {
-    blocks?: Array<{
-      id: string
-      block_type: string
-      html: string
-      page: number
-      bbox?: number[]
-      section_hierarchy?: Record<string, string>
-    }>
+    blocks?: WorkerChunkBlock[]
   }
 }
 
@@ -107,38 +119,45 @@ export function handleCleanup(
   event.cleanup = { reason, ...result }
 }
 
-/**
- * Process chunks and cache job result for persistence.
- */
 export function cacheJobResult(
   jobId: string,
   result: JobResultInput,
   fileInfo: FileInfo,
-): ChunkInput[] {
-  const rawChunks = result.formats?.chunks?.blocks ?? []
-  const chunks: ChunkInput[] = rawChunks
-    .map((chunk) => ({
-      blockId: chunk.id,
-      blockType: chunk.block_type,
-      content: stripHtmlForEmbedding(chunk.html ?? ""),
-      page: chunk.page,
-      section: chunk.section_hierarchy
-        ? Object.values(chunk.section_hierarchy).filter(Boolean).join(" > ")
-        : undefined,
-    }))
-    .filter((c) => c.content.trim().length > 0)
+): void {
+  const normalizedChunks = (result.formats?.chunks?.blocks ?? []).map((block, index) =>
+    normalizeChunk(block, index),
+  )
 
   resultCache.set(jobId, {
     html: result.formats?.html ?? result.content ?? "",
     markdown: result.formats?.markdown ?? "",
-    chunks,
+    chunks: normalizedChunks,
     metadata: { pages: result.metadata?.pages },
     filename: fileInfo.filename,
     fileId: fileInfo.fileId,
     documentPath: fileInfo.documentPath,
   })
+}
 
-  return chunks
+function normalizeChunk(block: WorkerChunkBlock, index: number): NormalizedChunk {
+  if ("id" in block) {
+    return {
+      id: block.id,
+      blockType: block.block_type,
+      html: block.html,
+      page: block.page,
+      bbox: block.bbox,
+      sectionHierarchy: block.section_hierarchy,
+    }
+  }
+  // CHANDRA format
+  return {
+    id: `chandra-${index}`,
+    blockType: block.label,
+    html: block.content,
+    page: block.page,
+    bbox: block.bbox,
+  }
 }
 
 /**
@@ -190,8 +209,13 @@ export async function processCompletedJob(
   let tocResult: TocResult | undefined
   let pageOffset = 0
 
-  if (chunks?.length && fileInfo?.documentPath) {
-    const chunkPageInfo = chunks.map((c) => ({ id: c.id, page: c.page }))
+  if (!chunks?.length || !fileInfo?.documentPath) {
+    event.tocStatus = "skipped"
+  } else if (chunks?.length && fileInfo?.documentPath) {
+    const chunkPageInfo = chunks.map((c, i) => ({
+      id: "id" in c ? c.id : `chandra-${i}`,
+      page: c.page,
+    }))
 
     // Try to read PDF for link extraction and TOC
     const pdfReadResult = await tryCatch(
@@ -233,16 +257,26 @@ export async function processCompletedJob(
         const tocExtractResult = await tryCatch(
           extractTableOfContents(textContent, pdfBuffer),
         )
-        if (tocExtractResult.success && tocExtractResult.data) {
-          tocResult = tocExtractResult.data
-          pageOffset = tocResult.offset
-          event.tocSections = tocResult.sections.length
+        if (tocExtractResult.success) {
+          const { toc, meta } = tocExtractResult.data
+          event.tocStatus = meta.status
+          event.tocOffsetDetected = meta.offsetDetected
+          if (toc) {
+            tocResult = toc
+            pageOffset = toc.offset
+            event.tocSections = toc.sections.length
+          }
+        } else {
+          console.warn("[jobs] TOC extraction failed:", tocExtractResult.error)
+          event.tocStatus = "error"
         }
       } catch (err) {
-        console.warn("[jobs] TOC extraction failed:", err)
+        console.warn("[jobs] TOC extraction failed (uncaught):", err)
+        event.tocStatus = "error"
       }
     } else {
       console.warn("[jobs] Failed to read PDF for link extraction:", pdfReadResult.error)
+      event.tocStatus = "pdf_read_failed"
     }
 
     // Inject page markers (always runs, uses offset=0 as fallback)

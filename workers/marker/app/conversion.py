@@ -1,16 +1,8 @@
-import json
 from pathlib import Path
-from typing import Any
 
 from .html_processing import images_to_base64, inject_image_dimensions
 from .models import get_or_create_models
-
-
-def _to_dict(obj: Any) -> Any:
-    """Convert pydantic model to dict, or return as-is if already a dict."""
-    if hasattr(obj, 'model_dump_json'):
-        return json.loads(obj.model_dump_json())
-    return obj
+from ..shared import extract_chunks
 
 
 def _create_converter(
@@ -39,25 +31,14 @@ def _create_converter(
     )
 
 
-def _render_all_formats(document: Any) -> dict:
+def _render_all_formats(document) -> dict:
     """Run all renderers on the document and return all formats."""
     from marker.renderers.html import HTMLRenderer
     from marker.renderers.markdown import MarkdownRenderer
 
     html_output = HTMLRenderer({"add_block_ids": True})(document)
     markdown_output = MarkdownRenderer()(document)
-
-    # Try to import ChunkRenderer (may not exist in older versions)
-    try:
-        from marker.renderers.chunk import ChunkRenderer
-        chunk_output = ChunkRenderer()(document)
-        chunks = {
-            "blocks": [_to_dict(b) for b in chunk_output.blocks],
-            "page_info": _to_dict(chunk_output.page_info) if chunk_output.page_info else None,
-            "metadata": _to_dict(chunk_output.metadata) if chunk_output.metadata else None,
-        } if chunk_output else None
-    except ImportError:
-        chunks = None
+    chunks = extract_chunks(document)
 
     return {
         "html": html_output.html,
