@@ -14,9 +14,10 @@ image = (
         "fastapi[standard]",
     )
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .pip_install("huggingface_hub[hf_transfer]")
     .run_commands(
         # Pre-download model
-        "python -c \"from vllm import LLM; LLM('lightonai/LightOnOCR-2-1B-bbox-soup', dtype='bfloat16')\""
+        "python -c \"from huggingface_hub import snapshot_download; snapshot_download('lightonai/LightOnOCR-2-1B-bbox-soup')\""
     )
 )
 
