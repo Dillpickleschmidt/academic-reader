@@ -1,7 +1,11 @@
 import { AwsClient } from "aws4fetch"
+import { readFileSync, existsSync } from "fs"
 import type { PresignedUrlResult } from "../types"
 import type { Storage, SaveFileOptions } from "./types"
 import { getImageMimeType } from "../utils/mime-types"
+import { env } from "../env"
+
+const TUNNEL_URL_FILE = "/tunnel/url"
 
 export interface S3Config {
   endpoint: string
@@ -32,12 +36,47 @@ export class S3Storage implements Storage {
     return new URL(`${this.config.endpoint}/${this.config.bucket}/${key}`)
   }
 
+  private getTunnelUrl(): string | undefined {
+    if (env.BACKEND_MODE !== "modal") return undefined
+    try {
+      if (existsSync(TUNNEL_URL_FILE)) {
+        const url = readFileSync(TUNNEL_URL_FILE, "utf-8").trim()
+        if (url) return url
+      }
+    } catch {}
+    return undefined
+  }
+
+  private async waitForTunnelUrl(maxWaitMs = 30000): Promise<string | undefined> {
+    if (env.BACKEND_MODE !== "modal") return undefined
+
+    const startTime = Date.now()
+    while (Date.now() - startTime < maxWaitMs) {
+      const url = this.getTunnelUrl()
+      if (url) return url
+      await new Promise((r) => setTimeout(r, 500))
+    }
+    console.warn("[S3] Tunnel URL not available after waiting")
+    return undefined
+  }
+
   /**
    * Get a presigned URL for uploading to a specific key.
+   * In modal mode, uses tunnel URL so external workers can reach MinIO.
    */
   async getPresignedUploadUrl(key: string): Promise<PresignedUrlResult> {
     const expiresInSeconds = 3600 // 1 hour
 
+    // In modal mode, use tunnel URL for external worker access
+    const tunnelUrl = await this.waitForTunnelUrl()
+    if (tunnelUrl) {
+      return {
+        uploadUrl: `${tunnelUrl}/${this.config.bucket}/${key}`,
+        expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+      }
+    }
+
+    // Fallback to presigned S3 URL
     const url = this.getObjectUrl(key)
     url.searchParams.set("X-Amz-Expires", String(expiresInSeconds))
 
@@ -54,6 +93,10 @@ export class S3Storage implements Storage {
 
   async getFileUrl(uploadKey: string, internal?: boolean): Promise<string> {
     if (!internal) {
+      const tunnelUrl = this.getTunnelUrl()
+      if (tunnelUrl) {
+        return `${tunnelUrl}/${this.config.bucket}/${uploadKey}`
+      }
       return `${this.config.publicUrl}/${uploadKey}`
     }
 

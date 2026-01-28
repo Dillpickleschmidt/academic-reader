@@ -5,14 +5,13 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("build-essential")
     .pip_install("marker-pdf==1.9.2", "httpx", "pydantic", "fastapi[standard]")
-    .env({"MARKER_BATCH_SIZES": "h100"})
     .run_commands("python -c 'from marker.models import create_model_dict; create_model_dict()'")
 )
 
 app = modal.App("marker", image=image)
 
 
-@app.function(gpu="H100", cpu=8.0, memory=32768, timeout=1800)
+@app.function(gpu="A10G", cpu=4.0, memory=16384, timeout=1800)
 def convert(
     file_url: str,
     result_upload_url: str,
@@ -112,13 +111,13 @@ def api():
 
     @web.get("/status/{call_id}")
     async def status(call_id: str):
-        fc = modal.FunctionCall.from_id(call_id)
         try:
+            fc = modal.FunctionCall.from_id(call_id)
             out = await fc.get.aio(timeout=0)
             return {"status": "COMPLETED", "output": out}
-        except modal.exception.OutputExpiredError:
-            return {"status": "FAILED", "error": "expired"}
         except TimeoutError:
             return {"status": "IN_PROGRESS"}
+        except Exception as e:
+            return {"status": "FAILED", "error": str(e)}
 
     return web

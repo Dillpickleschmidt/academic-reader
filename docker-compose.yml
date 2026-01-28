@@ -73,7 +73,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    profiles: ["local", "datalab"]
+    profiles: ["local", "datalab", "modal"]
     stop_grace_period: 10s
     stop_signal: SIGINT
     ports:
@@ -96,6 +96,7 @@ services:
     volumes:
       - ./web/server:/app/web/server
       - ./shared/core/src:/app/shared/core/src
+      - tunnel_url:/tunnel:ro
     depends_on:
       convex-backend:
         condition: service_healthy
@@ -119,7 +120,7 @@ services:
   # MinIO S3-compatible storage for all dev profiles
   minio:
     image: minio/minio
-    profiles: ["local", "datalab"]
+    profiles: ["local", "datalab", "modal"]
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -138,7 +139,7 @@ services:
   # MinIO bucket initialization
   minio-init:
     image: minio/mc
-    profiles: ["local", "datalab"]
+    profiles: ["local", "datalab", "modal"]
     depends_on:
       minio:
         condition: service_healthy
@@ -146,16 +147,38 @@ services:
       /bin/sh -c "
       mc alias set myminio http://minio:9000 minioadmin minioadmin;
       mc mb myminio/academic-reader --ignore-existing;
-      mc anonymous set download myminio/academic-reader;
+      mc anonymous set public myminio/academic-reader;
       mc ilm rule add myminio/academic-reader --prefix 'temp_documents/' --expire-days 7 2>/dev/null || true;
       exit 0;
       "
 
+  # Cloudflare tunnel for exposing MinIO to Modal workers
+  cloudflared:
+    image: alpine:latest
+    profiles: ["modal"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /usr/local/bin/cloudflared
+        chmod +x /usr/local/bin/cloudflared
+        cloudflared tunnel --url http://minio:9000 2>&1 | while IFS= read -r line; do
+          echo "$$line"
+          case "$$line" in *trycloudflare.com*)
+            echo "$$line" | grep -oE 'https://[^ ]+' > /tunnel/url ;;
+          esac
+        done
+    volumes:
+      - tunnel_url:/tunnel
+
   # Self-hosted Convex backend
-  # Profiles: all dev modes (local, datalab)
+  # Profiles: all dev modes (local, datalab, modal)
   convex-backend:
     image: ghcr.io/get-convex/convex-backend:523c6812d3020300314f386b89a9c29560f21027
-    profiles: ["local", "datalab"]
+    profiles: ["local", "datalab", "modal"]
     ports:
       - "3210:3210"
       - "3211:3211"
@@ -190,3 +213,4 @@ services:
 
 volumes:
   convex_data:
+  tunnel_url:

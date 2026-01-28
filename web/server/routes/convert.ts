@@ -73,9 +73,21 @@ convert.post("/convert/:fileId", async (c) => {
       return c.json({ error: "Failed to retrieve file" }, { status: 500 })
     }
     input = { ...baseInput, fileData: bytesResult.data, filename }
-  } else if (backendType === "local" || backendType === "modal") {
-    // Use internal URL for worker access (Docker network)
+  } else if (backendType === "local") {
+    // Use internal URL for local Docker worker access
     const fileUrlResult = await tryCatch(storage.getFileUrl(originalFilePath, true))
+    if (!fileUrlResult.success) {
+      event.error = {
+        category: "storage",
+        message: getErrorMessage(fileUrlResult.error),
+        code: "FILE_URL_ERROR",
+      }
+      return c.json({ error: "Failed to get file URL" }, { status: 500 })
+    }
+    input = { ...baseInput, fileUrl: fileUrlResult.data, mimeType, documentPath: docPath }
+  } else if (backendType === "modal") {
+    // Use external URL (tunnel) for Modal worker access
+    const fileUrlResult = await tryCatch(storage.getFileUrl(originalFilePath, false))
     if (!fileUrlResult.success) {
       event.error = {
         category: "storage",

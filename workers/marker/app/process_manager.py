@@ -79,7 +79,7 @@ class ProcessManager:
                 self._jobs,  # Shared dict
                 queue,  # Progress queue
             ),
-            daemon=True,
+            daemon=False,  # Must be False so pdftext can spawn child processes
         )
         process.start()
 

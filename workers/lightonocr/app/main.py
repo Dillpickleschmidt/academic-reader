@@ -1,4 +1,4 @@
-"""FastAPI server for LightOnOCR (local mode) with job-based API and SSE streaming."""
+"""LightOnOCR worker with job-based API and SSE streaming."""
 import asyncio
 import json
 import tempfile
@@ -34,28 +34,17 @@ class Job:
     file_url: str = ""
     mime_type: str | None = None
     page_range: str | None = None
-    # Progress info
     progress: dict[str, Any] | None = None
     html_content: str | None = None
-    # Event queue for SSE streaming
     events: asyncio.Queue = field(default_factory=asyncio.Queue)
 
 
-# In-memory job store
 jobs: dict[str, Job] = {}
-
-app = FastAPI(title="LightOnOCR Worker")
-
-
-@app.on_event("startup")
-async def startup():
-    """Startup hook - vLLM is now started lazily on first request."""
-    print("[lightonocr] FastAPI server starting (vLLM will start on-demand)", flush=True)
+app = FastAPI()
 
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
     return {"status": "ok"}
 
 

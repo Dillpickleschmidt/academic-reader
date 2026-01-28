@@ -49,6 +49,13 @@ def convert_file(file_path: Path, page_range: str | None = None) -> dict:
     return _convert_file_internal(file_path, page_range, run_inference)
 
 
+def convert_image(file_path: Path) -> dict:
+    """Convert a single image file using LightOnOCR via HTTP API."""
+    from .vllm_client import run_inference
+
+    return _convert_image(file_path, run_inference)
+
+
 def convert_file_with_llm(
     file_path: Path,
     llm: "LLM",

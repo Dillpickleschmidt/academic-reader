@@ -7,10 +7,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.lock .
+COPY requirements.txt .
 
-# Install pinned dependencies (PyTorch already in base image - pip will skip it)
-RUN pip install --no-cache-dir -r requirements.lock
+# Install dependencies (PyTorch already in base image)
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 
@@ -31,8 +31,5 @@ open(font_path, 'wb').write(data); \
 print(f'Saved to {font_path}')"
 
 EXPOSE 8000
-
-# H100 batch size optimization
-ENV MARKER_BATCH_SIZES=h100
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

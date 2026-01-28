@@ -7,44 +7,23 @@ from pathlib import Path
 from queue import Empty
 
 import httpx
-from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
-from .config import CORS_ORIGINS, SUPPORTED_EXTENSIONS, UPLOAD_DIR
-from .models import get_or_create_models
+from .config import UPLOAD_DIR
 from .process_manager import get_process_manager
 
 
 class PollFilter(logging.Filter):
-    """Filter out noisy polling requests from access logs."""
-
     def filter(self, record: logging.LogRecord) -> bool:
-        msg = record.getMessage()
-        return "/jobs/" not in msg
+        return "/jobs/" not in record.getMessage()
 
 
 logging.getLogger("uvicorn.access").addFilter(PollFilter())
 
-app = FastAPI(title="Academic Reader")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI()
 
 UPLOAD_DIR.mkdir(exist_ok=True)
-
-
-def validate_file_extension(filename: str):
-    ext = Path(filename).suffix.lower()
-    if ext not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file type: {ext}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
-        )
 
 
 @app.get("/health")
@@ -54,75 +33,14 @@ async def health():
 
 @app.post("/load")
 async def load():
-    """Load marker models. Idempotent - instant if already loaded."""
-    from .models import is_loaded
-
-    if is_loaded():
-        return {"status": "already_loaded"}
-    get_or_create_models()
+    """No-op. Subprocess loads its own models (spawn can't share GPU memory)."""
     return {"status": "ok"}
 
 
 @app.post("/unload")
 async def unload():
-    """Unload marker models to free GPU memory. Idempotent."""
-    from .models import unload_models
-
-    unloaded = unload_models()
-    return {"unloaded": unloaded}
-
-
-@app.post("/upload")
-async def upload_file(file: UploadFile):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
-
-    validate_file_extension(file.filename)
-
-    file_id = str(uuid.uuid4())
-    ext = Path(file.filename).suffix.lower()
-    file_path = UPLOAD_DIR / f"{file_id}{ext}"
-
-    content = await file.read()
-    file_path.write_bytes(content)
-
-    return {
-        "file_id": file_id,
-        "filename": file.filename,
-        "size": len(content),
-    }
-
-
-@app.post("/fetch-url")
-async def fetch_url(url: str):
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-
-        filename = url.split("/")[-1].split("?")[0]
-        if not filename or "." not in filename:
-            cd = response.headers.get("content-disposition", "")
-            if "filename=" in cd:
-                filename = cd.split("filename=")[-1].strip('"\'')
-            else:
-                filename = "document.pdf"
-
-        validate_file_extension(filename)
-
-        file_id = str(uuid.uuid4())
-        ext = Path(filename).suffix.lower()
-        file_path = UPLOAD_DIR / f"{file_id}{ext}"
-
-        file_path.write_bytes(response.content)
-
-        return {
-            "file_id": file_id,
-            "filename": filename,
-            "size": len(response.content),
-        }
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
+    """No-op. Models only exist in subprocess."""
+    return {"unloaded": False}
 
 
 @app.post("/convert/{file_id}")
