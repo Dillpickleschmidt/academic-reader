@@ -261,10 +261,10 @@ export function useConversion() {
       setImagesReady(true)
       // Transform Convex chunks to ChunkBlock format for TTS
       setChunks(
-        data.chunks?.map((c: { blockId: string; blockType: string; content: string; page: number }) => ({
+        data.chunks?.map((c: { blockId: string; blockType: string; html: string; page: number }) => ({
           id: c.blockId,
           block_type: c.blockType,
-          html: c.content,
+          html: c.html,
           page: c.page,
           polygon: [],
           bbox: [],
