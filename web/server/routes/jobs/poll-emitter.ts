@@ -1,5 +1,5 @@
 /**
- * Polling-based SSE emitter for cloud backends (Runpod, Datalab).
+ * Polling-based SSE emitter for cloud backends (Modal, Datalab).
  *
  * Polls the backend for job status and emits SSE events to the client.
  * Handles progress, html_ready, completed, and failed states.

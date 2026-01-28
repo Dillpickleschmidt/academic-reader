@@ -8,10 +8,11 @@
     "shared/*"
   ],
   "scripts": {
+    "setup": "bun scripts/dev.ts setup",
     "dev": "bun scripts/dev.ts dev",
     "dev:local": "bun scripts/dev.ts dev --mode local",
-    "dev:runpod": "bun scripts/dev.ts dev --mode runpod",
     "dev:datalab": "bun scripts/dev.ts dev --mode datalab",
+    "dev:modal": "bun scripts/dev.ts dev --mode modal",
     "build": "bun run --cwd web build",
     "typecheck": "bun run --cwd shared/core typecheck && bun run --cwd shared/convex typecheck && bun run --cwd web typecheck",
     "lint": "bun run --cwd web lint"

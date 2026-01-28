@@ -1,9 +1,9 @@
 """LightOnOCR conversion logic."""
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PIL import Image
 
-from .vllm_client import run_inference
 from .markdown_utils import (
     pil_to_base64,
     resize_image_for_inference,
@@ -15,13 +15,16 @@ from .markdown_utils import (
     parse_page_range,
 )
 
+if TYPE_CHECKING:
+    from vllm import LLM
+
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tiff", ".tif", ".bmp"}
 
 
 def convert_file(file_path: Path, page_range: str | None = None) -> dict:
     """
-    Convert PDF or image file using LightOnOCR.
+    Convert PDF or image file using LightOnOCR via HTTP API.
 
     Args:
         file_path: Path to PDF or image file
@@ -40,17 +43,75 @@ def convert_file(file_path: Path, page_range: str | None = None) -> dict:
             "images": {"image_N.png": "base64...", ...}
         }
     """
+    # Import here to avoid import errors when using convert_file_with_llm
+    from .vllm_client import run_inference
+
+    return _convert_file_internal(file_path, page_range, run_inference)
+
+
+def convert_file_with_llm(
+    file_path: Path,
+    llm: "LLM",
+    page_range: str | None = None,
+) -> dict:
+    """
+    Convert PDF or image file using a direct vLLM LLM instance.
+
+    Used by Modal worker where LLM is loaded as a class attribute.
+    """
+    def inference_fn(image_base64: str) -> str:
+        return _run_inference_with_llm(llm, image_base64)
+
+    return _convert_file_internal(file_path, page_range, inference_fn)
+
+
+def _run_inference_with_llm(llm: "LLM", image_base64: str) -> str:
+    """Run inference using direct vLLM LLM instance."""
+    from vllm import SamplingParams
+
+    messages = [{
+        "role": "user",
+        "content": [{
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+        }]
+    }]
+
+    outputs = llm.chat(
+        messages=[messages],
+        sampling_params=SamplingParams(
+            max_tokens=4096,
+            temperature=0.2,
+            top_p=0.9,
+        ),
+    )
+    return outputs[0].outputs[0].text
+
+
+def _convert_file_internal(
+    file_path: Path,
+    page_range: str | None,
+    inference_fn,
+) -> dict:
+    """
+    Internal conversion function that accepts an inference function.
+
+    Args:
+        file_path: Path to PDF or image file
+        page_range: Optional page range string like "1-5" or "1,3,5"
+        inference_fn: Function that takes base64 image and returns markdown text
+    """
     suffix = file_path.suffix.lower()
 
     if suffix == ".pdf":
-        return _convert_pdf(file_path, page_range)
+        return _convert_pdf(file_path, page_range, inference_fn)
     elif suffix in IMAGE_EXTENSIONS:
-        return convert_image(file_path)
+        return _convert_image(file_path, inference_fn)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
 
-def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
+def _convert_pdf(pdf_path: Path, page_range: str | None, inference_fn) -> dict:
     """Convert a PDF file."""
     total_pages = get_pdf_page_count(pdf_path)
     pages = parse_page_range(page_range, total_pages)
@@ -66,7 +127,7 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
 
         # Run OCR inference
         image_b64 = pil_to_base64(page_image)
-        raw_markdown = run_inference(image_b64)
+        raw_markdown = inference_fn(image_b64)
 
         # Parse bbox annotations and extract images
         cleaned_md, bboxes = parse_bbox_from_markdown(raw_markdown)
@@ -109,7 +170,7 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
     }
 
 
-def convert_image(image_path: Path) -> dict:
+def _convert_image(image_path: Path, inference_fn) -> dict:
     """Convert a single image file."""
     # Load and resize image
     img = Image.open(image_path)
@@ -117,7 +178,7 @@ def convert_image(image_path: Path) -> dict:
 
     # Run OCR inference
     image_b64 = pil_to_base64(img)
-    raw_markdown = run_inference(image_b64)
+    raw_markdown = inference_fn(image_b64)
 
     # Parse bbox annotations
     # Note: For single images, we can't extract embedded images since there's no PDF

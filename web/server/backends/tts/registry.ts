@@ -17,7 +17,7 @@ export interface VoiceDefinition {
 
 export interface EngineConfig {
   getLocalUrl: () => string
-  getRunpodEndpointId: () => string | undefined
+  getModalUrl: () => string | undefined
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -47,11 +47,11 @@ export const VOICE_REGISTRY: Record<string, VoiceDefinition> = {
 export const ENGINE_REGISTRY: Record<TTSEngine, EngineConfig> = {
   chatterbox: {
     getLocalUrl: () => env.CHATTERBOX_TTS_WORKER_URL,
-    getRunpodEndpointId: () => env.RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID,
+    getModalUrl: () => env.MODAL_CHATTERBOX_TTS_URL,
   },
   qwen3: {
     getLocalUrl: () => env.QWEN3_TTS_WORKER_URL,
-    getRunpodEndpointId: () => env.RUNPOD_QWEN3_TTS_ENDPOINT_ID,
+    getModalUrl: () => env.MODAL_QWEN3_TTS_URL,
   },
 }
 
@@ -84,7 +84,7 @@ export function listAvailableVoices(): VoiceDefinition[] {
     }
 
     const engineConfig = ENGINE_REGISTRY[voice.engine]
-    return Boolean(engineConfig.getRunpodEndpointId())
+    return Boolean(engineConfig.getModalUrl())
   })
 }
 

@@ -3,8 +3,8 @@
  * Development orchestration script.
  *
  * Usage:
- *   bun scripts/dev.ts dev           # Start dev servers (mode from .env.dev)
- *   bun scripts/dev.ts dev --mode X  # Override mode (local/runpod/datalab)
+ *   bun scripts/dev.ts dev           # Start dev servers (mode from .env.local)
+ *   bun scripts/dev.ts dev --mode X  # Override mode (local/datalab/modal)
  */
 
 import { loadEnv } from "./lib/utils"

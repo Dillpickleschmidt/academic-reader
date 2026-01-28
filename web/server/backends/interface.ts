@@ -2,7 +2,7 @@ import type { ConversionInput, ConversionJob } from "../types"
 
 /**
  * Interface for conversion backends.
- * Each backend (local, runpod, datalab) implements this interface.
+ * Each backend (local, datalab, modal) implements this interface.
  */
 export interface ConversionBackend {
   /**

@@ -12,8 +12,5 @@ omegaconf
 
 # Web framework
 fastapi>=0.115.0
-uvicorn>=0.32.0
+uvicorn[standard]>=0.32.0
 pydantic>=2.0.0
-
-# Runpod serverless handler
-runpod>=1.7.0

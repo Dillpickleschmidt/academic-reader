@@ -5,6 +5,7 @@ import {
   ROOT_DIR,
   colors,
   runProcess,
+  runProcessSync,
   generateBetterAuthSecret,
 } from "./utils"
 import {
@@ -30,18 +31,20 @@ ${colors.bold("Academic Reader Dev Script")}
 Usage: bun scripts/dev.ts <command> [options]
 
 Commands:
+  ${colors.cyan("setup")}     Install and configure external dependencies
   ${colors.cyan("dev")}       Start development servers
 
 Options:
-  ${colors.cyan("--mode <mode>")}   Override BACKEND_MODE (local/runpod/datalab)
+  ${colors.cyan("--mode <mode>")}   Override BACKEND_MODE (local/datalab/modal)
   ${colors.cyan("--dashboard")}     Enable Convex dashboard (http://localhost:6791)
 
 Modes:
   ${colors.cyan("local")}    Docker worker + self-hosted Convex + Vite
   ${colors.cyan("datalab")}  Datalab API + self-hosted Convex + Vite
-  ${colors.cyan("runpod")}   Runpod + MinIO + self-hosted Convex + Vite
+  ${colors.cyan("modal")}    Modal cloud GPU + MinIO + self-hosted Convex + Vite
 
 Examples:
+  bun scripts/dev.ts setup                # First-time setup
   bun scripts/dev.ts dev                  # Use mode from .env.local
   bun scripts/dev.ts dev --mode datalab   # Override to datalab
 `)
@@ -161,7 +164,53 @@ const devCommand: Command = {
 }
 
 // =============================================================================
+// Setup Command
+// =============================================================================
+
+const setupCommand: Command = {
+  name: "setup",
+  description: "Install and configure external dependencies",
+  async execute(): Promise<void> {
+    console.log(colors.bold("\nSetting up development environment...\n"))
+
+    await setupModal()
+
+    console.log(colors.green("\n✓ Setup complete!\n"))
+  },
+}
+
+async function setupModal(): Promise<void> {
+  console.log(colors.cyan("Checking Modal CLI..."))
+
+  // Check if modal is installed
+  const modalCheck = runProcessSync(["modal", "--version"])
+  if (!modalCheck.success) {
+    console.log("  Modal CLI not found. Installing via uv...")
+    const install = await runProcess(["uv", "tool", "install", "modal"])
+    await install.exited
+
+    // Re-check
+    const recheck = runProcessSync(["modal", "--version"])
+    if (!recheck.success) {
+      console.log(colors.red("\n✗ Failed to install Modal CLI."))
+      console.log("  Please install manually: uv tool install modal")
+      process.exit(1)
+    }
+  }
+  console.log(colors.green("  ✓ Modal CLI installed"))
+
+  // Check if authenticated (modal token info returns non-zero if not authenticated)
+  const authCheck = runProcessSync(["modal", "token", "info"])
+  if (!authCheck.success) {
+    console.log("  Modal not authenticated. Running setup (opens browser)...")
+    const setup = await runProcess(["modal", "setup"])
+    await setup.exited
+  }
+  console.log(colors.green("  ✓ Modal authenticated"))
+}
+
+// =============================================================================
 // Registry
 // =============================================================================
 
-const commands: Command[] = [devCommand]
+const commands: Command[] = [setupCommand, devCommand]

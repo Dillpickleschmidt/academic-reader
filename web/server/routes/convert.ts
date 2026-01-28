@@ -73,7 +73,7 @@ convert.post("/convert/:fileId", async (c) => {
       return c.json({ error: "Failed to retrieve file" }, { status: 500 })
     }
     input = { ...baseInput, fileData: bytesResult.data, filename }
-  } else if (backendType === "local" || backendType === "runpod") {
+  } else if (backendType === "local" || backendType === "modal") {
     // Use internal URL for worker access (Docker network)
     const fileUrlResult = await tryCatch(storage.getFileUrl(originalFilePath, true))
     if (!fileUrlResult.success) {

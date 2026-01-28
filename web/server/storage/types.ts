@@ -38,8 +38,8 @@ export interface Storage {
   /** Delete all files with a given prefix (for folder cleanup) */
   deletePrefix(prefix: string): Promise<number>
 
-  /** Get a URL for accessing a file (presigned URL, or tunnel URL in runpod mode)
-   * @param internal - If true, returns internal Docker network URL (for worker access)
+  /** Get a URL for accessing a file (presigned URL)
+   * @param internal - If true, returns signed URL (for worker access)
    */
   getFileUrl(key: string, internal?: boolean): Promise<string>
 

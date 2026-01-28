@@ -1,11 +1,7 @@
 import { AwsClient } from "aws4fetch"
-import { readFileSync, existsSync } from "fs"
 import type { PresignedUrlResult } from "../types"
 import type { Storage, SaveFileOptions } from "./types"
 import { getImageMimeType } from "../utils/mime-types"
-import { env } from "../env"
-
-const TUNNEL_URL_FILE = "/tunnel/url"
 
 export interface S3Config {
   endpoint: string
@@ -38,22 +34,10 @@ export class S3Storage implements Storage {
 
   /**
    * Get a presigned URL for uploading to a specific key.
-   * In runpod mode, uses tunnel URL so external workers can reach MinIO.
    */
   async getPresignedUploadUrl(key: string): Promise<PresignedUrlResult> {
     const expiresInSeconds = 3600 // 1 hour
 
-    // In runpod mode, use tunnel URL for external worker access
-    const tunnelUrl = await this.waitForTunnelUrl()
-    if (tunnelUrl) {
-      const uploadUrl = `${tunnelUrl}/${this.config.bucket}/${key}`
-      return {
-        uploadUrl,
-        expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
-      }
-    }
-
-    // Production: use presigned S3 URL
     const url = this.getObjectUrl(key)
     url.searchParams.set("X-Amz-Expires", String(expiresInSeconds))
 
@@ -68,48 +52,7 @@ export class S3Storage implements Storage {
     }
   }
 
-  private getTunnelUrl(): string | undefined {
-    // Only use tunnel URL in runpod mode
-    if (env.BACKEND_MODE !== "runpod") return undefined
-
-    try {
-      if (existsSync(TUNNEL_URL_FILE)) {
-        const url = readFileSync(TUNNEL_URL_FILE, "utf-8").trim()
-        if (url) return url
-      }
-    } catch {
-      // Ignore errors reading tunnel file
-    }
-    return undefined
-  }
-
-  /**
-   * Wait for tunnel URL to be available (runpod mode only).
-   * Polls every 500ms for up to 30 seconds.
-   */
-  private async waitForTunnelUrl(): Promise<string | undefined> {
-    if (env.BACKEND_MODE !== "runpod") return undefined
-
-    const maxWaitMs = 30_000
-    const pollIntervalMs = 500
-    const startTime = Date.now()
-
-    while (Date.now() - startTime < maxWaitMs) {
-      const url = this.getTunnelUrl()
-      if (url) return url
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
-    }
-
-    return undefined
-  }
-
   async getFileUrl(uploadKey: string, internal?: boolean): Promise<string> {
-    // In runpod mode, wait for tunnel URL (cloudflared may still be starting)
-    const tunnelUrl = await this.waitForTunnelUrl()
-    if (tunnelUrl) {
-      return `${tunnelUrl}/${this.config.bucket}/${uploadKey}`
-    }
-
     if (!internal) {
       return `${this.config.publicUrl}/${uploadKey}`
     }

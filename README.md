@@ -7,8 +7,8 @@ Supports PDF, DOCX, XLSX, PPTX, HTML, EPUB, and images.
 ## Quick Start
 
 ```bash
-cp .env.dev.example .env.dev   # Configure dev environment
-bun run dev                    # Start development servers
+cp .env.local.example .env.local   # Configure dev environment
+bun run dev                        # Start development servers
 ```
 
 ## Backend Modes
@@ -16,12 +16,37 @@ bun run dev                    # Start development servers
 | Mode      | GPU           | File Storage | Setup                      |
 | --------- | ------------- | ------------ | -------------------------- |
 | `local`   | Your machine  | MinIO        | NVIDIA GPU + Docker        |
-| `runpod`  | Runpod cloud  | MinIO / R2   | Runpod API key + S3 config |
 | `datalab` | Datalab cloud | MinIO / R2   | Datalab API key            |
+| `modal`   | Modal cloud   | MinIO / R2   | Modal account + S3 config  |
 
-Set `BACKEND_MODE` in `.env.dev` for development.
+Set `BACKEND_MODE` in `.env.local` for development.
 
-## Architecture
+### Backend Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Server (Hono)                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  BACKEND_MODE=local       │  BACKEND_MODE=datalab    │  BACKEND_MODE=modal  │
+│  ───────────────────────  │  ──────────────────────  │  ────────────────────│
+│  LocalBackend             │  DatalabBackend          │  ModalBackend        │
+│  - Docker: marker         │  - Datalab API           │  - Modal: marker     │
+│  - Docker: lightonocr     │                          │  - Modal: lightonocr │
+│  LocalTTSBackend          │  ModalTTSBackend         │  - Modal: chandra    │
+│  - Docker: chatterbox     │  - Modal: chatterbox     │  ModalTTSBackend     │
+│  - Docker: qwen3          │  - Modal: qwen3          │  - Modal: chatterbox │
+│                           │                          │  - Modal: qwen3      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Workers:**
+- `marker` - Fast PDF/document conversion (Marker)
+- `lightonocr` - Balanced OCR conversion (LightOnOCR + vLLM)
+- `chandra` - Aggressive OCR conversion (CHANDRA + vLLM)
+- `chatterbox` - TTS synthesis (Chatterbox)
+- `qwen3` - TTS synthesis (Qwen3-TTS)
+
+## Deployment Architecture
 
 ```
                                  Browser
@@ -45,7 +70,7 @@ Set `BACKEND_MODE` in `.env.dev` for development.
                     ▼
         ┌────────── OR ──────────┐
         │                        │
-     Datalab              Runpod ◀──▶ R2
+     Datalab               Modal ◀──▶ S3/R2
 ```
 
 Frontend and API served from VPS via Dokploy. Cloudflare proxy provides DDoS protection and caching.
@@ -72,10 +97,10 @@ Each document folder contains: `original.pdf`, `content.html`, `content.md`
 ## Development
 
 ```bash
-bun run dev            # Start with mode from .env.dev
+bun run dev            # Start with mode from .env.local
 bun run dev:local      # Override to local mode
 bun run dev:datalab    # Override to datalab mode
-bun run dev:runpod     # Override to runpod mode
+bun run dev:modal      # Override to modal mode
 ```
 
 Add `--dashboard` to enable Convex dashboard at localhost:6791.
@@ -142,7 +167,7 @@ Push to main
    - `GOOGLE_CLIENT_SECRET`
    - `BETTER_AUTH_SECRET`
 
-8. **Configure R2 lifecycle rule** (runpod mode only):
+8. **Configure R2 lifecycle rule** (modal mode):
 
    ```bash
    # Auto-delete temp files after 7 days (signed-out user uploads)
@@ -186,17 +211,19 @@ For structured logging via Grafana/Loki:
 
 ## Configuration
 
-### Development (.env.dev)
+### Development (.env.local)
 
 | Variable                   | Required     | Description                            |
 | -------------------------- | ------------ | -------------------------------------- |
-| `BACKEND_MODE`             | Yes          | `local`, `runpod`, or `datalab`        |
+| `BACKEND_MODE`             | Yes          | `local`, `datalab`, or `modal`         |
 | `SITE_URL`                 | Yes          | Frontend URL (default: localhost:5173) |
 | `DATALAB_API_KEY`          | datalab      | From [datalab.to](https://datalab.to)  |
-| `RUNPOD_API_KEY`           | runpod       | From Runpod dashboard                  |
-| `RUNPOD_MARKER_ENDPOINT_ID`| runpod       | Marker conversion endpoint ID          |
-| `RUNPOD_TTS_ENDPOINT_ID`   | runpod       | TTS synthesis endpoint ID              |
-| `GOOGLE_API_KEY`           | local/runpod | For Gemini API                         |
+| `MODAL_MARKER_URL`         | modal        | Modal marker endpoint URL              |
+| `MODAL_LIGHTONOCR_URL`     | modal        | Modal lightonocr endpoint URL          |
+| `MODAL_CHANDRA_URL`        | modal        | Modal chandra endpoint URL             |
+| `MODAL_CHATTERBOX_TTS_URL` | modal        | Modal chatterbox TTS endpoint URL      |
+| `MODAL_QWEN3_TTS_URL`      | modal        | Modal qwen3 TTS endpoint URL           |
+| `GOOGLE_API_KEY`           | local/modal  | For Gemini API                         |
 
 ### Production (set in Dokploy UI)
 
@@ -204,13 +231,11 @@ For structured logging via Grafana/Loki:
 
 | Variable                      | Required | Description                             |
 | ----------------------------- | -------- | --------------------------------------- |
-| `BACKEND_MODE`                | Yes      | `datalab` or `runpod`                   |
+| `BACKEND_MODE`                | Yes      | `datalab` or `modal`                    |
 | `SITE_URL`                    | Yes      | <https://yourdomain.com>                |
 | `DATALAB_API_KEY`             | datalab  | Production API key                      |
-| `RUNPOD_API_KEY`              | runpod   | From Runpod dashboard                   |
-| `RUNPOD_MARKER_ENDPOINT_ID`   | runpod   | Marker conversion endpoint ID           |
-| `RUNPOD_TTS_ENDPOINT_ID`      | runpod   | TTS synthesis endpoint ID               |
-| `S3_*`                        | runpod   | S3/R2 credentials                       |
+| `MODAL_*_URL`                 | modal    | Modal endpoint URLs (see above)         |
+| `S3_*`                        | modal    | S3/R2 credentials                       |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No       | `http://alloy:4318` for Grafana logging |
 
 **Convex Container:**
@@ -231,5 +256,7 @@ For structured logging via Grafana/Loki:
 | `GOOGLE_CLIENT_ID`     | Google OAuth client ID     |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `BETTER_AUTH_SECRET`   | Auth encryption secret     |
+| `MODAL_TOKEN_ID`       | Modal authentication       |
+| `MODAL_TOKEN_SECRET`   | Modal authentication       |
 
-See `.env.dev.example` and `.env.production.example` for all options.
+See `.env.local.example` and `.env.production.example` for all options.

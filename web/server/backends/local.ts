@@ -12,7 +12,7 @@ const LIGHTONOCR_URL = "http://lightonocr:8001"
 /**
  * Local backend - passes through to Marker or LightOnOCR workers running in Docker.
  * Supports "fast" (Marker) and "balanced" (LightOnOCR) modes.
- * Aggressive mode requires runpod backend (CHANDRA needs >16GB VRAM).
+ * Aggressive mode requires modal backend (CHANDRA needs >16GB VRAM).
  */
 export class LocalBackend implements ConversionBackend {
   readonly name = "local"
@@ -29,7 +29,7 @@ export class LocalBackend implements ConversionBackend {
   async submitJob(input: ConversionInput): Promise<string> {
     // CHANDRA requires ~19GB+ VRAM, which won't fit on 16GB local GPUs
     if (input.processingMode === "aggressive") {
-      throw new Error("[local] Aggressive mode requires runpod backend (CHANDRA needs >16GB VRAM)")
+      throw new Error("[local] Aggressive mode requires modal backend (CHANDRA needs >16GB VRAM)")
     }
 
     // Route to appropriate worker based on processing mode

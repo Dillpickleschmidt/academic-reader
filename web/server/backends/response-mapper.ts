@@ -38,26 +38,6 @@ export interface LocalWorkerResponse {
 }
 
 /**
- * Raw response from Runpod serverless endpoints.
- */
-export interface RunpodResponse {
-  id: string
-  status: "IN_QUEUE" | "IN_PROGRESS" | "COMPLETED" | "FAILED"
-  output?: {
-    s3_result?: boolean // When true, result was uploaded to S3
-    content?: string
-    metadata?: Record<string, unknown>
-    formats?: {
-      html: string
-      markdown: string
-      chunks?: ChunkOutput
-    }
-    images?: Record<string, string>
-  }
-  error?: string
-}
-
-/**
  * Raw response from Datalab hosted API.
  */
 export interface DatalabResponse {
@@ -83,13 +63,6 @@ const LOCAL_STATUS_MAP: Record<string, JobStatus> = {
   completed: "completed",
   failed: "failed",
   cancelled: "failed",
-}
-
-const RUNPOD_STATUS_MAP: Record<string, JobStatus> = {
-  IN_QUEUE: "pending",
-  IN_PROGRESS: "processing",
-  COMPLETED: "completed",
-  FAILED: "failed",
 }
 
 const DATALAB_STATUS_MAP: Record<string, JobStatus> = {
@@ -132,47 +105,6 @@ export function mapLocalResponse(data: LocalWorkerResponse): ConversionJob {
         : undefined,
     error: data.error,
     progress: data.progress,
-  }
-}
-
-/**
- * Map a Runpod response to ConversionJob.
- * When output.s3_result is true, the actual result is in S3 and must be fetched separately.
- */
-export function mapRunpodResponse(data: RunpodResponse): ConversionJob {
-  const status = RUNPOD_STATUS_MAP[data.status] ?? "failed"
-  const isComplete = status === "completed"
-  const output = data.output
-
-  // If worker uploaded to S3, return minimal response with flag
-  if (isComplete && output?.s3_result) {
-    return {
-      jobId: data.id,
-      status,
-      s3Result: true,
-    }
-  }
-
-  return {
-    jobId: data.id,
-    status,
-    htmlContent: isComplete ? output?.formats?.html : undefined,
-    result:
-      isComplete && output
-        ? {
-            content: output.content || "",
-            metadata: output.metadata || {},
-            formats: output.formats
-              ? {
-                  html: output.formats.html,
-                  markdown: output.formats.markdown,
-                  chunks: output.formats.chunks,
-                }
-              : undefined,
-            images: output.images,
-          }
-        : undefined,
-    error: data.error,
   }
 }
 

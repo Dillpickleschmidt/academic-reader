@@ -1,31 +1,32 @@
 import type { ConversionBackend } from "./interface"
 import type { Storage } from "../storage/types"
 import { createLocalBackend } from "./local"
-import { createRunpodBackend } from "./runpod"
 import { createDatalabBackend } from "./datalab"
+import { ModalBackend } from "./modal"
 import { env } from "../env"
 
 /**
  * Create the appropriate backend based on environment configuration.
- * @param storage - Required for Runpod backend (presigned URL generation)
+ * @param storage - Required for Modal backend (presigned URL generation)
  */
 export function createBackend(storage: Storage): ConversionBackend {
   switch (env.BACKEND_MODE) {
     case "local":
       return createLocalBackend()
 
-    case "runpod":
-      return createRunpodBackend({
-        RUNPOD_MARKER_ENDPOINT_ID: env.RUNPOD_MARKER_ENDPOINT_ID,
-        RUNPOD_LIGHTONOCR_ENDPOINT_ID: env.RUNPOD_LIGHTONOCR_ENDPOINT_ID,
-        RUNPOD_CHANDRA_ENDPOINT_ID: env.RUNPOD_CHANDRA_ENDPOINT_ID,
-        RUNPOD_API_KEY: env.RUNPOD_API_KEY,
-        storage,
-      })
-
     case "datalab":
       return createDatalabBackend({
         DATALAB_API_KEY: env.DATALAB_API_KEY,
       })
+
+    case "modal":
+      return new ModalBackend(
+        {
+          marker: env.MODAL_MARKER_URL!,
+          lightonocr: env.MODAL_LIGHTONOCR_URL,
+          chandra: env.MODAL_CHANDRA_URL,
+        },
+        storage,
+      )
   }
 }

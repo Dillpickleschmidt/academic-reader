@@ -34,8 +34,8 @@ savedDocuments.get("/saved-documents/:documentId", requireAuth, async (c) => {
   const event = c.get("event")
   event.backend = env.BACKEND_MODE as
     | "local"
-    | "runpod"
     | "datalab"
+    | "modal"
   const documentId = c.req.param("documentId")
   const userId = c.get("userId")
   const storage = c.get("storage")
@@ -120,8 +120,8 @@ savedDocuments.delete(
     const event = c.get("event")
     event.backend = env.BACKEND_MODE as
       | "local"
-      | "runpod"
       | "datalab"
+      | "modal"
     const documentId = c.req.param("documentId")
     const userId = c.get("userId")
     const storage = c.get("storage")

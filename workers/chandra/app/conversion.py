@@ -2,8 +2,10 @@
 import base64
 import io
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .models import get_or_create_manager
+if TYPE_CHECKING:
+    from chandra.model import InferenceManager
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tiff", ".tif", ".bmp"}
 
@@ -20,38 +22,35 @@ def pil_to_base64(img) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def convert_file(file_path: Path, page_range: str | None = None) -> dict:
+def convert_file_with_manager(
+    file_path: Path,
+    manager: "InferenceManager",
+    page_range: str | None = None,
+) -> dict:
     """
-    Convert PDF or image file using CHANDRA.
+    Convert PDF or image file using a provided InferenceManager.
+
+    Used by Modal worker where manager is a class attribute.
 
     Args:
         file_path: Path to PDF or image file
+        manager: CHANDRA InferenceManager instance
         page_range: Optional page range string like "1-5" or "1,3,5"
 
     Returns:
-        dict with structure:
-        {
-            "content": html_content,
-            "metadata": {"page_count": N, "processor": "chandra"},
-            "formats": {
-                "html": html_content,
-                "markdown": markdown_content,
-                "chunks": {"blocks": [...]},
-            },
-            "images": {"hash_idx_img.webp": "base64...", ...}
-        }
+        dict with standard conversion result structure
     """
     suffix = file_path.suffix.lower()
 
     if suffix == ".pdf":
-        return _convert_pdf(file_path, page_range)
+        return _convert_pdf(file_path, page_range, manager)
     elif suffix in IMAGE_EXTENSIONS:
-        return _convert_image(file_path)
+        return _convert_image(file_path, manager)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
 
-def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
+def _convert_pdf(pdf_path: Path, page_range: str | None, manager: "InferenceManager") -> dict:
     """Convert a PDF file using CHANDRA with parallel batch processing."""
     import pypdfium2 as pdfium
     from chandra.model import BatchInputItem
@@ -68,9 +67,6 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
     # Load images from PDF for specified pages
     pdf_images = load_pdf_images(str(pdf_path), page_range=pages)
     total_pages = len(pdf_images)
-
-    # Get inference manager
-    manager = get_or_create_manager()
 
     # Process in batches (SDK handles parallelization internally via ThreadPoolExecutor)
     results = []
@@ -134,7 +130,7 @@ def _convert_pdf(pdf_path: Path, page_range: str | None) -> dict:
     }
 
 
-def _convert_image(image_path: Path) -> dict:
+def _convert_image(image_path: Path, manager: "InferenceManager") -> dict:
     """Convert a single image file using CHANDRA."""
     from chandra.model import BatchInputItem
     from chandra.input import load_image
@@ -146,7 +142,6 @@ def _convert_image(image_path: Path) -> dict:
     batch_item = BatchInputItem(image=img, prompt_type="ocr_layout")
 
     # Run inference
-    manager = get_or_create_manager()
     results = manager.generate([batch_item])
     result = results[0]
 

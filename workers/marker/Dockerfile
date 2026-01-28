@@ -1,4 +1,4 @@
-# Runpod PyTorch base image - PyTorch 2.8 pre-installed
+# PyTorch base image - PyTorch 2.8 pre-installed
 # CUDA 12.8 requires driver 570+ (newer drivers)
 FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
@@ -34,9 +34,7 @@ print(f'Saved to {font_path}')"
 
 EXPOSE 8000
 
-# H100 batch size optimization for Runpod
+# H100 batch size optimization
 ENV MARKER_BATCH_SIZES=h100
 
-# Default to Runpod serverless handler
-# Local dev: docker-compose overrides with "uvicorn app.main:app ..."
-CMD ["python", "-u", "-m", "app.handler"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

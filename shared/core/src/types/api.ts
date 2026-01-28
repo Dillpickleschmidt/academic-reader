@@ -1,6 +1,6 @@
 // Shared type definitions between frontend and API
 
-export type BackendType = "local" | "runpod" | "datalab"
+export type BackendType = "local" | "datalab" | "modal"
 export type ProcessingMode = "fast" | "balanced" | "aggressive"
 export type JobStatus =
   | "pending"
@@ -11,14 +11,14 @@ export type JobStatus =
 
 export interface ConversionInput {
   fileId: string
-  fileUrl?: string // For Runpod/local (S3 URL)
+  fileUrl?: string // For Modal/local (S3 URL)
   fileData?: ArrayBuffer | Buffer // For Datalab (direct upload)
   filename?: string // For Datalab (original filename)
   mimeType?: string // For determining file type
   processingMode: ProcessingMode
   useLlm: boolean // fast mode only, non-datalab
   pageRange: string // empty string = all pages
-  documentPath?: string // For Runpod S3 result upload
+  documentPath?: string // For Modal S3 result upload
 }
 
 export interface ConversionProgress {
@@ -78,7 +78,7 @@ export interface ConversionJob {
   htmlContent?: string
   error?: string
   progress?: ConversionProgress
-  s3Result?: boolean // When true, result was uploaded to S3 (Runpod only)
+  s3Result?: boolean // When true, result was uploaded to S3 (Modal only)
 }
 
 export interface UploadResult {

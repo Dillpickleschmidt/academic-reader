@@ -12,7 +12,7 @@ UPLOAD_DIR = Path(tempfile.gettempdir()) / "academic-reader-uploads"
 _site_url = os.getenv("SITE_URL", "")
 CORS_ORIGINS = [_site_url] if _site_url else ["http://localhost:5173"]
 
-# Marker batch sizes - set MARKER_BATCH_SIZES=h100 for Runpod H100 optimization
+# Marker batch sizes - set MARKER_BATCH_SIZES=h100 for H100 optimization
 # Local mode: disable pdftext multiprocessing (daemon processes can't have children)
 # H100 batch sizes match official surya defaults (designed for ~16-20GB VRAM per model)
 if os.getenv("MARKER_BATCH_SIZES") == "h100":

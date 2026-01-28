@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "fs"
 import { resolve, dirname } from "path"
-import { spawn, type Subprocess } from "bun"
+import { spawn, spawnSync, type Subprocess } from "bun"
 import type { Env } from "./types"
 
 // =============================================================================
@@ -45,6 +45,25 @@ export async function runProcess(
     stdout: "inherit",
     stderr: "inherit",
   })
+}
+
+export function runProcessSync(cmd: string[]): { success: boolean; output: string } {
+  try {
+    const result = spawnSync({
+      cmd,
+      cwd: ROOT_DIR,
+      env: getSystemEnv(),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    return {
+      success: result.exitCode === 0,
+      output: result.stdout.toString(),
+    }
+  } catch {
+    // Command not found or other spawn error
+    return { success: false, output: "" }
+  }
 }
 
 export function generateBetterAuthSecret(): string {

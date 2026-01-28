@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-const backendModeSchema = z.enum(["local", "runpod", "datalab"]).default("local")
+const backendModeSchema = z.enum(["local", "datalab", "modal"]).default("local")
 
 const baseSchema = z.object({
   // Server
@@ -31,22 +31,21 @@ const baseSchema = z.object({
   // Backend mode
   BACKEND_MODE: backendModeSchema,
 
-  // TTS Engine: Chatterbox
+  // Local TTS worker URLs (Docker)
   CHATTERBOX_TTS_WORKER_URL: z.string().url().default("http://chatterbox-tts:8001"),
-  RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID: z.string().optional(),
-
-  // TTS Engine: Qwen3
   QWEN3_TTS_WORKER_URL: z.string().url().default("http://qwen3-tts:8002"),
-  RUNPOD_QWEN3_TTS_ENDPOINT_ID: z.string().optional(),
-
-  // RunPod backend
-  RUNPOD_API_KEY: z.string().optional(),
-  RUNPOD_MARKER_ENDPOINT_ID: z.string().optional(),
-  RUNPOD_LIGHTONOCR_ENDPOINT_ID: z.string().optional(),
-  RUNPOD_CHANDRA_ENDPOINT_ID: z.string().optional(),
 
   // DataLab backend
   DATALAB_API_KEY: z.string().optional(),
+
+  // Modal backend - conversion workers
+  MODAL_MARKER_URL: z.string().url().optional(),
+  MODAL_LIGHTONOCR_URL: z.string().url().optional(),
+  MODAL_CHANDRA_URL: z.string().url().optional(),
+
+  // Modal backend - TTS workers
+  MODAL_CHATTERBOX_TTS_URL: z.string().url().optional(),
+  MODAL_QWEN3_TTS_URL: z.string().url().optional(),
 
   // Observability
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
@@ -54,24 +53,6 @@ const baseSchema = z.object({
 
 // Refinements for conditional requirements
 const envSchema = baseSchema.superRefine((data, ctx) => {
-  // RunPod mode requires RunPod credentials
-  if (data.BACKEND_MODE === "runpod") {
-    if (!data.RUNPOD_API_KEY) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "RUNPOD_API_KEY required when BACKEND_MODE=runpod",
-        path: ["RUNPOD_API_KEY"],
-      })
-    }
-    if (!data.RUNPOD_MARKER_ENDPOINT_ID) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "RUNPOD_MARKER_ENDPOINT_ID required when BACKEND_MODE=runpod",
-        path: ["RUNPOD_MARKER_ENDPOINT_ID"],
-      })
-    }
-  }
-
   // DataLab mode requires DataLab credentials
   if (data.BACKEND_MODE === "datalab") {
     if (!data.DATALAB_API_KEY) {
@@ -83,17 +64,23 @@ const envSchema = baseSchema.superRefine((data, ctx) => {
     }
   }
 
-  // TTS on cloud backends requires at least one TTS endpoint
-  if (
-    data.BACKEND_MODE !== "local" &&
-    !data.RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID &&
-    !data.RUNPOD_QWEN3_TTS_ENDPOINT_ID
-  ) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "At least one TTS endpoint required for cloud backends",
-      path: ["RUNPOD_CHATTERBOX_TTS_ENDPOINT_ID"],
-    })
+  // Modal mode requires at least the marker URL
+  if (data.BACKEND_MODE === "modal") {
+    if (!data.MODAL_MARKER_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "MODAL_MARKER_URL required when BACKEND_MODE=modal",
+        path: ["MODAL_MARKER_URL"],
+      })
+    }
+    // TTS on Modal requires at least one TTS endpoint
+    if (!data.MODAL_CHATTERBOX_TTS_URL && !data.MODAL_QWEN3_TTS_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one Modal TTS endpoint required when BACKEND_MODE=modal",
+        path: ["MODAL_CHATTERBOX_TTS_URL"],
+      })
+    }
   }
 })
 

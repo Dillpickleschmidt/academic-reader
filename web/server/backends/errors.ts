@@ -2,7 +2,7 @@
  * Simple error helpers for conversion backends.
  */
 
-export type BackendName = "local" | "runpod" | "datalab"
+export type BackendName = "local" | "datalab" | "modal"
 
 /**
  * Create a "worker not configured" error.

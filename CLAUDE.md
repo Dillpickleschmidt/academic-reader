@@ -21,17 +21,17 @@ docker compose --profile local build
 bun run typecheck
 ```
 
-### Backend Modes (set `BACKEND_MODE` in `.env.dev`)
+### Backend Modes (set `BACKEND_MODE` in `.env.local`)
 
 - `local` - Local GPU via Docker (requires NVIDIA Docker)
-- `runpod` - Runpod cloud GPU with S3/MinIO storage
 - `datalab` - Datalab API (no GPU required)
+- `modal` - Modal cloud GPU with S3/MinIO storage
 
 ### Processing Modes
 
 - `fast` - Uses Marker (layout-aware extraction)
-- `accurate` - Uses CHANDRA (vision model OCR)
-- `balanced` - Datalab-only mode
+- `balanced` - Uses LightOnOCR (vision model OCR)
+- `aggressive` - Uses CHANDRA (vision model OCR, requires modal/datalab)
 
 ## Code Conventions
 
@@ -47,7 +47,7 @@ bun run typecheck
 - `web/server/` - Hono API server
 - `shared/convex/` - Convex functions + better-auth
 - `shared/core/` - Shared UI components (shadcn/ui)
-- `workers/` - GPU workers (marker, chandra, chatterbox-tts, qwen3-tts)
+- `workers/` - GPU workers (marker, lightonocr, chandra, chatterbox-tts, qwen3-tts)
 
 ### File Organization
 
