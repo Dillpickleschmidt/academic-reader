@@ -1,6 +1,4 @@
-# PyTorch base image - PyTorch 2.8 pre-installed
-# CUDA 12.8 requires driver 570+ (newer drivers)
-FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+FROM pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime
 
 WORKDIR /app
 

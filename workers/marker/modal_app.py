@@ -1,9 +1,4 @@
 """Modal worker for Marker PDF conversion."""
-import json
-import tempfile
-from pathlib import Path
-
-import httpx
 import modal
 
 image = (
@@ -25,6 +20,11 @@ def convert(
     page_range: str | None = None,
 ) -> dict:
     """Download file, convert with Marker, upload result to S3."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    import httpx
     from marker.config.parser import ConfigParser
     from marker.converters.pdf import PdfConverter
     from marker.models import create_model_dict

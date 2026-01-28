@@ -1,11 +1,4 @@
 """Modal worker for CHANDRA conversion."""
-import json
-import subprocess
-import tempfile
-import time
-from pathlib import Path
-
-import httpx
 import modal
 
 image = (
@@ -36,6 +29,11 @@ class Chandra:
     @modal.enter()
     def start_vllm(self):
         """Start vLLM server and wait for it to be ready."""
+        import subprocess
+        import time
+
+        import httpx
+
         print("[chandra] Starting vLLM server...", flush=True)
         self.vllm_proc = subprocess.Popen(
             [
@@ -86,6 +84,11 @@ class Chandra:
         page_range: str | None = None,
     ) -> dict:
         """Download file, convert with CHANDRA, upload result to S3."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        import httpx
         from app.conversion import convert_file_with_manager
 
         # Download file

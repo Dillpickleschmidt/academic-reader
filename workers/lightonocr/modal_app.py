@@ -1,9 +1,4 @@
 """Modal worker for LightOnOCR conversion."""
-import json
-import tempfile
-from pathlib import Path
-
-import httpx
 import modal
 
 image = (
@@ -53,6 +48,11 @@ class LightOnOCR:
         page_range: str | None = None,
     ) -> dict:
         """Download file, convert with LightOnOCR, upload result to S3."""
+        import json
+        import tempfile
+        from pathlib import Path
+
+        import httpx
         from app.conversion import convert_file_with_llm
 
         # Download file
