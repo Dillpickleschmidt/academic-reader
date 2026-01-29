@@ -5,14 +5,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from chandra.model import InferenceManager
+    from vllm import LLM
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".tiff", ".tif", ".bmp"}
-
-# Parallel processing settings (tuned for H100 80GB)
-# SDK uses ThreadPoolExecutor internally with max_workers
-MAX_WORKERS = 32  # Concurrent inference threads (SDK default: min(64, batch_size))
-BATCH_SIZE = 32   # Pages per batch (CLI default for vllm: 28)
 
 
 def pil_to_base64(img) -> str:
@@ -22,99 +17,107 @@ def pil_to_base64(img) -> str:
     return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
 
-def convert_file_with_manager(
+def convert_file_with_llm(
     file_path: Path,
-    manager: "InferenceManager",
+    llm: "LLM",
     page_range: str | None = None,
 ) -> dict:
     """
-    Convert PDF or image file using a provided InferenceManager.
+    Convert PDF or image file using a direct vLLM LLM instance.
 
-    Used by Modal worker where manager is a class attribute.
-
-    Args:
-        file_path: Path to PDF or image file
-        manager: CHANDRA InferenceManager instance
-        page_range: Optional page range string like "1-5" or "1,3,5"
-
-    Returns:
-        dict with standard conversion result structure
+    Used by Modal worker where LLM is loaded as a class attribute.
     """
     suffix = file_path.suffix.lower()
 
     if suffix == ".pdf":
-        return _convert_pdf(file_path, page_range, manager)
+        return _convert_pdf_with_llm(file_path, page_range, llm)
     elif suffix in IMAGE_EXTENSIONS:
-        return _convert_image(file_path, manager)
+        return _convert_image_with_llm(file_path, llm)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
 
-def _convert_pdf(pdf_path: Path, page_range: str | None, manager: "InferenceManager") -> dict:
-    """Convert a PDF file using CHANDRA with parallel batch processing."""
-    import pypdfium2 as pdfium
-    from chandra.model import BatchInputItem
-    from chandra.input import load_pdf_images, parse_range_str
+def _run_inference_with_llm(llm: "LLM", image, prompt: str) -> tuple[str, int]:
+    """Run inference using Qwen3-VL prompt format. Returns (raw_text, token_count)."""
+    from vllm import SamplingParams
+    from chandra.model.util import scale_to_fit
+    from chandra.settings import settings
 
-    # Get total page count first
+    image = scale_to_fit(image)
+
+    formatted_prompt = (
+        "<|im_start|>user\n"
+        "<|vision_start|><|image_pad|><|vision_end|>"
+        f"{prompt}<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    )
+
+    outputs = llm.generate(
+        {"prompt": formatted_prompt, "multi_modal_data": {"image": image}},
+        sampling_params=SamplingParams(
+            temperature=0,
+            top_p=0.1,
+            max_tokens=settings.MAX_OUTPUT_TOKENS,
+        ),
+    )
+    raw = outputs[0].outputs[0].text
+    token_count = len(outputs[0].outputs[0].token_ids)
+    return raw, token_count
+
+
+def _convert_pdf_with_llm(pdf_path: Path, page_range: str | None, llm: "LLM") -> dict:
+    """Convert a PDF file using direct vLLM LLM instance."""
+    import pypdfium2 as pdfium
+    from chandra.input import load_pdf_images, parse_range_str
+    from chandra.output import parse_markdown, parse_html, parse_chunks, extract_images
+    from chandra.prompts import PROMPT_MAPPING
+    from chandra.settings import settings
+
     pdf = pdfium.PdfDocument(str(pdf_path))
     page_count = len(pdf)
     pdf.close()
 
-    # Parse page range (1-indexed from user) or default to all pages (0-indexed)
     pages = parse_range_str(page_range) if page_range else list(range(page_count))
-
-    # Load images from PDF for specified pages
     pdf_images = load_pdf_images(str(pdf_path), page_range=pages)
     total_pages = len(pdf_images)
 
-    # Process in batches (SDK handles parallelization internally via ThreadPoolExecutor)
-    results = []
-    for batch_start in range(0, total_pages, BATCH_SIZE):
-        batch_end = min(batch_start + BATCH_SIZE, total_pages)
-        batch_images = pdf_images[batch_start:batch_end]
+    prompt = PROMPT_MAPPING["ocr_layout"].replace("{bbox_scale}", str(settings.BBOX_SCALE))
 
-        # Create batch items
-        batch_items = [
-            BatchInputItem(image=img, prompt_type="ocr_layout")
-            for img in batch_images
-        ]
-
-        print(f"[chandra] Processing pages {batch_start + 1}-{batch_end} of {total_pages} (max_workers={MAX_WORKERS})", flush=True)
-
-        # SDK's generate() uses ThreadPoolExecutor internally with max_workers
-        batch_results = manager.generate(batch_items, max_workers=MAX_WORKERS)
-        results.extend(batch_results)
-
-    # Combine results from all pages
     html_parts: list[str] = []
     markdown_parts: list[str] = []
     all_chunks: list[dict] = []
     all_images: dict[str, str] = {}
 
-    for idx, result in enumerate(results):
-        # Skip pages with errors (error is a bool in BatchOutputItem)
-        if result.error:
-            print(f"[chandra] Warning: Page {idx + 1} had an error, skipping", flush=True)
+    for idx, img in enumerate(pdf_images):
+        print(f"[chandra] Processing page {idx + 1} of {total_pages}", flush=True)
+
+        try:
+            raw, token_count = _run_inference_with_llm(llm, img, prompt)
+
+            html = parse_html(raw)
+            markdown = parse_markdown(raw)
+            chunks = parse_chunks(raw, img, bbox_scale=settings.BBOX_SCALE)
+            images = extract_images(raw, chunks, img)
+
+            if html:
+                html_parts.append(html)
+            if markdown:
+                markdown_parts.append(markdown)
+
+            if chunks:
+                for chunk in chunks:
+                    chunk_with_page = dict(chunk)
+                    chunk_with_page["page"] = pages[idx]
+                    all_chunks.append(chunk_with_page)
+
+            if images:
+                for name, extracted_img in images.items():
+                    all_images[name] = pil_to_base64(extracted_img)
+
+        except Exception as e:
+            print(f"[chandra] Warning: Page {idx + 1} had an error: {e}", flush=True)
             continue
 
-        if result.html:
-            html_parts.append(result.html)
-        if result.markdown:
-            markdown_parts.append(result.markdown)
-
-        # Extract chunks if available (chunks is a list of dicts with bbox/label/content)
-        if result.chunks:
-            for chunk in result.chunks:
-                chunk_with_page = dict(chunk)
-                chunk_with_page["page"] = pages[idx]
-                all_chunks.append(chunk_with_page)
-
-        if result.images:
-            for name, img in result.images.items():
-                all_images[name] = pil_to_base64(img)
-
-    # Join pages with horizontal rule separator
     html_content = "\n<hr>\n".join(html_parts)
     markdown_content = "\n\n---\n\n".join(markdown_parts)
 
@@ -130,37 +133,34 @@ def _convert_pdf(pdf_path: Path, page_range: str | None, manager: "InferenceMana
     }
 
 
-def _convert_image(image_path: Path, manager: "InferenceManager") -> dict:
-    """Convert a single image file using CHANDRA."""
-    from chandra.model import BatchInputItem
+def _convert_image_with_llm(image_path: Path, llm: "LLM") -> dict:
+    """Convert a single image file using direct vLLM LLM instance."""
     from chandra.input import load_image
+    from chandra.output import parse_markdown, parse_html, parse_chunks, extract_images
+    from chandra.prompts import PROMPT_MAPPING
+    from chandra.settings import settings
 
-    # Load image
     img = load_image(str(image_path))
+    prompt = PROMPT_MAPPING["ocr_layout"].replace("{bbox_scale}", str(settings.BBOX_SCALE))
 
-    # Create batch item
-    batch_item = BatchInputItem(image=img, prompt_type="ocr_layout")
+    raw, token_count = _run_inference_with_llm(llm, img, prompt)
 
-    # Run inference
-    results = manager.generate([batch_item])
-    result = results[0]
+    html_content = parse_html(raw) or ""
+    markdown_content = parse_markdown(raw) or ""
+    chunks = parse_chunks(raw, img, bbox_scale=settings.BBOX_SCALE)
+    images = extract_images(raw, chunks, img)
 
-    # Extract content
-    html_content = result.html or ""
-    markdown_content = result.markdown or ""
-
-    # Extract chunks
-    chunks: list[dict] = []
-    if result.chunks:
-        for chunk in result.chunks:
+    chunk_list: list[dict] = []
+    if chunks:
+        for chunk in chunks:
             chunk_with_page = dict(chunk) if isinstance(chunk, dict) else {"content": str(chunk)}
             chunk_with_page["page"] = 1
-            chunks.append(chunk_with_page)
+            chunk_list.append(chunk_with_page)
 
     all_images: dict[str, str] = {}
-    if result.images:
-        for name, img in result.images.items():
-            all_images[name] = pil_to_base64(img)
+    if images:
+        for name, extracted_img in images.items():
+            all_images[name] = pil_to_base64(extracted_img)
 
     return {
         "content": html_content,
@@ -168,7 +168,7 @@ def _convert_image(image_path: Path, manager: "InferenceManager") -> dict:
         "formats": {
             "html": html_content,
             "markdown": markdown_content,
-            "chunks": {"blocks": chunks} if chunks else None,
+            "chunks": {"blocks": chunk_list} if chunk_list else None,
         },
         "images": all_images if all_images else None,
     }

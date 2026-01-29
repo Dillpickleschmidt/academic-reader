@@ -22,60 +22,36 @@ image = (
 
 app = modal.App("chandra", image=image)
 
+snapshot_key = "v1"
 
-@app.cls(gpu="H100", cpu=2.0, memory=32768, timeout=1800)
+with image.imports():
+    from vllm import LLM
+
+
+@app.cls(
+    gpu="H100",
+    cpu=2.0,
+    memory=32768,
+    timeout=1800,
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
+)
 class Chandra:
-    """CHANDRA worker with persistent vLLM server."""
+    """CHANDRA worker with persistent vLLM model."""
 
-    @modal.enter()
-    def start_vllm(self):
-        """Start vLLM server and wait for it to be ready."""
-        import subprocess
-        import time
-
-        import httpx
-
-        print("[chandra] Starting vLLM server...", flush=True)
-        self.vllm_proc = subprocess.Popen(
-            [
-                "vllm", "serve", "datalab-to/chandra",
-                "--dtype", "bfloat16",
-                "--max-model-len", "8192",
-                "--max-num-seqs", "256",
-                "--gpu-memory-utilization", "0.9",
-                "--port", "8000",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+    @modal.enter(snap=True)
+    def load_model(self):
+        """Load vLLM model for GPU snapshotting."""
+        print("[chandra] Loading vLLM model...", flush=True)
+        self.llm = LLM(
+            model="datalab-to/chandra",
+            dtype="bfloat16",
+            max_model_len=8192,
+            limit_mm_per_prompt={"image": 1},
+            trust_remote_code=True,
+            gpu_memory_utilization=0.9,
         )
-
-        # Wait for server to be ready
-        base_url = "http://localhost:8000/v1"
-        start_time = time.time()
-        while time.time() - start_time < 300:
-            try:
-                resp = httpx.get(f"{base_url}/models", timeout=5)
-                if resp.status_code == 200:
-                    print(f"[chandra] vLLM ready in {time.time() - start_time:.1f}s", flush=True)
-                    break
-            except httpx.RequestError:
-                pass
-            time.sleep(2)
-        else:
-            raise RuntimeError("vLLM server did not start in time")
-
-        # Initialize InferenceManager
-        from chandra.model import InferenceManager
-        self.manager = InferenceManager(method="vllm")
-        print("[chandra] InferenceManager initialized", flush=True)
-
-    @modal.exit()
-    def stop_vllm(self):
-        """Stop vLLM server on container shutdown."""
-        if hasattr(self, "vllm_proc") and self.vllm_proc:
-            self.vllm_proc.terminate()
-            self.vllm_proc.wait(timeout=30)
-            print("[chandra] vLLM server stopped", flush=True)
+        print(f"[chandra] Model loaded, snapshotting {snapshot_key}", flush=True)
 
     @modal.method()
     def convert(
@@ -90,7 +66,7 @@ class Chandra:
         from pathlib import Path
 
         import httpx
-        from app.conversion import convert_file_with_manager
+        from app.conversion import convert_file_with_llm
 
         # Download file
         suffix = Path(file_url.split("?")[0]).suffix or ".pdf"
@@ -101,7 +77,7 @@ class Chandra:
             path = Path(f.name)
 
         try:
-            result = convert_file_with_manager(path, self.manager, page_range)
+            result = convert_file_with_llm(path, self.llm, page_range)
             httpx.put(
                 result_upload_url,
                 content=json.dumps(result),

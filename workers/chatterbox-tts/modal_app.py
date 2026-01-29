@@ -27,17 +27,29 @@ image = (
 
 app = modal.App("chatterbox-tts", image=image)
 
+# Change this to invalidate the snapshot cache
+snapshot_key = "v1"
 
-@app.cls(gpu="A10G", cpu=2.0, memory=8192, timeout=300)
+# Import in global scope so imports can be snapshot
+with image.imports():
+    import torch
+    from chatterbox.tts import ChatterboxTTS as ChatterboxModel
+    from torchaudio.pipelines import MMS_FA
+
+
+@app.cls(
+    gpu="A10G",
+    cpu=2.0,
+    memory=8192,
+    timeout=300,
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
+)
 class ChatterboxTTS:
     """Chatterbox TTS worker with persistent model."""
 
-    @modal.enter()
+    @modal.enter(snap=True)
     def load_model(self):
-        import torch
-        from chatterbox.tts import ChatterboxTTS as ChatterboxModel
-        from torchaudio.pipelines import MMS_FA
-
         print("[chatterbox-tts] Loading Chatterbox model...", flush=True)
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = ChatterboxModel.from_pretrained(device)
@@ -49,7 +61,7 @@ class ChatterboxTTS:
         self.align_aligner = MMS_FA.get_aligner()
         self.align_sample_rate = MMS_FA.sample_rate
         self.device = device
-        print("[chatterbox-tts] Ready", flush=True)
+        print(f"[chatterbox-tts] Ready, snapshotting {snapshot_key}", flush=True)
 
     @modal.method()
     def synthesize(self, text: str, voice_id: str) -> dict:
@@ -57,7 +69,6 @@ class ChatterboxTTS:
         import base64
         import io
         import numpy as np
-        import torch
         from scipy.io import wavfile
 
         # Voice configs
@@ -108,7 +119,6 @@ class ChatterboxTTS:
 
     def _get_word_timestamps(self, audio_tensor, text: str, sr: int) -> list[dict]:
         """Compute word-level timestamps using MMS alignment."""
-        import torch
         import torchaudio.functional as F
 
         # Resample to MMS sample rate (16kHz)

@@ -14,73 +14,96 @@ image = (
 
 app = modal.App("marker", image=image)
 
+# Change this to invalidate the snapshot cache
+snapshot_key = "v1"
 
-@app.function(gpu="A100-40GB", cpu=4.0, memory=16384, timeout=1800)
-def convert(
-    file_url: str,
-    result_upload_url: str,
-    use_llm: bool = False,
-    page_range: str | None = None,
-) -> dict:
-    """Download file, convert with Marker, upload result to S3."""
-    import json
+# Import in global scope so imports can be snapshot
+with image.imports():
     import sys
-    import tempfile
-    from pathlib import Path
-
     sys.path.insert(0, "/root")
     from shared import extract_chunks, encode_images
-
-    import httpx
     from marker.config.parser import ConfigParser
     from marker.converters.pdf import PdfConverter
     from marker.models import create_model_dict
     from marker.renderers.html import HTMLRenderer
     from marker.renderers.markdown import MarkdownRenderer
 
-    # Download
-    suffix = Path(file_url.split("?")[0]).suffix or ".pdf"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
-        r = httpx.get(file_url, follow_redirects=True, timeout=60.0)
-        r.raise_for_status()
-        f.write(r.content)
-        path = Path(f.name)
 
-    try:
-        # Convert
-        config = {"output_format": "html", "use_llm": use_llm}
-        if page_range:
-            config["page_range"] = page_range
-        parser = ConfigParser(config)
-        converter = PdfConverter(
-            config=parser.generate_config_dict(),
-            artifact_dict=create_model_dict(),
-            processor_list=parser.get_processors(),
-            renderer=parser.get_renderer(),
-        )
-        doc = converter.build_document(str(path))
+@app.cls(
+    gpu="A100-40GB",
+    cpu=4.0,
+    memory=16384,
+    timeout=1800,
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
+)
+class Marker:
+    """Marker worker with persistent models."""
 
-        html = HTMLRenderer({"add_block_ids": True})(doc)
-        md = MarkdownRenderer()(doc)
-        chunks = extract_chunks(doc)
+    @modal.enter(snap=True)
+    def load_models(self):
+        print("[marker] Loading models...", flush=True)
+        self.model_dict = create_model_dict()
+        print(f"[marker] Models loaded, snapshotting {snapshot_key}", flush=True)
 
-        result = {
-            "content": html.html,
-            "metadata": html.metadata,
-            "formats": {"html": html.html, "markdown": md.markdown, "chunks": chunks},
-            "images": encode_images(html.images) if html.images else None,
-        }
+    @modal.method()
+    def convert(
+        self,
+        file_url: str,
+        result_upload_url: str,
+        use_llm: bool = False,
+        page_range: str | None = None,
+    ) -> dict:
+        """Download file, convert with Marker, upload result to S3."""
+        import json
+        import tempfile
+        from pathlib import Path
 
-        # Upload to S3
-        httpx.put(
-            result_upload_url,
-            content=json.dumps(result),
-            headers={"Content-Type": "application/json"},
-            timeout=120.0,
-        ).raise_for_status()
-        return {"s3_result": True}
-    finally:
-        path.unlink(missing_ok=True)
+        import httpx
+
+        # Download
+        suffix = Path(file_url.split("?")[0]).suffix or ".pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+            r = httpx.get(file_url, follow_redirects=True, timeout=60.0)
+            r.raise_for_status()
+            f.write(r.content)
+            path = Path(f.name)
+
+        try:
+            # Convert
+            config = {"output_format": "html", "use_llm": use_llm}
+            if page_range:
+                config["page_range"] = page_range
+            parser = ConfigParser(config)
+            converter = PdfConverter(
+                config=parser.generate_config_dict(),
+                artifact_dict=self.model_dict,
+                processor_list=parser.get_processors(),
+                renderer=parser.get_renderer(),
+            )
+            doc = converter.build_document(str(path))
+
+            html = HTMLRenderer({"add_block_ids": True})(doc)
+            md = MarkdownRenderer()(doc)
+            chunks = extract_chunks(doc)
+
+            result = {
+                "content": html.html,
+                "metadata": html.metadata,
+                "formats": {"html": html.html, "markdown": md.markdown, "chunks": chunks},
+                "images": encode_images(html.images) if html.images else None,
+            }
+
+            # Upload to S3
+            httpx.put(
+                result_upload_url,
+                content=json.dumps(result),
+                headers={"Content-Type": "application/json"},
+                timeout=120.0,
+            ).raise_for_status()
+            return {"s3_result": True}
+        finally:
+            path.unlink(missing_ok=True)
 
 
 # HTTP API for job submission and polling
@@ -91,6 +114,7 @@ def api():
     from pydantic import BaseModel
 
     web = FastAPI()
+    worker = Marker()
 
     class ConvertRequest(BaseModel):
         file_url: str
@@ -100,7 +124,7 @@ def api():
 
     @web.post("/run")
     async def run(req: ConvertRequest):
-        call = await convert.spawn.aio(
+        call = await worker.convert.spawn.aio(
             req.file_url, req.result_upload_url, req.use_llm, req.page_range
         )
         return {"id": call.object_id}

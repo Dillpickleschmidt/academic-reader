@@ -23,14 +23,27 @@ image = (
 
 app = modal.App("lightonocr", image=image)
 
+# Change this to invalidate the snapshot cache
+snapshot_key = "v1"
 
-@app.cls(gpu="H100", cpu=2.0, memory=16384, timeout=1800)
+# Import in global scope so imports can be snapshot
+with image.imports():
+    from vllm import LLM
+
+
+@app.cls(
+    gpu="H100",
+    cpu=2.0,
+    memory=16384,
+    timeout=1800,
+    enable_memory_snapshot=True,
+    experimental_options={"enable_gpu_snapshot": True},
+)
 class LightOnOCR:
     """LightOnOCR worker with persistent vLLM model."""
 
-    @modal.enter()
+    @modal.enter(snap=True)
     def load_model(self):
-        from vllm import LLM
         print("[lightonocr] Loading vLLM model...", flush=True)
         self.llm = LLM(
             "lightonai/LightOnOCR-2-1B-bbox-soup",
@@ -39,7 +52,7 @@ class LightOnOCR:
             limit_mm_per_prompt={"image": 1},
             gpu_memory_utilization=0.9,
         )
-        print("[lightonocr] Model loaded", flush=True)
+        print(f"[lightonocr] Model loaded, snapshotting {snapshot_key}", flush=True)
 
     @modal.method()
     def convert(
