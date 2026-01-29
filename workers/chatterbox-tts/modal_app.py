@@ -44,7 +44,10 @@ class ChatterboxTTS:
         print(f"[chatterbox-tts] Model loaded on {device}", flush=True)
 
         print("[chatterbox-tts] Loading MMS alignment model...", flush=True)
-        self.align_model, self.align_labels = MMS_FA.get_model().to(device), MMS_FA.get_labels()
+        self.align_model = MMS_FA.get_model().to(device)
+        self.align_tokenizer = MMS_FA.get_tokenizer()
+        self.align_aligner = MMS_FA.get_aligner()
+        self.align_sample_rate = MMS_FA.sample_rate
         self.device = device
         print("[chatterbox-tts] Ready", flush=True)
 
@@ -108,60 +111,57 @@ class ChatterboxTTS:
         import torch
         import torchaudio.functional as F
 
-        # Resample to 16kHz for MMS
-        if sr != 16000:
-            audio_16k = F.resample(audio_tensor.unsqueeze(0), sr, 16000).squeeze(0)
+        # Resample to MMS sample rate (16kHz)
+        if sr != self.align_sample_rate:
+            audio_resampled = F.resample(audio_tensor.unsqueeze(0), sr, self.align_sample_rate).squeeze(0)
         else:
-            audio_16k = audio_tensor
+            audio_resampled = audio_tensor
 
-        # Normalize
-        audio_16k = audio_16k / audio_16k.abs().max()
+        # Ensure correct shape [1, T]
+        if audio_resampled.dim() == 1:
+            audio_resampled = audio_resampled.unsqueeze(0)
 
-        # Get emissions
+        waveform = audio_resampled.to(self.device)
+
+        # Generate emissions
         with torch.inference_mode():
-            emissions, _ = self.align_model(audio_16k.unsqueeze(0).to(self.device))
+            emission, _ = self.align_model(waveform)
 
-        # Tokenize text
-        words = text.split()
-        transcript = "".join(words).upper()
+        # Normalize text: MMS expects lowercase, only a-z and apostrophe
+        normalized = text.lower()
+        normalized = "".join(c if c.isalpha() or c in "' " else " " for c in normalized)
+        words = normalized.split()
 
-        # Create token indices
-        dictionary = {c: i for i, c in enumerate(self.align_labels)}
-        tokens = [dictionary.get(c, dictionary.get("<unk>", 0)) for c in transcript]
-
-        if not tokens:
+        if not words:
             return []
 
-        # Align
-        from torchaudio.functional import forced_align
-        alignments, scores = forced_align(emissions, torch.tensor([tokens]).to(self.device), blank=0)
+        # Tokenize and align using bundle's high-level APIs
+        tokens = self.align_tokenizer(words)
+        token_spans = self.align_aligner(emission[0], tokens)
 
-        # Convert frame indices to timestamps
-        frame_duration_ms = 1000 * 320 / 16000  # MMS frame duration
+        # Convert frame indices to milliseconds
+        num_frames = emission.shape[1]
+        ratio = waveform.shape[1] / num_frames / self.align_sample_rate
 
-        timestamps = []
-        char_idx = 0
-        for word in words:
-            word_chars = word.upper()
-            start_frame = None
-            end_frame = None
+        results = []
+        for i, span in enumerate(token_spans):
+            # Handle both single TokenSpan and list of TokenSpans per word
+            if isinstance(span, list):
+                word_start = span[0].start if span else 0
+                word_end = span[-1].end if span else 0
+            else:
+                word_start = span.start
+                word_end = span.end
 
-            for c in word_chars:
-                if char_idx < len(alignments[0]):
-                    frame = alignments[0][char_idx].item()
-                    if start_frame is None:
-                        start_frame = frame
-                    end_frame = frame
-                char_idx += 1
+            start_ms = word_start * ratio * 1000
+            end_ms = word_end * ratio * 1000
+            results.append({
+                "word": words[i],
+                "startMs": round(start_ms, 1),
+                "endMs": round(end_ms, 1),
+            })
 
-            if start_frame is not None and end_frame is not None:
-                timestamps.append({
-                    "word": word,
-                    "startMs": start_frame * frame_duration_ms,
-                    "endMs": (end_frame + 1) * frame_duration_ms,
-                })
-
-        return timestamps
+        return results
 
     def _compress(
         self,
