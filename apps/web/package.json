@@ -1,0 +1,45 @@
+{
+	"name": "@academic-reader/web",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev --port 5173",
+		"generate-routes": "tsr generate",
+		"build": "vite build",
+		"preview": "vite preview",
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit",
+		"format": "biome format",
+		"lint": "biome lint",
+		"check": "bun run typecheck && biome check"
+	},
+	"dependencies": {
+		"@academic-reader/convex": "workspace:*",
+		"@convex-dev/better-auth": "^0.10.9",
+		"@tailwindcss/vite": "^4.1.18",
+		"@tanstack/router-plugin": "^1.133.21",
+		"@tanstack/solid-router": "latest",
+		"@tanstack/solid-router-devtools": "latest",
+		"better-auth": "1.4.9",
+		"convex": "^1.31.7",
+		"convex-solidjs": "^0.0.3",
+		"solid-js": "^1.9.12",
+		"tailwindcss": "^4.1.18"
+	},
+	"devDependencies": {
+		"@solidjs/testing-library": "^0.8.10",
+		"@tanstack/devtools-vite": "latest",
+		"@tanstack/router-cli": "^1.133.21",
+		"@tanstack/router-plugin": "latest",
+		"jsdom": "^28.1.0",
+		"typescript": "^6.0.2",
+		"vite": "^8.0.0",
+		"vite-plugin-solid": "^2.11.12",
+		"vitest": "^4.1.5"
+	},
+	"trustedDependencies": [
+		"@tailwindcss/oxide",
+		"esbuild",
+		"lightningcss"
+	]
+}

@@ -1,0 +1,29 @@
+{
+	"name": "@academic-reader/convex",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "CONVEX_AGENT_MODE=anonymous convex dev",
+		"codegen": "convex codegen",
+		"check": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json"
+	},
+	"exports": {
+		"./api": {
+			"types": "./convex/_generated/api.d.ts",
+			"default": "./convex/_generated/api.js"
+		},
+		"./data-model": {
+			"types": "./convex/_generated/dataModel.d.ts",
+			"default": "./convex/_generated/dataModel.d.ts"
+		}
+	},
+	"dependencies": {
+		"@convex-dev/better-auth": "^0.10.9",
+		"better-auth": "1.4.9",
+		"convex": "^1.31.7"
+	},
+	"devDependencies": {
+		"@types/node": "^24.10.1",
+		"typescript": "^6.0.2"
+	}
+}

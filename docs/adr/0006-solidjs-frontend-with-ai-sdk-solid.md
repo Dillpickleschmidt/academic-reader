@@ -1,0 +1,3 @@
+# Use SolidJS for the frontend
+
+Academic Reader uses stable SolidJS 1.x for the rewrite so the UI can express fine-grained document overlays, side-by-side views, and live event updates while staying compatible with solid-ui, Kobalte, and the broader Solid component ecosystem. The web app uses TanStack Solid Router with file-based routing rather than TanStack Start, because the API is a separate Hono-on-Bun service. AI chat UI uses the community Solid integration listed by the AI SDK project, `@kodehort/ai-sdk-solid`, directly in chat components. We will not add a wrapper or adapter unless the code shows real pressure for one; persisted chat records should still use durable AI SDK-compatible message shapes rather than transient hook/component state.

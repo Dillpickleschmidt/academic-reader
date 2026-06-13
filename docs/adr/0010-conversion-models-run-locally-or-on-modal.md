@@ -1,0 +1,3 @@
+# Conversion models run locally or on Modal
+
+Academic Reader removes Datalab from v1 conversion. The reader chooses a Conversion Model—Marker, LightOnOCR, or Chandra—in Processing Configuration, while deployment configuration controls whether each model is available locally or on Modal. Model configs can exist before the model is enabled, but a model is disabled in the UI until its adapter, worker execution path, and fine-grained Processing Events are implemented and tested. This keeps the UI model-centric and keeps execution location out of the reader-facing domain language without forcing bad downstream assumptions for unfinished models.

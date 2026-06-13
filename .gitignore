@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+.bun
+
+# Build/test output
+dist
+dist-ssr
+coverage
+.vite
+.turbo
+.tanstack
+
+# Local environment and secrets
+.env
+.env.*
+!.env*.example
+
+# Convex local deployment state
+.convex
+packages/convex/.convex
+
+# OS/editor/runtime noise
+.DS_Store
+.vscode/
+*.log
