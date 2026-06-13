@@ -8,7 +8,7 @@ import {
 	sourceDocumentMaxSizeBytes,
 	sourceDocumentMimeTypeForFile,
 } from "@academic-reader/shared/uploads";
-import { useMutation, useQuery } from "convex-solidjs";
+import { useQuery } from "convex-solidjs";
 import { createEffect, For, Show } from "solid-js";
 import { authClient } from "../../lib/auth-client";
 import { useConvexAuth } from "../../providers/convex";
@@ -124,9 +124,6 @@ export function ConfigureProcessingFlow(props: {
 			enabled: convexAuth.isAuthenticated(),
 		}),
 	);
-	const createSourceDocument = useMutation(
-		api.api.sourceDocuments.createFromPromotedUpload,
-	);
 	const state = props.state;
 
 	createEffect(() => {
@@ -177,43 +174,50 @@ export function ConfigureProcessingFlow(props: {
 		state.setIsStarting(true);
 
 		try {
-			const promoteResponse = await fetch("/api/uploads/promote", {
+			const { data } = await authClient.convex.token({
+				fetchOptions: { throw: false },
+			});
+			const token = data?.token;
+			if (!token)
+				throw new Error("Could not authenticate Source Document creation");
+
+			const response = await fetch("/api/source-documents", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${token}`,
+				},
 				body: JSON.stringify({
 					temporaryUploadId,
 					filename: selectedFile.name,
+					mimeType,
+					sizeBytes: selectedFile.size,
+					processingConfiguration: {
+						conversionModel: state.conversionModel(),
+						pageRange: state.pageRange(),
+						markerOptions: {
+							forceOcr: state.forceOcr(),
+							useLlm: state.useLlm(),
+						},
+						narration: {
+							enabled: state.narrationEnabled(),
+							voice: state.narrationVoice(),
+						},
+					},
 				}),
 			});
-			const promotedUpload = await promoteResponse.json();
+			const payload = await response.json();
 
-			if (!promoteResponse.ok) {
-				throw new Error(
-					promotedUpload.error || "Could not promote temporary upload",
-				);
+			if (!response.ok) {
+				throw new Error(payload.error || "Could not start processing");
 			}
 
-			await createSourceDocument.mutate({
-				filename: selectedFile.name,
-				mimeType,
-				sizeBytes: selectedFile.size,
-				storageObjectKey: promotedUpload.objectKey,
-				processingConfiguration: {
-					conversionModel: state.conversionModel(),
-					pageRange: state.pageRange(),
-					markerOptions: {
-						forceOcr: state.forceOcr(),
-						useLlm: state.useLlm(),
-					},
-					narration: {
-						enabled: state.narrationEnabled(),
-						voice: state.narrationVoice(),
-					},
-				},
-			});
-
 			clearSourceDocumentDraft(state);
-			state.setSuccess("Source Document created and processing started.");
+			state.setSuccess(
+				payload.processingStarted
+					? "Source Document created and processing started."
+					: "Source Document created, but Marker did not start. Check Processing Events.",
+			);
 		} catch (startError) {
 			state.setError(
 				startError instanceof Error
@@ -368,8 +372,8 @@ export function ConfigureProcessingFlow(props: {
 					<aside class="rounded-3xl border border-stone-800 bg-stone-900/50 p-6">
 						<h3 class="font-semibold text-xl">Create Source Document</h3>
 						<p class="mt-2 text-sm text-stone-400">
-							Processing starts only after this temporary upload is promoted
-							into document storage.
+							Processing starts only after the API creates the Source Document
+							and hands it to Marker.
 						</p>
 
 						<div class="mt-6 rounded-xl border border-stone-800 bg-stone-950 p-4 text-sm">

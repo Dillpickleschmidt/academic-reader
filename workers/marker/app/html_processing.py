@@ -1,0 +1,34 @@
+import base64
+from io import BytesIO
+
+
+def inject_image_dimensions(html: str, images: dict) -> str:
+    if not images:
+        return html
+
+    for image_name, pil_image in images.items():
+        width, height = pil_image.width, pil_image.height
+        html = html.replace(
+            f"src='{image_name}'",
+            f"src='{image_name}' width='{width}' height='{height}'",
+        )
+        html = html.replace(
+            f'src="{image_name}"',
+            f'src="{image_name}" width="{width}" height="{height}"',
+        )
+
+    return html
+
+
+def pil_to_base64(pil_image) -> str:
+    buffer = BytesIO()
+    if pil_image.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+        pil_image = pil_image.convert("RGB")
+    pil_image.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+
+def images_to_base64(images: dict) -> dict[str, str]:
+    if not images:
+        return {}
+    return {name: pil_to_base64(img) for name, img in images.items()}

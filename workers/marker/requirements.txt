@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+httpx
+marker-pdf[full]
+python-dotenv

@@ -1,5 +1,15 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+	blockTypeValidator,
+	normalizedBoundingBoxValidator,
+} from "./blockValidators";
+import {
+	processingEventEmitterValidator,
+	processingEventProgressValidator,
+	processingEventSeverityValidator,
+	processingEventTypeValidator,
+} from "./processingEventValidators";
 
 export default defineSchema({
 	sourceDocuments: defineTable({
@@ -29,6 +39,7 @@ export default defineSchema({
 			v.literal("created"),
 			v.literal("processing"),
 			v.literal("ready"),
+			v.literal("readyWithWarnings"),
 			v.literal("failed"),
 		),
 		createdAt: v.number(),
@@ -36,6 +47,46 @@ export default defineSchema({
 	})
 		.index("by_reader", ["readerId"])
 		.index("by_reader_status", ["readerId", "processingStatus"]),
+
+	pages: defineTable({
+		sourceDocumentId: v.id("sourceDocuments"),
+		physicalPageNumber: v.number(),
+		width: v.number(),
+		height: v.number(),
+	})
+		.index("by_source_document", ["sourceDocumentId"])
+		.index("by_source_document_physical_page", [
+			"sourceDocumentId",
+			"physicalPageNumber",
+		]),
+
+	blocks: defineTable({
+		sourceDocumentId: v.id("sourceDocuments"),
+		blockId: v.string(),
+		blockType: blockTypeValidator,
+		rawBlockType: v.string(),
+		order: v.number(),
+		contentHtml: v.string(),
+		contentMarkdown: v.optional(v.string()),
+		pageNumber: v.optional(v.number()),
+		normalizedBoundingBox: v.optional(normalizedBoundingBoxValidator),
+	})
+		.index("by_source_document", ["sourceDocumentId"])
+		.index("by_source_document_order", ["sourceDocumentId", "order"])
+		.index("by_source_document_block", ["sourceDocumentId", "blockId"]),
+
+	processingEvents: defineTable({
+		sourceDocumentId: v.id("sourceDocuments"),
+		type: processingEventTypeValidator,
+		emitter: processingEventEmitterValidator,
+		severity: processingEventSeverityValidator,
+		message: v.string(),
+		emittedAt: v.number(),
+		pageNumber: v.optional(v.number()),
+		blockId: v.optional(v.string()),
+		progress: v.optional(processingEventProgressValidator),
+		data: v.optional(v.record(v.string(), v.any())),
+	}).index("by_source_document", ["sourceDocumentId"]),
 
 	configurationPreferences: defineTable({
 		readerId: v.string(),

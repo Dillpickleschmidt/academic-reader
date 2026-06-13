@@ -1,9 +1,11 @@
+import type { Id } from "@academic-reader/convex/data-model";
 import { createSignal, For, Show } from "solid-js";
+import { ProcessingEventsPanel } from "./ProcessingEventsPanel";
 import { UploadPrompt } from "./SourceDocumentCreationFlow";
 import type { SourceDocumentCreation } from "./source-document-creation";
 
 export type SourceDocumentListItem = {
-	_id: string;
+	_id: Id<"sourceDocuments">;
 	filename: string;
 	processingStatus: string;
 	updatedAt: number;
@@ -87,17 +89,23 @@ export function SignedInWorkbench(props: {
 							<div class="mt-8 divide-y divide-stone-800 rounded-2xl border border-stone-800">
 								<For each={props.documents}>
 									{(document) => (
-										<div class="flex items-center justify-between gap-4 p-4">
-											<div>
-												<p class="font-medium">{document.filename}</p>
-												<p class="text-stone-500 text-sm">
-													Updated{" "}
-													{new Date(document.updatedAt).toLocaleString()}
-												</p>
+										<div class="p-4">
+											<div class="flex items-center justify-between gap-4">
+												<div>
+													<p class="font-medium">{document.filename}</p>
+													<p class="text-stone-500 text-sm">
+														Updated{" "}
+														{new Date(document.updatedAt).toLocaleString()}
+													</p>
+												</div>
+												<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-400 text-xs">
+													{document.processingStatus}
+												</span>
 											</div>
-											<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-400 text-xs">
-												{document.processingStatus}
-											</span>
+											<ProcessingEventsPanel
+												sourceDocumentId={document._id}
+												isLive={document.processingStatus === "processing"}
+											/>
 										</div>
 									)}
 								</For>

@@ -7,6 +7,14 @@ export const list = query({
 	handler: (ctx) => SourceDocuments.listSourceDocuments(ctx),
 });
 
+export const get = query({
+	args: {
+		sourceDocumentId: v.id("sourceDocuments"),
+	},
+	handler: (ctx, args) =>
+		SourceDocuments.getSourceDocument(ctx, args.sourceDocumentId),
+});
+
 export const createFromPromotedUpload = mutation({
 	args: {
 		filename: v.string(),
@@ -28,4 +36,31 @@ export const createFromPromotedUpload = mutation({
 	},
 	handler: (ctx, args) =>
 		SourceDocuments.createSourceDocumentFromPromotedUpload(ctx, args),
+});
+
+export const getProcessingInputForApi = query({
+	args: {
+		serviceSecret: v.string(),
+		sourceDocumentId: v.id("sourceDocuments"),
+	},
+	handler: (ctx, args) => SourceDocuments.getProcessingInputForApi(ctx, args),
+});
+
+export const finishProcessingFromApi = mutation({
+	args: {
+		serviceSecret: v.string(),
+		sourceDocumentId: v.id("sourceDocuments"),
+		status: v.union(v.literal("ready"), v.literal("readyWithWarnings")),
+		pageCount: v.number(),
+	},
+	handler: (ctx, args) => SourceDocuments.finishProcessingFromApi(ctx, args),
+});
+
+export const markProcessingFailedFromApi = mutation({
+	args: {
+		serviceSecret: v.string(),
+		sourceDocumentId: v.id("sourceDocuments"),
+	},
+	handler: (ctx, args) =>
+		SourceDocuments.markProcessingFailedFromApi(ctx, args),
 });

@@ -6,7 +6,9 @@
 		"check": "tsc --noEmit"
 	},
 	"exports": {
+		"./blocks": "./src/blocks.ts",
 		"./processing": "./src/processing.ts",
+		"./processing-events": "./src/processing-events.ts",
 		"./uploads": "./src/uploads.ts"
 	},
 	"devDependencies": {

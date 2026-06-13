@@ -13,6 +13,12 @@ const convexEnv = parseEnvFile(convexEnvPath);
 const nextEnv = {
 	...rootEnv,
 	SITE_URL: rootEnv.SITE_URL ?? "http://localhost:5173",
+	CONVEX_URL: firstValidUrl(
+		rootEnv.CONVEX_URL,
+		convexEnv.CONVEX_URL,
+		convexEnv.VITE_CONVEX_URL,
+		"http://localhost:3210",
+	),
 	VITE_CONVEX_URL: firstValidUrl(
 		rootEnv.VITE_CONVEX_URL,
 		convexEnv.VITE_CONVEX_URL,
@@ -35,8 +41,12 @@ const nextEnv = {
 	S3_BUCKET: rootEnv.S3_BUCKET ?? "academic-reader",
 	MINIO_ROOT_USER: rootEnv.MINIO_ROOT_USER ?? "minioadmin",
 	MINIO_ROOT_PASSWORD: rootEnv.MINIO_ROOT_PASSWORD ?? "minioadmin",
+	CONVERSION_BACKEND: rootEnv.CONVERSION_BACKEND ?? "local",
+	MODAL_MARKER_URL: rootEnv.MODAL_MARKER_URL,
 	BETTER_AUTH_SECRET:
 		rootEnv.BETTER_AUTH_SECRET ?? randomBytes(32).toString("hex"),
+	API_TO_CONVEX_SERVICE_SECRET:
+		rootEnv.API_TO_CONVEX_SERVICE_SECRET ?? randomBytes(32).toString("hex"),
 	CONVEX_DEPLOYMENT: convexEnv.CONVEX_DEPLOYMENT,
 	GOOGLE_CLIENT_ID: rootEnv.GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET: rootEnv.GOOGLE_CLIENT_SECRET,
@@ -92,7 +102,11 @@ function renderEnv(env: Record<string, string | undefined>) {
 }
 
 async function syncConvexEnv(env: Record<string, string | undefined>) {
-	const keys = ["SITE_URL", "BETTER_AUTH_SECRET"];
+	const keys = [
+		"SITE_URL",
+		"BETTER_AUTH_SECRET",
+		"API_TO_CONVEX_SERVICE_SECRET",
+	];
 	const convexCwd = resolve(root, "packages/convex");
 	let didSync = false;
 

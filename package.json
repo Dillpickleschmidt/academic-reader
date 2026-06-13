@@ -10,8 +10,7 @@
 	"scripts": {
 		"setup:dev": "bun scripts/setup-dev.ts",
 		"dev": "bun scripts/dev.ts",
-		"dev:web": "cd apps/web && bun run dev",
-		"dev:api": "cd apps/api && bun run dev",
+		"deploy:workers": "bun scripts/deploy-workers.ts",
 		"dev:convex": "cd packages/convex && bun run dev",
 		"check": "bun run check:web && bun run check:api && bun run check:convex && bun run check:shared",
 		"check:web": "cd apps/web && bun run check",
