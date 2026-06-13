@@ -15,6 +15,7 @@ image = (
     .add_local_file(_here / "app/event_client.py", "/root/app/event_client.py")
     .add_local_file(_here / "app/html_processing.py", "/root/app/html_processing.py")
     .add_local_file(_here / "app/models.py", "/root/app/models.py")
+    .add_local_file(_here / "app/processing_run.py", "/root/app/processing_run.py")
     .add_local_file(_here / "app/progress.py", "/root/app/progress.py")
 )
 
@@ -32,78 +33,33 @@ models_volume = modal.Volume.from_name("marker-models", create_if_missing=True)
 class Marker:
     @modal.method()
     def convert(self, request: dict):
-        import os
         import sys
-        import tempfile
-        from pathlib import Path
-        from urllib.parse import urlparse
-
-        import httpx
 
         sys.path.insert(0, "/root")
-        from app.conversion import convert_file
-        from app.event_client import ProcessingEventClient
         from app.models import get_or_create_models
-        from app.progress import install_tqdm_progress_hook
-
-        event_client = ProcessingEventClient(
-            request["appApiUrl"],
-            request["sourceDocumentId"],
-            request["ingestToken"],
+        from app.processing_run import (
+            MarkerProcessingRunRequest,
+            MarkerProcessingRunRuntime,
+            run_marker_processing_run,
         )
-        file_path = None
 
-        try:
-            event_client.emit(
-                type="conversion.started",
-                severity="info",
-                message="Marker conversion started on Modal.",
-                data={
-                    "useLlm": request.get("useLlm", False),
-                    "forceOcr": request.get("forceOcr", False),
-                    "pageRange": request.get("pageRange"),
-                },
-            )
-            suffix = Path(urlparse(request["fileUrl"]).path).suffix or ".pdf"
-            fd, path = tempfile.mkstemp(prefix="marker-modal-", suffix=suffix)
-            file_path = Path(path)
-            with httpx.Client(follow_redirects=True, timeout=120.0) as client:
-                response = client.get(request["fileUrl"])
-                response.raise_for_status()
-                with os.fdopen(fd, "wb") as output:
-                    output.write(response.content)
-
-            with install_tqdm_progress_hook(event_client):
-                model_dict = get_or_create_models()
-                result = convert_file(
-                    file_path,
-                    request.get("useLlm", False),
-                    request.get("forceOcr", False),
-                    request.get("pageRange"),
-                    artifact_dict=model_dict,
-                )
-            models_volume.commit()
-
-            event_client.post_result(result)
-            return {"ok": True}
-        except Exception as error:
-            message = str(error)
-            try:
-                event_client.emit(
-                    type="conversion.failed",
-                    severity="error",
-                    message=message,
-                )
-            except Exception:
-                pass
-            try:
-                event_client.post_error(message)
-            except Exception:
-                pass
-            raise
-        finally:
-            if file_path and file_path.exists():
-                file_path.unlink(missing_ok=True)
+        run_marker_processing_run(
+            MarkerProcessingRunRequest(
+                file_url=request["fileUrl"],
+                app_api_url=request["appApiUrl"],
+                source_document_id=request["sourceDocumentId"],
+                ingest_token=request["ingestToken"],
+                use_llm=request.get("useLlm", False),
+                force_ocr=request.get("forceOcr", False),
+                page_range=request.get("pageRange"),
+            ),
+            MarkerProcessingRunRuntime(
+                model_provider=get_or_create_models,
+                after_success=models_volume.commit,
+                raise_errors=True,
+            ),
+        )
+        return {"ok": True}
 
 
 @app.function()
