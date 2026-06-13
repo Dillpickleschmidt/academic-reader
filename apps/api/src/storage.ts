@@ -11,18 +11,40 @@ export interface TemporaryUploadInput {
 export async function createTemporaryUpload(input: TemporaryUploadInput) {
 	const config = readStorageConfig();
 	const temporaryUploadId = randomUUID();
-	const objectKey = `temporary-uploads/${temporaryUploadId}/${safeFilename(input.filename)}`;
-	const uploadUrl = await getPresignedUploadUrl(config, objectKey, input.mimeType);
+	const sourceObjectKey = temporaryUploadObjectKey(
+		temporaryUploadId,
+		input.filename,
+	);
+	const uploadUrl = await getPresignedUploadUrl(
+		config,
+		sourceObjectKey,
+		input.mimeType,
+	);
 
 	return {
 		temporaryUploadId,
-		objectKey,
 		uploadUrl,
 		expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
 		headers: {
 			"Content-Type": input.mimeType,
 		},
 	};
+}
+
+export async function promoteTemporaryUpload(input: {
+	temporaryUploadId: string;
+	filename: string;
+}) {
+	const config = readStorageConfig();
+	const sourceObjectKey = temporaryUploadObjectKey(
+		input.temporaryUploadId,
+		input.filename,
+	);
+	const objectKey = `source-documents/${randomUUID()}/${safeFilename(input.filename)}`;
+	await copyObject(config, sourceObjectKey, objectKey);
+	await deleteObject(config, sourceObjectKey);
+
+	return { objectKey };
 }
 
 function readStorageConfig() {
@@ -69,6 +91,62 @@ function objectUrl(endpoint: string, bucket: string, key: string) {
 			.map(encodeURIComponent)
 			.join("/")}`,
 	);
+}
+
+async function copyObject(
+	config: ReturnType<typeof readStorageConfig>,
+	sourceObjectKey: string,
+	destinationObjectKey: string,
+) {
+	const client = storageClient(config);
+	const response = await client.fetch(
+		objectUrl(config.endpoint, config.bucket, destinationObjectKey),
+		{
+			method: "PUT",
+			headers: {
+				"x-amz-copy-source": copySource(config.bucket, sourceObjectKey),
+			},
+		},
+	);
+
+	if (!response.ok) {
+		throw new Error(`Could not promote upload (${response.status})`);
+	}
+}
+
+async function deleteObject(
+	config: ReturnType<typeof readStorageConfig>,
+	objectKey: string,
+) {
+	const client = storageClient(config);
+	const response = await client.fetch(
+		objectUrl(config.endpoint, config.bucket, objectKey),
+		{ method: "DELETE" },
+	);
+
+	if (!response.ok && response.status !== 404) {
+		throw new Error(`Could not delete temporary upload (${response.status})`);
+	}
+}
+
+function storageClient(config: ReturnType<typeof readStorageConfig>) {
+	return new AwsClient({
+		accessKeyId: config.accessKeyId,
+		secretAccessKey: config.secretAccessKey,
+		region: config.region,
+		service: "s3",
+	});
+}
+
+function copySource(bucket: string, key: string) {
+	return `/${encodeURIComponent(bucket)}/${key
+		.split("/")
+		.map(encodeURIComponent)
+		.join("/")}`;
+}
+
+function temporaryUploadObjectKey(temporaryUploadId: string, filename: string) {
+	return `temporary-uploads/${temporaryUploadId}/${safeFilename(filename)}`;
 }
 
 function safeFilename(filename: string) {

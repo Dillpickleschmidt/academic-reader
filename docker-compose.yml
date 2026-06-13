@@ -10,7 +10,7 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio-data:/data
+      - ./minio-data:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 2s
@@ -32,6 +32,3 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       S3_BUCKET: ${S3_BUCKET}
       SITE_URL: ${SITE_URL}
-
-volumes:
-  minio-data:

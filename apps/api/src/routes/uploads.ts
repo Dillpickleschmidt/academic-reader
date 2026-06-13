@@ -4,7 +4,7 @@ import {
 } from "@academic-reader/shared/uploads";
 import { Hono } from "hono";
 import * as v from "valibot";
-import { createTemporaryUpload } from "../storage";
+import { createTemporaryUpload, promoteTemporaryUpload } from "../storage";
 
 const temporaryUploadSchema = v.object({
 	filename: v.pipe(v.string(), v.minLength(1)),
@@ -14,6 +14,11 @@ const temporaryUploadSchema = v.object({
 		v.minValue(1),
 		v.maxValue(sourceDocumentMaxSizeBytes),
 	),
+});
+
+const promoteUploadSchema = v.object({
+	temporaryUploadId: v.pipe(v.string(), v.minLength(1)),
+	filename: v.pipe(v.string(), v.minLength(1)),
 });
 
 export const uploadsRoute = new Hono();
@@ -29,6 +34,23 @@ uploadsRoute.post("/temporary", async (c) => {
 					error instanceof Error
 						? error.message
 						: "Could not create temporary upload",
+			},
+			400,
+		);
+	}
+});
+
+uploadsRoute.post("/promote", async (c) => {
+	try {
+		const input = v.parse(promoteUploadSchema, await c.req.json());
+		return c.json(await promoteTemporaryUpload(input));
+	} catch (error) {
+		return c.json(
+			{
+				error:
+					error instanceof Error
+						? error.message
+						: "Could not promote temporary upload",
 			},
 			400,
 		);

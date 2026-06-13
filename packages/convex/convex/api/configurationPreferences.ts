@@ -10,7 +10,10 @@ export const get = query({
 export const save = mutation({
 	args: {
 		conversionModel: v.string(),
+		markerForceOcr: v.boolean(),
+		markerUseLlm: v.boolean(),
 		narrationEnabled: v.boolean(),
+		narrationVoice: v.string(),
 	},
 	handler: (ctx, args) =>
 		ConfigurationPreferences.saveConfigurationPreferences(ctx, args),

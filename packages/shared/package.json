@@ -6,6 +6,7 @@
 		"check": "tsc --noEmit"
 	},
 	"exports": {
+		"./processing": "./src/processing.ts",
 		"./uploads": "./src/uploads.ts"
 	},
 	"devDependencies": {

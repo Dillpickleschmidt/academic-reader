@@ -11,14 +11,23 @@ export async function getConfigurationPreferences(ctx: QueryCtx) {
 	return (
 		preferences ?? {
 			conversionModel: "marker",
+			markerForceOcr: false,
+			markerUseLlm: true,
 			narrationEnabled: true,
+			narrationVoice: "af_heart",
 		}
 	);
 }
 
 export async function saveConfigurationPreferences(
 	ctx: MutationCtx,
-	input: { conversionModel: string; narrationEnabled: boolean },
+	input: {
+		conversionModel: string;
+		markerForceOcr: boolean;
+		markerUseLlm: boolean;
+		narrationEnabled: boolean;
+		narrationVoice: string;
+	},
 ) {
 	const reader = await requireReader(ctx);
 	const existing = await ctx.db

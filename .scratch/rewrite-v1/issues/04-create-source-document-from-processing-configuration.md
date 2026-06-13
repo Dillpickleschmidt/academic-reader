@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # Create Source Document from confirmed Processing Configuration
 
@@ -8,11 +8,11 @@ Let a Reader confirm Processing Configuration after upload completes. If unauthe
 
 ## Acceptance criteria
 
-- [ ] Start Processing is disabled until upload completes.
-- [ ] Processing Configuration includes Conversion Model, page range, Marker options, Narration enabled, and Narration voice.
-- [ ] Configuration Preferences are saved by default, except actual page range text is not reused across Source Documents.
-- [ ] Source Document is created only after authentication.
-- [ ] One Source Document has one immutable Processing Configuration and one Processing Run.
+- [x] Start Processing is disabled until upload completes.
+- [x] Processing Configuration includes Conversion Model, page range, Marker options, Narration enabled, and Narration voice.
+- [x] Configuration Preferences are saved by default, except actual page range text is not reused across Source Documents.
+- [x] Source Document is created only after authentication.
+- [x] One Source Document has one immutable Processing Configuration and one Processing Run.
 
 ## Blocked by
 

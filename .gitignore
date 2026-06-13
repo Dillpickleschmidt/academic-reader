@@ -10,6 +10,9 @@ coverage
 .turbo
 .tanstack
 
+# Local object storage
+minio-data/
+
 # Local environment and secrets
 .env
 .env.*
