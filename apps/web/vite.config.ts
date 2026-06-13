@@ -7,6 +7,11 @@ import solidPlugin from "vite-plugin-solid";
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, "../../", "");
+	const convexSiteUrl = env.VITE_CONVEX_SITE_URL;
+
+	if (!convexSiteUrl) {
+		throw new Error("VITE_CONVEX_SITE_URL is required");
+	}
 
 	return {
 		envDir: "../../",
@@ -20,7 +25,11 @@ export default defineConfig(({ mode }) => {
 		server: {
 			proxy: {
 				"/api/auth": {
-					target: env.VITE_CONVEX_SITE_URL || "http://localhost:3211",
+					target: convexSiteUrl,
+					changeOrigin: true,
+				},
+				"/api": {
+					target: "http://localhost:8787",
 					changeOrigin: true,
 				},
 			},

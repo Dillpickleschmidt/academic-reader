@@ -3,7 +3,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "CONVEX_AGENT_MODE=anonymous convex dev",
+		"dev": "CONVEX_AGENT_MODE=anonymous bun --env-file ../../.env.local node_modules/.bin/convex dev",
 		"codegen": "convex codegen",
 		"check": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json"
 	},

@@ -3,11 +3,14 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "PORT=8787 bun --watch src/main.ts",
+		"dev": "PORT=8787 bun --env-file ../../.env.local --watch src/main.ts",
 		"check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"hono": "^4.10.7"
+		"@academic-reader/shared": "workspace:*",
+		"aws4fetch": "^1.0.20",
+		"hono": "^4.10.7",
+		"valibot": "^1.2.0"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.5",

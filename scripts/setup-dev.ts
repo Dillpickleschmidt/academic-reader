@@ -1,9 +1,10 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const rootEnvPath = resolve(root, ".env.local");
+const rootEnvExamplePath = resolve(root, ".env.local.example");
 const convexEnvPath = resolve(root, "packages/convex/.env.local");
 const shouldSyncConvex = !process.argv.includes("--no-sync");
 
@@ -11,20 +12,34 @@ const rootEnv = parseEnvFile(rootEnvPath);
 const convexEnv = parseEnvFile(convexEnvPath);
 const nextEnv = {
 	...rootEnv,
-	CONVEX_DEPLOYMENT: rootEnv.CONVEX_DEPLOYMENT ?? convexEnv.CONVEX_DEPLOYMENT,
 	SITE_URL: rootEnv.SITE_URL ?? "http://localhost:5173",
-	VITE_CONVEX_URL:
-		rootEnv.VITE_CONVEX_URL ??
-		convexEnv.VITE_CONVEX_URL ??
-		convexEnv.CONVEX_URL ??
+	VITE_CONVEX_URL: firstValidUrl(
+		rootEnv.VITE_CONVEX_URL,
+		convexEnv.VITE_CONVEX_URL,
+		convexEnv.CONVEX_URL,
 		"http://localhost:3210",
-	VITE_CONVEX_SITE_URL:
-		rootEnv.VITE_CONVEX_SITE_URL ??
-		convexEnv.VITE_CONVEX_SITE_URL ??
-		convexEnv.CONVEX_SITE_URL ??
+	),
+	VITE_CONVEX_SITE_URL: firstValidUrl(
+		rootEnv.VITE_CONVEX_SITE_URL,
+		convexEnv.VITE_CONVEX_SITE_URL,
+		convexEnv.CONVEX_SITE_URL,
 		"http://localhost:3211",
+	),
+	STORAGE_BACKEND: rootEnv.STORAGE_BACKEND ?? "minio",
+	S3_API_ENDPOINT: rootEnv.S3_API_ENDPOINT ?? "http://localhost:9000",
+	S3_PRESIGNED_URL_ENDPOINT:
+		rootEnv.S3_PRESIGNED_URL_ENDPOINT ?? "http://localhost:9000",
+	S3_REGION: rootEnv.S3_REGION ?? "us-east-1",
+	S3_ACCESS_KEY: rootEnv.S3_ACCESS_KEY ?? "minioadmin",
+	S3_SECRET_KEY: rootEnv.S3_SECRET_KEY ?? "minioadmin",
+	S3_BUCKET: rootEnv.S3_BUCKET ?? "academic-reader",
+	MINIO_ROOT_USER: rootEnv.MINIO_ROOT_USER ?? "minioadmin",
+	MINIO_ROOT_PASSWORD: rootEnv.MINIO_ROOT_PASSWORD ?? "minioadmin",
 	BETTER_AUTH_SECRET:
 		rootEnv.BETTER_AUTH_SECRET ?? randomBytes(32).toString("hex"),
+	CONVEX_DEPLOYMENT: convexEnv.CONVEX_DEPLOYMENT,
+	GOOGLE_CLIENT_ID: rootEnv.GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET: rootEnv.GOOGLE_CLIENT_SECRET,
 };
 
 writeEnvFile(rootEnvPath, nextEnv);
@@ -45,24 +60,35 @@ function parseEnvFile(path: string) {
 	return vars;
 }
 
+function firstValidUrl(...values: Array<string | undefined>) {
+	for (const value of values) {
+		if (!value || value.includes("=")) continue;
+		try {
+			return new URL(value)
+				.toString()
+				.replace(/\/$/, "")
+				.replace("http://127.0.0.1:", "http://localhost:");
+		} catch {}
+	}
+	throw new Error("No valid URL fallback provided");
+}
+
 function writeEnvFile(path: string, env: Record<string, string | undefined>) {
-	const order = [
-		"CONVEX_DEPLOYMENT",
-		"SITE_URL",
-		"VITE_CONVEX_URL",
-		"VITE_CONVEX_SITE_URL",
-		"BETTER_AUTH_SECRET",
-	];
-	const lines = order
-		.map((key) => [key, env[key]] as const)
-		.filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
-		.map(([key, value]) => `${key}=${value}`);
+	writeFileSync(path, renderEnv(env));
+}
 
-	const remaining = Object.entries(env)
-		.filter(([key, value]) => value && !order.includes(key))
-		.map(([key, value]) => `${key}=${value}`);
+function renderEnv(env: Record<string, string | undefined>) {
+	const template = readFileSync(rootEnvExamplePath, "utf8");
+	const lines = template.split("\n").map((line) => {
+		const match = line.match(/^(#\s*)?([A-Z0-9_]+)=.*$/);
+		if (!match) return line;
 
-	writeFileSync(path, `${[...lines, ...remaining].join("\n")}\n`);
+		const key = match[2];
+		const value = env[key];
+		return value ? `${key}=${value}` : line;
+	});
+
+	return `${lines.join("\n").replace(/\n*$/, "")}\n`;
 }
 
 async function syncConvexEnv(env: Record<string, string | undefined>) {

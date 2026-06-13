@@ -18,6 +18,12 @@ This repo uses a single-context domain-doc layout. See `docs/agents/domain.md`.
 - `TTS_BACKEND=local|modal|none`
 - `STORAGE_BACKEND=minio|r2`
 
+### Git Operations
+
+Agents may run read-only git inspection commands such as `git status`, `git diff`, `git diff --stat`, `git log`, `git show --stat`, `git ls-files`, and `git check-ignore`.
+
+Do not run git commands that modify repository state unless explicitly approved in the current conversation. This includes `git add`, `git commit`, `git reset`, `git checkout`, `git restore`, `git rm`, `git clean`, and `git stash`.
+
 ### File Organization
 
 - Public API at top of file

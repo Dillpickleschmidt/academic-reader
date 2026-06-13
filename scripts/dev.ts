@@ -9,6 +9,8 @@ process.on("SIGINT", stopChildren);
 process.on("SIGTERM", stopChildren);
 
 await run("setup", "bun", ["scripts/setup-dev.ts", "--no-sync"], root);
+await run("storage", "docker", ["compose", "--env-file", ".env.local", "up", "-d", "minio"], root);
+await run("storage", "docker", ["compose", "--env-file", ".env.local", "run", "--rm", "minio-init"], root);
 
 const convexReady = deferred<void>();
 const convex = spawn("convex", "bun", ["run", "dev:convex"], root, (text) => {
@@ -103,6 +105,7 @@ function prefix(label: string) {
 		convex: "\x1b[35m",
 		api: "\x1b[32m",
 		web: "\x1b[34m",
+		storage: "\x1b[33m",
 	};
 	const reset = "\x1b[0m";
 	return `${colors[label] ?? ""}${label.padEnd(7)}${reset}`;

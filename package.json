@@ -13,10 +13,11 @@
 		"dev:web": "cd apps/web && bun run dev",
 		"dev:api": "cd apps/api && bun run dev",
 		"dev:convex": "cd packages/convex && bun run dev",
-		"check": "bun run check:web && bun run check:api && bun run check:convex",
+		"check": "bun run check:web && bun run check:api && bun run check:convex && bun run check:shared",
 		"check:web": "cd apps/web && bun run check",
 		"check:api": "cd apps/api && bun run check",
 		"check:convex": "cd packages/convex && bun run check",
+		"check:shared": "cd packages/shared && bun run check",
 		"format": "biome format --write .",
 		"lint": "biome lint ."
 	},

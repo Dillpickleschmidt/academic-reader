@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@academic-reader/convex": "workspace:*",
+		"@academic-reader/shared": "workspace:*",
 		"@convex-dev/better-auth": "^0.10.9",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tanstack/router-plugin": "^1.133.21",

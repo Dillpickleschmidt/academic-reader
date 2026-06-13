@@ -1,4 +1,9 @@
 import { api } from "@academic-reader/convex/api";
+import {
+	sourceDocumentAcceptAttribute,
+	sourceDocumentMaxSizeBytes,
+	sourceDocumentMimeTypeForFile,
+} from "@academic-reader/shared/uploads";
 import { createFileRoute } from "@tanstack/solid-router";
 import { useQuery } from "convex-solidjs";
 import { createSignal, For, Show } from "solid-js";
@@ -210,8 +215,8 @@ function SignedOutWorkbench() {
 					processing configuration before sign-in. Creating a Source Document
 					will require authentication.
 				</p>
-				<div class="mt-8 rounded-2xl border border-stone-800 bg-stone-950 p-8 text-center text-stone-500">
-					Temporary upload flow lands in the next slice.
+				<div class="mt-8">
+					<UploadAndConfigure />
 				</div>
 			</section>
 
@@ -290,14 +295,198 @@ function SignedInWorkbench(props: {
 
 function EmptyLibrary() {
 	return (
-		<div class="mt-8 rounded-2xl border border-dashed border-stone-700 bg-stone-950 p-10 text-center">
-			<h3 class="text-xl font-semibold">No Source Documents yet</h3>
-			<p class="mt-2 text-stone-500">
-				Your library is ready. Temporary upload and Source Document creation are
-				next.
-			</p>
+		<div class="mt-8 rounded-2xl border border-dashed border-stone-700 bg-stone-950 p-10">
+			<div class="text-center">
+				<h3 class="text-xl font-semibold">No Source Documents yet</h3>
+				<p class="mt-2 text-stone-500">
+					Your library is ready. Temporary upload and Source Document creation
+					are next.
+				</p>
+			</div>
+			<div class="mt-8">
+				<UploadAndConfigure />
+			</div>
 		</div>
 	);
+}
+
+function UploadAndConfigure() {
+	const [file, setFile] = createSignal<File>();
+	const [status, setStatus] = createSignal<
+		"idle" | "requesting" | "uploading" | "complete" | "error"
+	>("idle");
+	const [progress, setProgress] = createSignal(0);
+	const [error, setError] = createSignal<string>();
+	const [temporaryUploadId, setTemporaryUploadId] = createSignal<string>();
+
+	async function selectFile(selectedFile: File | undefined) {
+		if (!selectedFile) return;
+
+		const mimeType = sourceDocumentMimeTypeForFile(
+			selectedFile.name,
+			selectedFile.type,
+		);
+		if (!mimeType) {
+			setError("Choose a PDF, PNG, JPEG, WebP, or TIFF file.");
+			setStatus("error");
+			return;
+		}
+		if (selectedFile.size > sourceDocumentMaxSizeBytes) {
+			setError("Source Documents must be 50MB or smaller.");
+			setStatus("error");
+			return;
+		}
+
+		setFile(selectedFile);
+		setError(undefined);
+		setTemporaryUploadId(undefined);
+		setProgress(0);
+		setStatus("requesting");
+
+		try {
+			const response = await fetch("/api/uploads/temporary", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					filename: selectedFile.name,
+					mimeType,
+					sizeBytes: selectedFile.size,
+				}),
+			});
+			const payload = await response.json();
+
+			if (!response.ok) {
+				throw new Error(payload.error || "Could not create upload URL");
+			}
+
+			setTemporaryUploadId(payload.temporaryUploadId);
+			setStatus("uploading");
+			await uploadFile(
+				selectedFile,
+				payload.uploadUrl,
+				payload.headers,
+				setProgress,
+			);
+			setProgress(100);
+			setStatus("complete");
+		} catch (uploadError) {
+			setStatus("error");
+			setError(
+				uploadError instanceof Error ? uploadError.message : "Upload failed",
+			);
+		}
+	}
+
+	return (
+		<div class="grid gap-4 md:grid-cols-[1fr_1fr]">
+			<label class="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-stone-700 bg-stone-950 p-6 text-center hover:border-amber-300">
+				<span class="font-medium text-stone-100">Choose source document</span>
+				<span class="mt-2 text-sm text-stone-500">
+					PDF, PNG, JPEG, WebP, or TIFF up to 50MB
+				</span>
+				<input
+					accept={sourceDocumentAcceptAttribute}
+					class="sr-only"
+					type="file"
+					onChange={(event) => selectFile(event.currentTarget.files?.[0])}
+				/>
+			</label>
+
+			<Show
+				when={file()}
+				fallback={
+					<div class="rounded-2xl border border-stone-800 bg-stone-950 p-6 text-stone-500">
+						Processing Configuration opens after file selection.
+					</div>
+				}
+			>
+				{(selectedFile) => (
+					<section class="rounded-2xl border border-stone-800 bg-stone-950 p-6">
+						<p class="font-medium text-amber-300 text-sm tracking-[0.2em] uppercase">
+							Processing Configuration
+						</p>
+						<h3 class="mt-3 font-semibold text-xl">{selectedFile().name}</h3>
+						<p class="mt-1 text-sm text-stone-500">
+							{formatBytes(selectedFile().size)} · Marker conversion
+						</p>
+
+						<div class="mt-5 space-y-2">
+							<div class="flex justify-between text-sm text-stone-400">
+								<span>{uploadStatusLabel(status())}</span>
+								<span>{Math.round(progress())}%</span>
+							</div>
+							<progress class="h-2 w-full" max="100" value={progress()} />
+						</div>
+
+						<Show when={temporaryUploadId()}>
+							{(id) => (
+								<p class="mt-3 break-all text-stone-600 text-xs">
+									Temporary upload: {id()}
+								</p>
+							)}
+						</Show>
+
+						<Show when={error()}>
+							{(message) => (
+								<p class="mt-3 text-red-300 text-sm">{message()}</p>
+							)}
+						</Show>
+
+						<button
+							class="mt-5 w-full rounded-lg bg-amber-300 px-4 py-2 font-medium text-stone-950 disabled:opacity-50"
+							disabled={status() !== "complete"}
+							type="button"
+						>
+							Start processing in next slice
+						</button>
+					</section>
+				)}
+			</Show>
+		</div>
+	);
+}
+
+function uploadFile(
+	file: File,
+	uploadUrl: string,
+	headers: Record<string, string>,
+	onProgress: (progress: number) => void,
+) {
+	return new Promise<void>((resolve, reject) => {
+		const request = new XMLHttpRequest();
+		request.open("PUT", uploadUrl);
+
+		for (const [key, value] of Object.entries(headers)) {
+			request.setRequestHeader(key, value);
+		}
+
+		request.upload.onprogress = (event) => {
+			if (!event.lengthComputable) return;
+			onProgress(Math.round((event.loaded / event.total) * 100));
+		};
+		request.onload = () => {
+			if (request.status >= 200 && request.status < 300) {
+				resolve();
+				return;
+			}
+			reject(new Error(`Upload failed with status ${request.status}`));
+		};
+		request.onerror = () => reject(new Error("Upload failed"));
+		request.send(file);
+	});
+}
+
+function formatBytes(bytes: number) {
+	if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)}KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function uploadStatusLabel(status: string) {
+	if (status === "requesting") return "Preparing upload";
+	if (status === "uploading") return "Uploading";
+	if (status === "complete") return "Upload complete";
+	if (status === "error") return "Upload failed";
+	return "Waiting";
 }
 
 function SectionCard(props: { title: string; body: string }) {

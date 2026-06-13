@@ -1,0 +1,14 @@
+{
+	"name": "@academic-reader/shared",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check": "tsc --noEmit"
+	},
+	"exports": {
+		"./uploads": "./src/uploads.ts"
+	},
+	"devDependencies": {
+		"typescript": "^6.0.2"
+	}
+}

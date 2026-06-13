@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # Add storage service and temporary direct upload flow
 
@@ -8,11 +8,11 @@ Implement MinIO/R2-compatible object storage and the temporary upload flow. Sele
 
 ## Acceptance criteria
 
-- [ ] Storage service supports MinIO and R2 through one interface.
-- [ ] API creates presigned direct upload URLs for temporary uploads without creating Convex records.
-- [ ] Web upload supports PDF, PNG, JPEG, WebP, and TIFF only.
-- [ ] Max file size is 50MB.
-- [ ] Processing Configuration opens immediately and shows upload progress.
+- [x] Storage service supports MinIO and R2 through one interface.
+- [x] API creates presigned direct upload URLs for temporary uploads without creating Convex records.
+- [x] Web upload supports PDF, PNG, JPEG, WebP, and TIFF only.
+- [x] Max file size is 50MB.
+- [x] Processing Configuration opens immediately and shows upload progress.
 
 ## Blocked by
 
