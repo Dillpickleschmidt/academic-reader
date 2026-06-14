@@ -76,6 +76,26 @@ _Avoid_: TTS, audio generation
 The spoken form of a Block used to produce Narration.
 _Avoid_: TTS text, rewrite, script
 
+**Narration Candidate**:
+The text-bearing material from a Block considered for Narration after non-narratable content is removed.
+_Avoid_: classifier input, filtered HTML, TTS candidate
+
+**Narration Eligibility**:
+A decision about whether a Block should contribute to Narration.
+_Avoid_: block classification, TTS filter, read-aloud flag
+
+**Narration Preparation**:
+The preparation needs identified for an eligible Block before creating Narration Text.
+_Avoid_: completed steps, TTS route, rewrite mode, generation pipeline
+
+**Inline Citation**:
+A citation embedded in Block prose, such as a bracketed author-year reference or numbered citation.
+_Avoid_: bibliography entry, reference entry, footnote
+
+**Narration Guide**:
+A compact document-level guide that summarizes reading context, terminology, notation, and pronunciation conventions for Narration.
+_Avoid_: prompt, AI summary, classifier context
+
 **Chat**:
 A conversation with an AI model from inside the Document page.
 

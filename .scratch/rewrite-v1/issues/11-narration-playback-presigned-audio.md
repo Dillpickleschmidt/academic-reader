@@ -16,4 +16,4 @@ Persist generated Narration audio metadata and play it from short-lived presigne
 
 ## Blocked by
 
-- `.scratch/rewrite-v1/issues/10-narration-text-and-fifo-audio-queue.md`
+- `.scratch/rewrite-v1/issues/10d-fifo-narration-audio-generation.md`

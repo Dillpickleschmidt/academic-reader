@@ -1,19 +1,12 @@
-Status: ready-for-agent
+Status: superseded
 
 # Add Narration Text and FIFO audio queue
 
-## What to build
+This issue was split because Narration should be staged before audio generation:
 
-When Narration is enabled in Processing Configuration, generate Narration Text for eligible Blocks after Blocks exist. As each Block's Narration Text is ready, enqueue it for audio generation in FIFO order with one Block processed at a time.
+- `.scratch/rewrite-v1/issues/10a-inline-citation-markup.md`
+- `.scratch/rewrite-v1/issues/10b-narration-candidates-and-eligibility.md`
+- `.scratch/rewrite-v1/issues/10c-narration-preparation-and-rewrites.md`
+- `.scratch/rewrite-v1/issues/10d-fifo-narration-audio-generation.md`
 
-## Acceptance criteria
-
-- [ ] Narration is enabled by default on first run and remembered afterward.
-- [ ] Narration Text generation starts after Blocks exist and does not block Reader View readiness.
-- [ ] Audio queue processes one Block at a time in Block order.
-- [ ] Processing Events show Narration Text and audio queue progress.
-- [ ] Failures are surfaced as warning/error events without hiding the Reader View.
-
-## Blocked by
-
-- `.scratch/rewrite-v1/issues/06-marker-conversion-vertical-slice.md`
+The original scope jumped directly from Blocks to audio generation. The revised plan first marks Inline Citations in Block HTML, derives Narration Candidates, persists Narration Eligibility, prepares Narration Text, then generates Narration audio in FIFO order.

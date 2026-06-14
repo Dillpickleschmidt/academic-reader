@@ -1,0 +1,5 @@
+# Mark Inline Citations before Narration
+
+Academic Reader marks Inline Citations in canonical Block HTML before Blocks are persisted. This is model-agnostic in-process API post-processing after a Conversion Model adapter produces Blocks and rewrites image URLs, not Marker-specific adapter behavior and not a separate route, worker, Convex round-trip, or network boundary. The persisted markup uses `inline-citation` spans and no separate citation schema in v1. Reader View can style Inline Citations directly, Debug Overlay can derive citation evidence from Block HTML, and Narration Candidate extraction preserves the spans so later Narration Text preparation can smooth or omit citations with LLM context.
+
+The initial detector follows the old app's bracketed citation coverage and adds support for citations split across adjacent inline elements within a Block. Academic Reader does not attempt broad natural-language citation detection, bibliography parsing, or cross-Block citation reconstruction in this step.
