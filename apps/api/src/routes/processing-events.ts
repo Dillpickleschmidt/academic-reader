@@ -5,18 +5,12 @@ import {
 	processingEventTypes,
 } from "@academic-reader/shared/processing-events";
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
 import * as v from "valibot";
 import {
 	api,
 	createConvexHttpClient,
 	readApiToConvexServiceSecret,
 } from "../convex";
-import {
-	publishProcessingEvent,
-	subscribeToProcessingEvents,
-	type ProcessingEventMessage,
-} from "../processing-event-broker";
 import {
 	createProcessingEventIngestToken,
 	isMatchingProcessingEventIngestToken,
@@ -73,30 +67,25 @@ processingEventsRoute.post("/ingest", async (c) => {
 			return c.json({ error: "Unauthenticated" }, 401);
 		}
 
-		const event = await client.mutation(
-			api.api.processingEvents.appendFromApi,
-			{
-				serviceSecret,
-				documentId,
-				event: {
-					type: input.type,
-					emitter: input.emitter,
-					severity: input.severity,
-					message: input.message,
-					emittedAt: input.emittedAt,
-					...(input.pageNumber !== undefined
-						? { pageNumber: input.pageNumber }
-						: {}),
-					...(input.blockId !== undefined ? { blockId: input.blockId } : {}),
-					...(input.progress !== undefined ? { progress: input.progress } : {}),
-					...(input.data !== undefined ? { data: input.data } : {}),
-				},
+		await client.mutation(api.api.processingEvents.appendFromApi, {
+			serviceSecret,
+			documentId,
+			event: {
+				type: input.type,
+				emitter: input.emitter,
+				severity: input.severity,
+				message: input.message,
+				emittedAt: input.emittedAt,
+				...(input.pageNumber !== undefined
+					? { pageNumber: input.pageNumber }
+					: {}),
+				...(input.blockId !== undefined ? { blockId: input.blockId } : {}),
+				...(input.progress !== undefined ? { progress: input.progress } : {}),
+				...(input.data !== undefined ? { data: input.data } : {}),
 			},
-		);
+		});
 
-		publishProcessingEvent(event);
-
-		return c.json(event);
+		return c.json({ ok: true });
 	} catch (error) {
 		return c.json(
 			{
@@ -109,103 +98,3 @@ processingEventsRoute.post("/ingest", async (c) => {
 		);
 	}
 });
-
-processingEventsRoute.get("/stream/:documentId", async (c) => {
-	const documentId = c.req.param("documentId") as Id<"documents">;
-	const authToken = bearerToken(c.req.header("Authorization"));
-
-	if (!authToken) {
-		return c.json({ error: "Unauthenticated" }, 401);
-	}
-
-	try {
-		await createConvexHttpClient(authToken).query(
-			api.api.processingEvents.authorizeStream,
-			{ documentId },
-		);
-	} catch {
-		return c.json({ error: "Document not found" }, 404);
-	}
-
-	return streamSSE(c, async (stream) => {
-		const queue: ProcessingEventMessage[] = [];
-		let resolveNext:
-			| ((event: ProcessingEventMessage | null) => void)
-			| undefined;
-		let timeout: ReturnType<typeof setTimeout> | undefined;
-
-		function cleanupPendingWait() {
-			if (timeout) clearTimeout(timeout);
-			timeout = undefined;
-			const resolve = resolveNext;
-			resolveNext = undefined;
-			resolve?.(null);
-		}
-
-		function notify(event: ProcessingEventMessage) {
-			if (!resolveNext) {
-				queue.push(event);
-				return;
-			}
-
-			if (timeout) clearTimeout(timeout);
-			timeout = undefined;
-			const resolve = resolveNext;
-			resolveNext = undefined;
-			resolve(event);
-		}
-
-		function nextEvent() {
-			const queuedEvent = queue.shift();
-			if (queuedEvent) return Promise.resolve(queuedEvent);
-
-			return new Promise<ProcessingEventMessage | null>((resolve) => {
-				resolveNext = resolve;
-				timeout = setTimeout(() => {
-					resolveNext = undefined;
-					timeout = undefined;
-					resolve(null);
-				}, 25_000);
-			});
-		}
-
-		const unsubscribe = subscribeToProcessingEvents(documentId, notify);
-		stream.onAbort(() => {
-			unsubscribe();
-			cleanupPendingWait();
-		});
-
-		try {
-			await stream.writeSSE({ event: "connected", data: "{}" });
-
-			while (!stream.aborted && !stream.closed) {
-				const event = await nextEvent();
-				if (stream.aborted || stream.closed) break;
-
-				if (!event) {
-					await stream.writeSSE({ event: "heartbeat", data: "{}" });
-					continue;
-				}
-
-				await stream.writeSSE({
-					event: "processing-event",
-					id: event._id,
-					data: JSON.stringify(event),
-				});
-			}
-		} finally {
-			unsubscribe();
-			cleanupPendingWait();
-		}
-	});
-});
-
-function bearerToken(authorizationHeader: string | undefined) {
-	const prefix = "Bearer ";
-
-	if (!authorizationHeader?.startsWith(prefix)) {
-		return null;
-	}
-
-	return authorizationHeader.slice(prefix.length).trim() || null;
-}

@@ -1,10 +1,9 @@
 import { v } from "convex/values";
 import { mutation } from "../_generated/server";
 import { blockInputValidator } from "../blockValidators";
-import { pageInputValidator } from "../pageValidators";
-import { processingEventDocumentValidator } from "../processingEventValidators";
-import { tableOfContentsEntryInputValidator } from "../tableOfContentsValidators";
 import * as DocumentProjections from "../model/documentProjections";
+import { pageInputValidator } from "../pageValidators";
+import { tableOfContentsEntryInputValidator } from "../tableOfContentsValidators";
 
 const projectionStatusValidator = v.union(
 	v.literal("ready"),
@@ -29,7 +28,6 @@ export const replaceFromApi = mutation({
 			status: projectionStatusValidator,
 			pageCount: v.number(),
 			blockCount: v.number(),
-			events: v.array(processingEventDocumentValidator),
 		}),
 	),
 	handler: (ctx, args) =>

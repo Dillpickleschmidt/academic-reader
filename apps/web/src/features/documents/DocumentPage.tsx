@@ -230,7 +230,6 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 								/>
 
 								<EventsDrawer
-									document={document.data()}
 									documentId={documentId()}
 									open={eventsOpen()}
 									onClose={() => setEventsOpen(false)}
@@ -247,7 +246,6 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 function EventsDrawer(props: {
 	open: boolean;
 	documentId: Id<"documents">;
-	document: Doc<"documents"> | undefined;
 	onClose: () => void;
 }) {
 	return (
@@ -267,10 +265,9 @@ function EventsDrawer(props: {
 				</button>
 			</div>
 			<div class="h-[calc(100%-3rem)] overflow-y-auto">
-				<ProcessingEventsPanel
-					documentId={props.documentId}
-					isLive={props.document?.processingStatus === "processing"}
-				/>
+				<Show when={props.open}>
+					<ProcessingEventsPanel documentId={props.documentId} />
+				</Show>
 			</div>
 		</aside>
 	);

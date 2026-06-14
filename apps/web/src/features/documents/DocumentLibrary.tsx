@@ -113,10 +113,7 @@ export function SignedInDocuments(props: {
 													</Link>
 												</div>
 											</div>
-											<ProcessingEventsPanel
-												documentId={document._id}
-												isLive={document.processingStatus === "processing"}
-											/>
+											<ProcessingEventsPanel documentId={document._id} />
 										</div>
 									)}
 								</For>

@@ -594,12 +594,27 @@ function blockNarrationEvidence(
 	]);
 
 	return {
-		narration: latestEvent
-			? `${narration.voice} · ${latestEvent.type} · ${latestEvent.severity}`
-			: `${narration.voice} · no block event`,
+		narration: blockNarrationText(block, narration.voice, latestEvent),
 		audio: audio ?? "not recorded",
 		alignment: alignment ?? "not recorded",
 	};
+}
+
+function blockNarrationText(
+	block: Doc<"blocks">,
+	voice: string,
+	latestEvent: Doc<"processingEvents"> | undefined,
+) {
+	const persisted = block.narration;
+	if (!persisted) {
+		return latestEvent
+			? `${voice} · pending eligibility · ${latestEvent.type}`
+			: `${voice} · pending eligibility`;
+	}
+	if (persisted.decision === "eligible") {
+		return `${voice} · eligible · ${persisted.preparation.join(", ")}`;
+	}
+	return `${voice} · ineligible · ${persisted.reason}`;
 }
 
 function latestBlockDataValue(

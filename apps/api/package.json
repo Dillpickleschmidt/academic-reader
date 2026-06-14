@@ -9,6 +9,8 @@
 	"dependencies": {
 		"@academic-reader/convex": "workspace:*",
 		"@academic-reader/shared": "workspace:*",
+		"@ai-sdk/groq": "^3.0.41",
+		"ai": "^6.0.205",
 		"aws4fetch": "^1.0.20",
 		"convex": "^1.31.7",
 		"hono": "^4.10.7",

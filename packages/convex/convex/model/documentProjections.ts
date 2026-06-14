@@ -1,9 +1,9 @@
 import type { BlockType } from "@academic-reader/shared/blocks";
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { insertProcessingEvent } from "./processingEvents";
 import { requireServiceSecret } from "./documents";
+import { insertProcessingEvent } from "./processingEvents";
 
 export interface DocumentProjectionPageInput {
 	physicalPageNumber: number;
@@ -49,7 +49,6 @@ export type ReplaceDocumentProjectionResult =
 			status: "ready" | "readyWithWarnings";
 			pageCount: number;
 			blockCount: number;
-			events: Doc<"processingEvents">[];
 	  };
 
 export async function replaceDocumentProjectionFromApi(
@@ -150,36 +149,30 @@ export async function replaceDocumentProjectionFromApi(
 		updatedAt: now,
 	});
 
-	const events: Doc<"processingEvents">[] = [];
 	if (input.warnings.length) {
-		events.push(
-			await insertProcessingEvent(ctx, {
-				documentId: input.documentId,
-				...conversionWarningEvent(input.warnings, input.emittedAt),
-			}),
-		);
-	}
-	events.push(
 		await insertProcessingEvent(ctx, {
 			documentId: input.documentId,
-			...conversionCompletedEvent({
-				status,
-				pageCount: input.pages.length,
-				blockCount: input.blocks.length,
-				imageCount: input.imageCount,
-				tableOfContentsEntryCount: input.tableOfContentsEntries.length,
-				warningCount: input.warnings.length,
-				emittedAt: input.emittedAt,
-			}),
+			...conversionWarningEvent(input.warnings, input.emittedAt),
+		});
+	}
+	await insertProcessingEvent(ctx, {
+		documentId: input.documentId,
+		...conversionCompletedEvent({
+			status,
+			pageCount: input.pages.length,
+			blockCount: input.blocks.length,
+			imageCount: input.imageCount,
+			tableOfContentsEntryCount: input.tableOfContentsEntries.length,
+			warningCount: input.warnings.length,
+			emittedAt: input.emittedAt,
 		}),
-	);
+	});
 
 	return {
 		ignored: false,
 		status,
 		pageCount: input.pages.length,
 		blockCount: input.blocks.length,
-		events,
 	};
 }
 

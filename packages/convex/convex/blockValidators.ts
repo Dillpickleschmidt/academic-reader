@@ -1,3 +1,7 @@
+import {
+	ineligibleNarrationReasons,
+	narrationPreparations,
+} from "@academic-reader/shared/narration";
 import { v } from "convex/values";
 
 export const blockTypeValidator = v.union(
@@ -22,6 +26,26 @@ export const normalizedBoundingBoxValidator = v.object({
 	width: v.number(),
 	height: v.number(),
 });
+
+export const narrationPreparationValidator = v.union(
+	...narrationPreparations.map((preparation) => v.literal(preparation)),
+);
+
+export const ineligibleNarrationReasonValidator = v.union(
+	...ineligibleNarrationReasons.map((reason) => v.literal(reason)),
+);
+
+export const blockNarrationValidator = v.union(
+	v.object({
+		decision: v.literal("eligible"),
+		preparation: v.array(narrationPreparationValidator),
+		text: v.optional(v.string()),
+	}),
+	v.object({
+		decision: v.literal("ineligible"),
+		reason: ineligibleNarrationReasonValidator,
+	}),
+);
 
 export const blockInputValidator = v.object({
 	blockId: v.string(),

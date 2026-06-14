@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	blockNarrationValidator,
 	blockTypeValidator,
 	normalizedBoundingBoxValidator,
 } from "./blockValidators";
@@ -83,6 +84,7 @@ export default defineSchema({
 		order: v.number(),
 		contentHtml: v.string(),
 		contentMarkdown: v.optional(v.string()),
+		narration: v.optional(blockNarrationValidator),
 		pageNumber: v.optional(v.number()),
 		normalizedBoundingBox: v.optional(normalizedBoundingBoxValidator),
 	})

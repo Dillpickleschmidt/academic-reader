@@ -1,28 +1,11 @@
-type HtmlNode = ElementNode | RawNode | RootNode | TextNode;
-
-interface RootNode {
-	kind: "root";
-	children: HtmlNode[];
-}
-
-interface ElementNode {
-	kind: "element";
-	name: string;
-	rawOpen: string;
-	rawClose?: string;
-	children: HtmlNode[];
-	selfClosing: boolean;
-}
-
-interface TextNode {
-	kind: "text";
-	raw: string;
-}
-
-interface RawNode {
-	kind: "raw";
-	raw: string;
-}
+import {
+	type ElementNode,
+	elementHasClass,
+	type HtmlNode,
+	nodeTextContent,
+	parseHtmlFragment,
+	serializeNode,
+} from "./html-fragment";
 
 interface CitationMatch {
 	start: number;
@@ -83,94 +66,12 @@ const excludedElementNames = new Set([
 	"textarea",
 ]);
 
-const voidElementNames = new Set([
-	"area",
-	"base",
-	"br",
-	"col",
-	"embed",
-	"hr",
-	"img",
-	"input",
-	"link",
-	"meta",
-	"param",
-	"source",
-	"track",
-	"wbr",
-]);
-
 export function markInlineCitationsInHtml(html: string) {
 	if (!html.includes("[") || !html.includes("]")) return html;
 
 	const root = parseHtmlFragment(html);
 	markInlineCitationsInChildren(root.children);
 	return serializeNode(root);
-}
-
-function parseHtmlFragment(html: string): RootNode {
-	const root: RootNode = { kind: "root", children: [] };
-	const stack: Array<RootNode | ElementNode> = [root];
-	const tagPattern = /<!--[\s\S]*?-->|<![^>]*>|<\/?[A-Za-z][^>]*>/g;
-	let lastIndex = 0;
-	let match = tagPattern.exec(html);
-
-	while (match) {
-		if (match.index > lastIndex) {
-			currentParent(stack).children.push({
-				kind: "text",
-				raw: html.slice(lastIndex, match.index),
-			});
-		}
-
-		appendHtmlTagToken(stack, match[0]);
-		lastIndex = match.index + match[0].length;
-		match = tagPattern.exec(html);
-	}
-
-	if (lastIndex < html.length) {
-		currentParent(stack).children.push({
-			kind: "text",
-			raw: html.slice(lastIndex),
-		});
-	}
-
-	return root;
-}
-
-function appendHtmlTagToken(stack: Array<RootNode | ElementNode>, raw: string) {
-	const closingName = closingTagName(raw);
-	if (closingName) {
-		const parent = currentParent(stack);
-		if (parent.kind === "element" && parent.name === closingName) {
-			parent.rawClose = raw;
-			stack.pop();
-		} else {
-			parent.children.push({ kind: "raw", raw });
-		}
-		return;
-	}
-
-	const openingName = openingTagName(raw);
-	if (!openingName) {
-		currentParent(stack).children.push({ kind: "raw", raw });
-		return;
-	}
-
-	const selfClosing = /\/\s*>$/.test(raw) || voidElementNames.has(openingName);
-	const element: ElementNode = {
-		kind: "element",
-		name: openingName,
-		rawOpen: raw,
-		children: [],
-		selfClosing,
-	};
-	currentParent(stack).children.push(element);
-	if (!selfClosing) stack.push(element);
-}
-
-function currentParent(stack: Array<RootNode | ElementNode>) {
-	return stack[stack.length - 1];
 }
 
 function markInlineCitationsInChildren(children: HtmlNode[]) {
@@ -376,23 +277,8 @@ function isRunBoundary(node: HtmlNode) {
 	return nodeTextContent(node).length === 0;
 }
 
-function nodeTextContent(node: HtmlNode): string {
-	if (node.kind === "text") return node.raw;
-	if (node.kind === "raw") return "";
-	return node.children.map(nodeTextContent).join("");
-}
-
-function serializeNode(node: HtmlNode): string {
-	if (node.kind === "text" || node.kind === "raw") return node.raw;
-	if (node.kind === "root") return node.children.map(serializeNode).join("");
-	if (node.selfClosing) return node.rawOpen;
-	return `${node.rawOpen}${node.children.map(serializeNode).join("")}${node.rawClose ?? ""}`;
-}
-
 function isInlineCitationElement(node: ElementNode) {
-	return (
-		node.name === "span" && elementHasClass(node.rawOpen, "inline-citation")
-	);
+	return node.name === "span" && elementHasClass(node, "inline-citation");
 }
 
 function containsInlineCitationElement(node: ElementNode): boolean {
@@ -407,27 +293,4 @@ function containsInlineCitationElement(node: ElementNode): boolean {
 
 function isExcludedElement(node: ElementNode) {
 	return excludedElementNames.has(node.name);
-}
-
-function elementHasClass(rawOpen: string, className: string) {
-	const value = attributeValue(rawOpen, "class");
-	return value?.split(/\s+/).includes(className) ?? false;
-}
-
-function attributeValue(rawOpen: string, name: string) {
-	const pattern = new RegExp(
-		`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
-		"i",
-	);
-	const match = rawOpen.match(pattern);
-	return match?.[1] ?? match?.[2] ?? match?.[3];
-}
-
-function openingTagName(raw: string) {
-	if (/^<\s*\//.test(raw) || /^<!/.test(raw)) return undefined;
-	return raw.match(/^<\s*([A-Za-z][^\s/>]*)/)?.[1]?.toLowerCase();
-}
-
-function closingTagName(raw: string) {
-	return raw.match(/^<\s*\/\s*([A-Za-z][^\s>]*)/)?.[1]?.toLowerCase();
 }

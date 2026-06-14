@@ -4,7 +4,7 @@ Status: done
 
 ## What to build
 
-Implement persisted Processing Events, worker event ingest, and live delivery via SSE. Events should use the shared broad/common strict event type union, required emitter, severity, message, emittedAt, optional progress/block/page fields, and debug-only data.
+Implement persisted Processing Events, worker event ingest, and live client delivery. Events should use the shared broad/common strict event type union, required emitter, severity, message, emittedAt, optional progress/block/page fields, and debug-only data.
 
 ## Acceptance criteria
 
@@ -12,7 +12,7 @@ Implement persisted Processing Events, worker event ingest, and live delivery vi
 - [x] Events are ordered and displayed by Convex `_creationTime`.
 - [x] Worker/app emitted events include required `emittedAt`.
 - [x] API exposes authenticated worker event ingest using a per-run ingest token.
-- [x] Web app loads persisted events from Convex and receives live events over SSE without polling.
+- [x] Web app loads persisted events from Convex and receives live updates through Convex subscriptions without polling.
 
 ## Blocked by
 
@@ -21,3 +21,5 @@ Implement persisted Processing Events, worker event ingest, and live delivery vi
 ## Comments
 
 Validated through the Issue 06 Marker vertical slice smoke test: Marker posted `conversion.started`, `conversion.progress`, `conversion.warning`, and `conversion.completed` through the app API; events persisted in Convex and appeared live in the web Processing Events panel without polling.
+
+Updated during Issue 10b: client-facing event delivery now uses Convex subscriptions directly. The app API still owns worker event ingest and per-run ingest-token validation, but no longer maintains a separate SSE stream or in-memory fanout broker.

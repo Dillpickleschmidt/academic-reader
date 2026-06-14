@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { processingEventInputValidator } from "../processingEventValidators";
 import * as ProcessingEvents from "../model/processingEvents";
+import { processingEventInputValidator } from "../processingEventValidators";
 
 export const listForDocument = query({
 	args: {
@@ -9,14 +9,6 @@ export const listForDocument = query({
 	},
 	handler: (ctx, args) =>
 		ProcessingEvents.listProcessingEventsForDocument(ctx, args.documentId),
-});
-
-export const authorizeStream = query({
-	args: {
-		documentId: v.id("documents"),
-	},
-	handler: (ctx, args) =>
-		ProcessingEvents.authorizeProcessingEventStream(ctx, args.documentId),
 });
 
 export const getIngestMetadata = query({
@@ -34,6 +26,7 @@ export const appendFromApi = mutation({
 		documentId: v.id("documents"),
 		event: processingEventInputValidator,
 	},
+	returns: v.object({ ok: v.literal(true) }),
 	handler: (ctx, args) =>
 		ProcessingEvents.appendProcessingEventFromApi(ctx, args),
 });

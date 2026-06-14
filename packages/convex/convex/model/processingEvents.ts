@@ -1,5 +1,5 @@
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requiredEnv } from "../env";
 import { requireReader } from "./auth";
@@ -19,14 +19,6 @@ export async function listProcessingEventsForDocument(
 		.withIndex("by_document", (q) => q.eq("documentId", documentId))
 		.order("asc")
 		.collect();
-}
-
-export async function authorizeProcessingEventStream(
-	ctx: QueryCtx,
-	documentId: Id<"documents">,
-) {
-	await requireOwnedDocument(ctx, documentId);
-	return true;
 }
 
 export async function getProcessingEventIngestMetadata(
@@ -64,10 +56,12 @@ export async function appendProcessingEventFromApi(
 		throw new Error("Document not found");
 	}
 
-	return insertProcessingEvent(ctx, {
+	await insertProcessingEvent(ctx, {
 		documentId: input.documentId,
 		...input.event,
 	});
+
+	return { ok: true as const };
 }
 
 export function appendInitialProcessingStartedEvent(
@@ -88,33 +82,19 @@ export function appendInitialProcessingStartedEvent(
 export async function insertProcessingEvent(
 	ctx: MutationCtx,
 	input: ProcessingEventInsert,
-): Promise<Doc<"processingEvents">> {
-	const event = {
+) {
+	await ctx.db.insert("processingEvents", {
 		documentId: input.documentId,
 		type: input.type,
 		emitter: input.emitter,
 		severity: input.severity,
 		message: input.message,
 		emittedAt: input.emittedAt,
-	} satisfies Omit<
-		Doc<"processingEvents">,
-		"_id" | "_creationTime" | "pageNumber" | "blockId" | "progress" | "data"
-	>;
-
-	const eventId = await ctx.db.insert("processingEvents", {
-		...event,
 		...(input.pageNumber !== undefined ? { pageNumber: input.pageNumber } : {}),
 		...(input.blockId !== undefined ? { blockId: input.blockId } : {}),
 		...(input.progress !== undefined ? { progress: input.progress } : {}),
 		...(input.data !== undefined ? { data: input.data } : {}),
 	});
-	const insertedEvent = await ctx.db.get("processingEvents", eventId);
-
-	if (!insertedEvent) {
-		throw new Error("Could not load inserted Processing Event");
-	}
-
-	return insertedEvent;
 }
 
 async function requireOwnedDocument(

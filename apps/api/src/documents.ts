@@ -13,11 +13,11 @@ import {
 	decodeBase64Image,
 	normalizeMarkerConversionResult,
 } from "./marker-result";
+import { startNarrationEligibilityInBackground } from "./narration-eligibility";
 import {
 	extractPdfPageLabelsAndOutline,
 	type PdfMetadataBlockCandidate,
 } from "./pdf-metadata";
-import { publishProcessingEvent } from "./processing-event-broker";
 import {
 	createProcessingEventIngestToken,
 	isMatchingProcessingEventIngestToken,
@@ -161,7 +161,9 @@ export async function acceptMarkerResult(input: {
 		);
 
 		if (projection.ignored) return { ignored: true };
-		for (const event of projection.events) publishProcessingEvent(event);
+		if (metadata.processingConfiguration.narration.enabled) {
+			startNarrationEligibilityInBackground(input.documentId);
+		}
 
 		return { status: projection.status };
 	} catch (error) {
@@ -267,7 +269,7 @@ async function startMarkerProcessing(documentId: Id<"documents">) {
 }
 
 async function failProcessing(documentId: Id<"documents">, message: string) {
-	const failed = await createConvexHttpClient().mutation(
+	await createConvexHttpClient().mutation(
 		api.api.documents.failProcessingFromApi,
 		{
 			serviceSecret: readApiToConvexServiceSecret(),
@@ -276,7 +278,6 @@ async function failProcessing(documentId: Id<"documents">, message: string) {
 			emittedAt: Date.now(),
 		},
 	);
-	if (!failed.ignored) publishProcessingEvent(failed.event);
 }
 
 async function getValidatedIngestMetadata(input: {

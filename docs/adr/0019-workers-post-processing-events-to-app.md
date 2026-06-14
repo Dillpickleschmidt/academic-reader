@@ -1,5 +1,5 @@
 # Workers post Processing Events to the app
 
-Workers post Processing Events to the app API, not directly to Convex. The app API validates a per-run ingest token, persists the event through Convex, and fans it out to live SSE subscribers. This keeps Convex service credentials out of workers and gives the app one place to validate event ingestion.
+Workers post Processing Events to the app API, not directly to Convex. The app API validates a per-run ingest token and persists the event through Convex. Clients observe persisted Processing Events through Convex subscriptions.
 
-Before running multiple API replicas, replace or augment the in-memory broker with shared fanout such as Redis pub/sub, NATS, Postgres listen/notify, sticky routing by Document, or a Convex-driven subscription strategy.
+This keeps Convex service credentials out of workers, gives the app one place to validate event ingestion, and avoids a separate app-owned client fanout path for data that is already stored in Convex.

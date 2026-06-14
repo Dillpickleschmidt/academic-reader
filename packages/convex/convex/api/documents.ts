@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { processingEventDocumentValidator } from "../processingEventValidators";
 import * as Documents from "../model/documents";
 
 export const list = query({
@@ -55,10 +54,7 @@ export const failProcessingFromApi = mutation({
 	},
 	returns: v.union(
 		v.object({ ignored: v.literal(true) }),
-		v.object({
-			ignored: v.literal(false),
-			event: processingEventDocumentValidator,
-		}),
+		v.object({ ignored: v.literal(false) }),
 	),
 	handler: (ctx, args) => Documents.failProcessingFromApi(ctx, args),
 });

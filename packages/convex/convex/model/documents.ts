@@ -1,5 +1,5 @@
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requiredEnv } from "../env";
 import { requireReader } from "./auth";
@@ -113,9 +113,7 @@ export async function failProcessingFromApi(
 		message: string;
 		emittedAt: number;
 	},
-): Promise<
-	{ ignored: true } | { ignored: false; event: Doc<"processingEvents"> }
-> {
+): Promise<{ ignored: true } | { ignored: false }> {
 	requireServiceSecret(input.serviceSecret);
 	const document = await ctx.db.get("documents", input.documentId);
 
@@ -136,12 +134,12 @@ export async function failProcessingFromApi(
 		updatedAt: now,
 	});
 
-	const event = await insertProcessingEvent(ctx, {
+	await insertProcessingEvent(ctx, {
 		documentId: input.documentId,
 		...conversionFailedEvent(input.message, input.emittedAt),
 	});
 
-	return { ignored: false, event };
+	return { ignored: false };
 }
 
 async function requireOwnedDocument(
