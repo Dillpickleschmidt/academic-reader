@@ -57,8 +57,8 @@ The reader-facing presentation derived from Blocks after inspection and cleanup.
 _Avoid_: Readable View, final HTML, rendered output
 
 **Debug Overlay**:
-A reader-facing view that draws visible metadata directly on Blocks so the reader can inspect what Academic Reader knows without leaving the document.
-_Avoid_: inspector panel, admin console, hidden devtools
+A reader-facing mode that draws always-visible Block regions over Source View and Reader View content without changing their layout, with Block Evidence available on hover or focus so the reader can inspect what Academic Reader knows without leaving the document.
+_Avoid_: inspector panel, admin console, hidden devtools, in-flow debug chrome
 
 **Narration**:
 Spoken audio generated from Blocks in the Reader View.

@@ -47,7 +47,7 @@ interface MarkerBlock {
 	id: string;
 	block_type: string;
 	html: string;
-	page?: number;
+	markerPageId?: number;
 	bbox?: number[];
 }
 
@@ -102,7 +102,10 @@ export function adaptMarkerConversionResult(input: {
 }) {
 	const warnings: string[] = [];
 	const chunks = input.result.formats.chunks;
-	const pageDimensions = new Map<number, { width: number; height: number }>();
+	const pageDimensionsByMarkerPageId = new Map<
+		number,
+		{ width: number; height: number }
+	>();
 	const pages: PageInput[] = [];
 
 	if (!chunks) {
@@ -134,7 +137,7 @@ export function adaptMarkerConversionResult(input: {
 			continue;
 		}
 
-		pageDimensions.set(pageId, { width, height });
+		pageDimensionsByMarkerPageId.set(pageId, { width, height });
 		pages.push({
 			physicalPageNumber: pageId + 1,
 			width,
@@ -160,11 +163,12 @@ export function adaptMarkerConversionResult(input: {
 			...rewrite.warnings.map((warning) => `${block.id}: ${warning}`),
 		);
 
-		const pageNumber = block.page === undefined ? undefined : block.page + 1;
+		const pageNumber =
+			block.markerPageId === undefined ? undefined : block.markerPageId + 1;
 		const normalizedBoundingBox = normalizeBoundingBox({
 			bbox: block.bbox,
-			page: block.page,
-			pageDimensions,
+			markerPageId: block.markerPageId,
+			pageDimensionsByMarkerPageId,
 			warnings,
 			blockId: block.id,
 		});
@@ -253,25 +257,30 @@ function normalizeMarkerBlock(
 		typeof value.id === "string" && value.id ? value.id : `marker-${index}`;
 	if (id === `marker-${index}`)
 		warnings.push(`Block ${index} is missing an id`);
+	const markerPageId = markerPageIdFromBlockId(id);
 
 	return {
 		id,
 		block_type:
 			typeof value.block_type === "string" ? value.block_type : "Unknown",
 		html: value.html,
-		...(typeof value.page === "number" && Number.isInteger(value.page)
-			? { page: value.page }
-			: {}),
+		...(markerPageId !== undefined ? { markerPageId } : {}),
 		...(numberArray(value.bbox)
 			? { bbox: numberArray(value.bbox) ?? undefined }
 			: {}),
 	};
 }
 
+function markerPageIdFromBlockId(blockId: string) {
+	const [, pageId] = blockId.match(/^\/page\/(\d+)(?:\/|$)/) ?? [];
+	if (pageId === undefined) return undefined;
+	return Number(pageId);
+}
+
 function normalizeBoundingBox(input: {
 	bbox: number[] | undefined;
-	page: number | undefined;
-	pageDimensions: Map<number, { width: number; height: number }>;
+	markerPageId: number | undefined;
+	pageDimensionsByMarkerPageId: Map<number, { width: number; height: number }>;
 	warnings: string[];
 	blockId: string;
 }) {
@@ -280,13 +289,13 @@ function normalizeBoundingBox(input: {
 		input.warnings.push(`${input.blockId}: bbox must have four coordinates`);
 		return undefined;
 	}
-	if (input.page === undefined) {
+	if (input.markerPageId === undefined) {
 		input.warnings.push(
-			`${input.blockId}: bbox ignored because page is missing`,
+			`${input.blockId}: bbox ignored because Marker block id is missing a page path`,
 		);
 		return undefined;
 	}
-	const page = input.pageDimensions.get(input.page);
+	const page = input.pageDimensionsByMarkerPageId.get(input.markerPageId);
 	if (!page) {
 		input.warnings.push(
 			`${input.blockId}: bbox ignored because page dimensions are missing`,
