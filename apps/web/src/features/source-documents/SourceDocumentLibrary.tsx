@@ -1,4 +1,5 @@
 import type { Id } from "@academic-reader/convex/data-model";
+import { Link } from "@tanstack/solid-router";
 import { createSignal, For, Show } from "solid-js";
 import { ProcessingEventsPanel } from "./ProcessingEventsPanel";
 import { UploadPrompt } from "./SourceDocumentCreationFlow";
@@ -92,15 +93,30 @@ export function SignedInWorkbench(props: {
 										<div class="p-4">
 											<div class="flex items-center justify-between gap-4">
 												<div>
-													<p class="font-medium">{document.filename}</p>
+													<Link
+														class="font-medium hover:text-amber-200"
+														params={{ sourceDocumentId: document._id }}
+														to="/documents/$sourceDocumentId"
+													>
+														{document.filename}
+													</Link>
 													<p class="text-stone-500 text-sm">
 														Updated{" "}
 														{new Date(document.updatedAt).toLocaleString()}
 													</p>
 												</div>
-												<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-400 text-xs">
-													{document.processingStatus}
-												</span>
+												<div class="flex items-center gap-2">
+													<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-400 text-xs">
+														{document.processingStatus}
+													</span>
+													<Link
+														class="rounded-lg border border-stone-700 px-3 py-1 text-stone-300 text-xs hover:bg-stone-800"
+														params={{ sourceDocumentId: document._id }}
+														to="/documents/$sourceDocumentId"
+													>
+														Open
+													</Link>
+												</div>
 											</div>
 											<ProcessingEventsPanel
 												sourceDocumentId={document._id}

@@ -10,33 +10,44 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DocumentsSourceDocumentIdRouteImport } from './routes/documents/$sourceDocumentId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocumentsSourceDocumentIdRoute =
+  DocumentsSourceDocumentIdRouteImport.update({
+    id: '/documents/$sourceDocumentId',
+    path: '/documents/$sourceDocumentId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/documents/$sourceDocumentId': typeof DocumentsSourceDocumentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/documents/$sourceDocumentId': typeof DocumentsSourceDocumentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/documents/$sourceDocumentId': typeof DocumentsSourceDocumentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/documents/$sourceDocumentId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/documents/$sourceDocumentId'
+  id: '__root__' | '/' | '/documents/$sourceDocumentId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DocumentsSourceDocumentIdRoute: typeof DocumentsSourceDocumentIdRoute
 }
 
 declare module '@tanstack/solid-router' {
@@ -48,11 +59,19 @@ declare module '@tanstack/solid-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/documents/$sourceDocumentId': {
+      id: '/documents/$sourceDocumentId'
+      path: '/documents/$sourceDocumentId'
+      fullPath: '/documents/$sourceDocumentId'
+      preLoaderRoute: typeof DocumentsSourceDocumentIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DocumentsSourceDocumentIdRoute: DocumentsSourceDocumentIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -9,7 +9,8 @@ import * as v from "valibot";
 import {
 	acceptMarkerResult,
 	createSourceDocumentAndStartProcessing,
-	readSourceDocumentImage,
+	createSourceDocumentImageAccess,
+	createSourceDocumentSourceAccess,
 } from "../source-documents";
 
 const processingConfigurationSchema = v.object({
@@ -41,6 +42,10 @@ const markerResultSchema = v.object({
 	ingestToken: v.pipe(v.string(), v.minLength(1)),
 	result: v.optional(v.any()),
 	error: v.optional(v.string()),
+});
+
+const imageUrlsSchema = v.object({
+	filenames: v.array(v.pipe(v.string(), v.minLength(1))),
 });
 
 export const sourceDocumentsRoute = new Hono();
@@ -82,24 +87,45 @@ sourceDocumentsRoute.post("/:sourceDocumentId/marker-result", async (c) => {
 	}
 });
 
-sourceDocumentsRoute.get("/:sourceDocumentId/images/:filename", async (c) => {
+sourceDocumentsRoute.get("/:sourceDocumentId/source-url", async (c) => {
 	const authToken = bearerToken(c.req.header("Authorization"));
 	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
 
 	try {
-		const image = await readSourceDocumentImage({
-			authToken,
-			sourceDocumentId: c.req.param(
-				"sourceDocumentId",
-			) as Id<"sourceDocuments">,
-			filename: c.req.param("filename"),
-		});
-		return c.body(image.content, 200, {
-			"Content-Type": image.contentType,
-			"Cache-Control": image.cacheControl,
-		});
+		return c.json(
+			await createSourceDocumentSourceAccess({
+				authToken,
+				sourceDocumentId: c.req.param(
+					"sourceDocumentId",
+				) as Id<"sourceDocuments">,
+			}),
+		);
 	} catch {
-		return c.json({ error: "Image not found" }, 404);
+		return c.json({ error: "Source Document not found" }, 404);
+	}
+});
+
+sourceDocumentsRoute.post("/:sourceDocumentId/image-urls", async (c) => {
+	const authToken = bearerToken(c.req.header("Authorization"));
+	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
+
+	try {
+		const input = v.parse(imageUrlsSchema, await c.req.json());
+		if (input.filenames.length > 500) {
+			return c.json({ error: "Too many images requested" }, 400);
+		}
+
+		return c.json(
+			await createSourceDocumentImageAccess({
+				authToken,
+				sourceDocumentId: c.req.param(
+					"sourceDocumentId",
+				) as Id<"sourceDocuments">,
+				filenames: input.filenames,
+			}),
+		);
+	} catch (error) {
+		return c.json({ error: errorMessage(error) }, 400);
 	}
 });
 

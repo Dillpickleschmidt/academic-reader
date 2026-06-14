@@ -59,7 +59,23 @@ export async function getWorkerPresignedReadUrl(objectKey: string) {
 		config,
 		objectKey,
 		workerPresignedEndpoint(config),
+		60 * 60,
 	);
+}
+
+export async function getBrowserPresignedReadUrl(objectKey: string) {
+	const config = readStorageConfig();
+	const expiresInSeconds = 15 * 60;
+
+	return {
+		url: await getPresignedReadUrl(
+			config,
+			objectKey,
+			config.presignedEndpoint,
+			expiresInSeconds,
+		),
+		expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString(),
+	};
 }
 
 export async function saveObject(
@@ -84,20 +100,6 @@ export async function saveObject(
 	if (!response.ok) {
 		throw new Error(`Could not save object (${response.status})`);
 	}
-}
-
-export async function readObject(objectKey: string) {
-	const config = readStorageConfig();
-	const response = await storageClient(config).fetch(
-		objectUrl(config.endpoint, config.bucket, objectKey),
-		{ method: "GET" },
-	);
-
-	if (!response.ok) {
-		throw new Error(`Could not read object (${response.status})`);
-	}
-
-	return Buffer.from(await response.arrayBuffer());
 }
 
 export function sourceDocumentImageObjectKey(
@@ -161,9 +163,10 @@ async function getPresignedReadUrl(
 	config: ReturnType<typeof readStorageConfig>,
 	objectKey: string,
 	endpoint: string,
+	expiresInSeconds: number,
 ) {
 	const url = objectUrl(endpoint, config.bucket, objectKey);
-	url.searchParams.set("X-Amz-Expires", String(60 * 60));
+	url.searchParams.set("X-Amz-Expires", String(expiresInSeconds));
 	const signedRequest = await storageClient(config).sign(
 		new Request(url, { method: "GET" }),
 		{ aws: { signQuery: true } },

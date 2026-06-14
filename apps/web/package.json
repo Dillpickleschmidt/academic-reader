@@ -24,14 +24,17 @@
 		"better-auth": "1.4.9",
 		"convex": "^1.31.7",
 		"convex-solidjs": "^0.0.3",
+		"pdfjs-dist": "^6.0.227",
 		"solid-js": "^1.9.12",
-		"tailwindcss": "^4.1.18"
+		"tailwindcss": "^4.1.18",
+		"utif": "^3.1.0"
 	},
 	"devDependencies": {
 		"@solidjs/testing-library": "^0.8.10",
 		"@tanstack/devtools-vite": "latest",
 		"@tanstack/router-cli": "^1.133.21",
 		"@tanstack/router-plugin": "latest",
+		"@types/utif": "^3.0.6",
 		"jsdom": "^28.1.0",
 		"typescript": "^6.0.2",
 		"vite": "^8.0.0",

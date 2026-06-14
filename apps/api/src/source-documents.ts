@@ -18,9 +18,9 @@ import {
 	isMatchingProcessingEventIngestToken,
 } from "./processing-event-ingest-token";
 import {
+	getBrowserPresignedReadUrl,
 	getWorkerPresignedReadUrl,
 	promoteTemporaryUpload,
-	readObject,
 	saveObject,
 	sourceDocumentImageObjectKey,
 	sourceDocumentImageUrl,
@@ -151,10 +151,31 @@ export async function acceptMarkerResult(input: {
 	}
 }
 
-export async function readSourceDocumentImage(input: {
+export async function createSourceDocumentSourceAccess(input: {
 	authToken: string;
 	sourceDocumentId: Id<"sourceDocuments">;
-	filename: string;
+}) {
+	const sourceDocument = await createConvexHttpClient(input.authToken).query(
+		api.api.sourceDocuments.get,
+		{
+			sourceDocumentId: input.sourceDocumentId,
+		},
+	);
+	const access = await getBrowserPresignedReadUrl(
+		sourceDocument.storageObjectKey,
+	);
+
+	return {
+		...access,
+		filename: sourceDocument.filename,
+		mimeType: sourceDocument.mimeType,
+	};
+}
+
+export async function createSourceDocumentImageAccess(input: {
+	authToken: string;
+	sourceDocumentId: Id<"sourceDocuments">;
+	filenames: string[];
 }) {
 	await createConvexHttpClient(input.authToken).query(
 		api.api.sourceDocuments.get,
@@ -162,15 +183,18 @@ export async function readSourceDocumentImage(input: {
 			sourceDocumentId: input.sourceDocumentId,
 		},
 	);
-	const content = await readObject(
-		sourceDocumentImageObjectKey(input.sourceDocumentId, input.filename),
-	);
+	const urls: Record<string, string> = {};
+	let expiresAt = new Date().toISOString();
 
-	return {
-		content,
-		contentType: imageContentType(input.filename),
-		cacheControl: "private, max-age=31536000, immutable",
-	};
+	for (const filename of new Set(input.filenames)) {
+		const access = await getBrowserPresignedReadUrl(
+			sourceDocumentImageObjectKey(input.sourceDocumentId, filename),
+		);
+		urls[filename] = access.url;
+		expiresAt = access.expiresAt;
+	}
+
+	return { urls, expiresAt };
 }
 
 async function startMarkerProcessing(sourceDocumentId: Id<"sourceDocuments">) {
