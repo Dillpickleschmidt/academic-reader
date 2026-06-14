@@ -5,29 +5,27 @@ import { requiredEnv } from "../env";
 import { requireReader } from "./auth";
 
 interface ProcessingEventInsert extends ProcessingEventInput {
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 }
 
-export async function listProcessingEventsForSourceDocument(
+export async function listProcessingEventsForDocument(
 	ctx: QueryCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 ) {
-	await requireOwnedSourceDocument(ctx, sourceDocumentId);
+	await requireOwnedDocument(ctx, documentId);
 
 	return ctx.db
 		.query("processingEvents")
-		.withIndex("by_source_document", (q) =>
-			q.eq("sourceDocumentId", sourceDocumentId),
-		)
+		.withIndex("by_document", (q) => q.eq("documentId", documentId))
 		.order("asc")
 		.collect();
 }
 
 export async function authorizeProcessingEventStream(
 	ctx: QueryCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 ) {
-	await requireOwnedSourceDocument(ctx, sourceDocumentId);
+	await requireOwnedDocument(ctx, documentId);
 	return true;
 }
 
@@ -35,22 +33,19 @@ export async function getProcessingEventIngestMetadata(
 	ctx: QueryCtx,
 	input: {
 		serviceSecret: string;
-		sourceDocumentId: Id<"sourceDocuments">;
+		documentId: Id<"documents">;
 	},
 ) {
 	requireServiceSecret(input.serviceSecret);
 
-	const sourceDocument = await ctx.db.get(
-		"sourceDocuments",
-		input.sourceDocumentId,
-	);
-	if (!sourceDocument) {
-		throw new Error("Source Document not found");
+	const document = await ctx.db.get("documents", input.documentId);
+	if (!document) {
+		throw new Error("Document not found");
 	}
 
 	return {
-		sourceDocumentId: sourceDocument._id,
-		processingRunStartedAt: sourceDocument.processingRun.startedAt,
+		documentId: document._id,
+		processingRunStartedAt: document.processingRun.startedAt,
 	};
 }
 
@@ -58,33 +53,30 @@ export async function appendProcessingEventFromApi(
 	ctx: MutationCtx,
 	input: {
 		serviceSecret: string;
-		sourceDocumentId: Id<"sourceDocuments">;
+		documentId: Id<"documents">;
 		event: ProcessingEventInput;
 	},
 ) {
 	requireServiceSecret(input.serviceSecret);
 
-	const sourceDocument = await ctx.db.get(
-		"sourceDocuments",
-		input.sourceDocumentId,
-	);
-	if (!sourceDocument) {
-		throw new Error("Source Document not found");
+	const document = await ctx.db.get("documents", input.documentId);
+	if (!document) {
+		throw new Error("Document not found");
 	}
 
 	return insertProcessingEvent(ctx, {
-		sourceDocumentId: input.sourceDocumentId,
+		documentId: input.documentId,
 		...input.event,
 	});
 }
 
 export function appendInitialProcessingStartedEvent(
 	ctx: MutationCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 	emittedAt: number,
 ) {
 	return insertProcessingEvent(ctx, {
-		sourceDocumentId,
+		documentId,
 		type: "processing.started",
 		emitter: "app",
 		severity: "info",
@@ -98,7 +90,7 @@ export async function insertProcessingEvent(
 	input: ProcessingEventInsert,
 ): Promise<Doc<"processingEvents">> {
 	const event = {
-		sourceDocumentId: input.sourceDocumentId,
+		documentId: input.documentId,
 		type: input.type,
 		emitter: input.emitter,
 		severity: input.severity,
@@ -125,18 +117,18 @@ export async function insertProcessingEvent(
 	return insertedEvent;
 }
 
-async function requireOwnedSourceDocument(
+async function requireOwnedDocument(
 	ctx: QueryCtx | MutationCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 ) {
 	const reader = await requireReader(ctx);
-	const sourceDocument = await ctx.db.get("sourceDocuments", sourceDocumentId);
+	const document = await ctx.db.get("documents", documentId);
 
-	if (!sourceDocument || sourceDocument.readerId !== reader._id) {
-		throw new Error("Source Document not found");
+	if (!document || document.readerId !== reader._id) {
+		throw new Error("Document not found");
 	}
 
-	return sourceDocument;
+	return document;
 }
 
 function requireServiceSecret(serviceSecret: string) {

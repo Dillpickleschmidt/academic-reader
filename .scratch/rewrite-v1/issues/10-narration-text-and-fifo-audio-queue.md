@@ -9,10 +9,10 @@ When Narration is enabled in Processing Configuration, generate Narration Text f
 ## Acceptance criteria
 
 - [ ] Narration is enabled by default on first run and remembered afterward.
-- [ ] Narration Text generation starts after Blocks exist and does not block Readable View readiness.
+- [ ] Narration Text generation starts after Blocks exist and does not block Reader View readiness.
 - [ ] Audio queue processes one Block at a time in Block order.
 - [ ] Processing Events show Narration Text and audio queue progress.
-- [ ] Failures are surfaced as warning/error events without hiding the Readable View.
+- [ ] Failures are surfaced as warning/error events without hiding the Reader View.
 
 ## Blocked by
 

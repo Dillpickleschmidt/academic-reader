@@ -5,9 +5,9 @@ import httpx
 
 
 class ProcessingEventClient:
-    def __init__(self, app_api_url: str, source_document_id: str, ingest_token: str):
+    def __init__(self, app_api_url: str, document_id: str, ingest_token: str):
         self.app_api_url = app_api_url.rstrip("/")
-        self.source_document_id = source_document_id
+        self.document_id = document_id
         self.ingest_token = ingest_token
 
     def emit(
@@ -22,7 +22,7 @@ class ProcessingEventClient:
         block_id: str | None = None,
     ) -> None:
         payload: dict[str, Any] = {
-            "sourceDocumentId": self.source_document_id,
+            "documentId": self.document_id,
             "ingestToken": self.ingest_token,
             "type": type,
             "emitter": "marker",
@@ -49,7 +49,7 @@ class ProcessingEventClient:
     def post_result(self, result: dict[str, Any]) -> None:
         with httpx.Client(timeout=120.0) as client:
             response = client.post(
-                f"{self.app_api_url}/api/source-documents/{self.source_document_id}/marker-result",
+                f"{self.app_api_url}/api/documents/{self.document_id}/marker-result",
                 json={"ingestToken": self.ingest_token, "result": result},
             )
             response.raise_for_status()
@@ -57,7 +57,7 @@ class ProcessingEventClient:
     def post_error(self, message: str) -> None:
         with httpx.Client(timeout=30.0) as client:
             response = client.post(
-                f"{self.app_api_url}/api/source-documents/{self.source_document_id}/marker-result",
+                f"{self.app_api_url}/api/documents/{self.document_id}/marker-result",
                 json={"ingestToken": self.ingest_token, "error": message},
             )
             response.raise_for_status()

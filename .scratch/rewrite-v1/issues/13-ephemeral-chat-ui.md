@@ -4,11 +4,11 @@ Status: ready-for-agent
 
 ## What to build
 
-Add simple ephemeral Chat using `@kodehort/ai-sdk-solid` directly in chat components. Chat should allow general model interaction from inside the workbench without persistence, document search, RAG, web search, or app-specific tools.
+Add simple ephemeral Chat using `@kodehort/ai-sdk-solid` directly in chat components. Chat should allow general model interaction from inside the Document page without persistence, document search, RAG, web search, or app-specific tools.
 
 ## Acceptance criteria
 
-- [ ] Chat UI is available in the app/workbench.
+- [ ] Chat UI is available in the app.
 - [ ] `@kodehort/ai-sdk-solid` works with Solid 2 beta or the issue documents the compatibility blocker.
 - [ ] Messages are not persisted in Convex in v1.
 - [ ] Chat has no document/RAG/web-search tools.

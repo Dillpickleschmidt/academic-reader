@@ -1,22 +1,21 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
 import { processingEventDocumentValidator } from "../processingEventValidators";
-import * as SourceDocuments from "../model/sourceDocuments";
+import * as Documents from "../model/documents";
 
 export const list = query({
 	args: {},
-	handler: (ctx) => SourceDocuments.listSourceDocuments(ctx),
+	handler: (ctx) => Documents.listDocuments(ctx),
 });
 
 export const get = query({
 	args: {
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 	},
-	handler: (ctx, args) =>
-		SourceDocuments.getSourceDocument(ctx, args.sourceDocumentId),
+	handler: (ctx, args) => Documents.getDocument(ctx, args.documentId),
 });
 
-export const createFromPromotedUpload = mutation({
+export const createFromPromotedSourceDocument = mutation({
 	args: {
 		filename: v.string(),
 		mimeType: v.string(),
@@ -36,21 +35,21 @@ export const createFromPromotedUpload = mutation({
 		}),
 	},
 	handler: (ctx, args) =>
-		SourceDocuments.createSourceDocumentFromPromotedUpload(ctx, args),
+		Documents.createDocumentFromPromotedSourceDocument(ctx, args),
 });
 
 export const getProcessingInputForApi = query({
 	args: {
 		serviceSecret: v.string(),
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 	},
-	handler: (ctx, args) => SourceDocuments.getProcessingInputForApi(ctx, args),
+	handler: (ctx, args) => Documents.getProcessingInputForApi(ctx, args),
 });
 
 export const failProcessingFromApi = mutation({
 	args: {
 		serviceSecret: v.string(),
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 		message: v.string(),
 		emittedAt: v.number(),
 	},
@@ -61,5 +60,5 @@ export const failProcessingFromApi = mutation({
 			event: processingEventDocumentValidator,
 		}),
 	),
-	handler: (ctx, args) => SourceDocuments.failProcessingFromApi(ctx, args),
+	handler: (ctx, args) => Documents.failProcessingFromApi(ctx, args),
 });

@@ -2,10 +2,9 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import * as Blocks from "../model/blocks";
 
-export const listForSourceDocument = query({
+export const listForDocument = query({
 	args: {
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 	},
-	handler: (ctx, args) =>
-		Blocks.listBlocksForSourceDocument(ctx, args.sourceDocumentId),
+	handler: (ctx, args) => Blocks.listBlocksForDocument(ctx, args.documentId),
 });

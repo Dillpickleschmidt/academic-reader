@@ -39,7 +39,7 @@ export const processingEventInputValidator = v.object({
 export const processingEventDocumentValidator = v.object({
 	_id: v.id("processingEvents"),
 	_creationTime: v.number(),
-	sourceDocumentId: v.id("sourceDocuments"),
+	documentId: v.id("documents"),
 	type: processingEventTypeValidator,
 	emitter: processingEventEmitterValidator,
 	severity: processingEventSeverityValidator,

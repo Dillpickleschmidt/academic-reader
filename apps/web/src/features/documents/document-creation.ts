@@ -8,11 +8,9 @@ export type UploadStatus =
 	| "complete"
 	| "error";
 
-export type SourceDocumentCreation = ReturnType<
-	typeof createSourceDocumentCreation
->;
+export type DocumentCreation = ReturnType<typeof createDocumentCreation>;
 
-export function createSourceDocumentCreation() {
+export function createDocumentCreation() {
 	const [file, setFile] = createSignal<File>();
 	const [mimeType, setMimeType] = createSignal<string>();
 	const [status, setStatus] = createSignal<UploadStatus>("idle");
@@ -78,7 +76,7 @@ export function createSourceDocumentCreation() {
 	};
 }
 
-export function clearSourceDocumentDraft(state: SourceDocumentCreation) {
+export function clearDocumentDraft(state: DocumentCreation) {
 	state.setFile(undefined);
 	state.setMimeType(undefined);
 	state.setTemporaryUploadId(undefined);

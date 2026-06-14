@@ -12,7 +12,7 @@ import {
 } from "./processingEventValidators";
 
 export default defineSchema({
-	sourceDocuments: defineTable({
+	documents: defineTable({
 		readerId: v.string(),
 		filename: v.string(),
 		mimeType: v.string(),
@@ -49,17 +49,14 @@ export default defineSchema({
 		.index("by_reader_status", ["readerId", "processingStatus"]),
 
 	pages: defineTable({
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 		physicalPageNumber: v.number(),
 		width: v.number(),
 		height: v.number(),
-	}).index("by_source_document_physical_page", [
-		"sourceDocumentId",
-		"physicalPageNumber",
-	]),
+	}).index("by_document_physical_page", ["documentId", "physicalPageNumber"]),
 
 	blocks: defineTable({
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 		blockId: v.string(),
 		blockType: blockTypeValidator,
 		rawBlockType: v.string(),
@@ -69,11 +66,11 @@ export default defineSchema({
 		pageNumber: v.optional(v.number()),
 		normalizedBoundingBox: v.optional(normalizedBoundingBoxValidator),
 	})
-		.index("by_source_document_order", ["sourceDocumentId", "order"])
-		.index("by_source_document_block", ["sourceDocumentId", "blockId"]),
+		.index("by_document_order", ["documentId", "order"])
+		.index("by_document_block", ["documentId", "blockId"]),
 
 	processingEvents: defineTable({
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 		type: processingEventTypeValidator,
 		emitter: processingEventEmitterValidator,
 		severity: processingEventSeverityValidator,
@@ -83,7 +80,7 @@ export default defineSchema({
 		blockId: v.optional(v.string()),
 		progress: v.optional(processingEventProgressValidator),
 		data: v.optional(v.record(v.string(), v.any())),
-	}).index("by_source_document", ["sourceDocumentId"]),
+	}).index("by_document", ["documentId"]),
 
 	configurationPreferences: defineTable({
 		readerId: v.string(),

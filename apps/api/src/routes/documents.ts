@@ -8,10 +8,10 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import {
 	acceptMarkerResult,
-	createSourceDocumentAndStartProcessing,
-	createSourceDocumentImageAccess,
-	createSourceDocumentSourceAccess,
-} from "../source-documents";
+	createDocumentAndStartProcessing,
+	createDocumentImageAccess,
+	createDocumentSourceAccess,
+} from "../documents";
 
 const processingConfigurationSchema = v.object({
 	conversionModel: v.picklist(conversionModels),
@@ -26,7 +26,7 @@ const processingConfigurationSchema = v.object({
 	}),
 });
 
-const createSourceDocumentSchema = v.object({
+const createDocumentSchema = v.object({
 	temporaryUploadId: v.pipe(v.string(), v.minLength(1)),
 	filename: v.pipe(v.string(), v.minLength(1)),
 	mimeType: v.picklist(sourceDocumentMimeTypes),
@@ -48,15 +48,15 @@ const imageUrlsSchema = v.object({
 	filenames: v.array(v.pipe(v.string(), v.minLength(1))),
 });
 
-export const sourceDocumentsRoute = new Hono();
+export const documentsRoute = new Hono();
 
-sourceDocumentsRoute.post("/", async (c) => {
+documentsRoute.post("/", async (c) => {
 	const authToken = bearerToken(c.req.header("Authorization"));
 	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
 
 	try {
-		const input = v.parse(createSourceDocumentSchema, await c.req.json());
-		const result = await createSourceDocumentAndStartProcessing({
+		const input = v.parse(createDocumentSchema, await c.req.json());
+		const result = await createDocumentAndStartProcessing({
 			authToken,
 			...input,
 		});
@@ -67,16 +67,14 @@ sourceDocumentsRoute.post("/", async (c) => {
 	}
 });
 
-sourceDocumentsRoute.post("/:sourceDocumentId/marker-result", async (c) => {
-	const sourceDocumentId = c.req.param(
-		"sourceDocumentId",
-	) as Id<"sourceDocuments">;
+documentsRoute.post("/:documentId/marker-result", async (c) => {
+	const documentId = c.req.param("documentId") as Id<"documents">;
 
 	try {
 		const input = v.parse(markerResultSchema, await c.req.json());
 		return c.json(
 			await acceptMarkerResult({
-				sourceDocumentId,
+				documentId,
 				ingestToken: input.ingestToken,
 				result: input.result,
 				error: input.error,
@@ -87,25 +85,23 @@ sourceDocumentsRoute.post("/:sourceDocumentId/marker-result", async (c) => {
 	}
 });
 
-sourceDocumentsRoute.get("/:sourceDocumentId/source-url", async (c) => {
+documentsRoute.get("/:documentId/source-url", async (c) => {
 	const authToken = bearerToken(c.req.header("Authorization"));
 	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
 
 	try {
 		return c.json(
-			await createSourceDocumentSourceAccess({
+			await createDocumentSourceAccess({
 				authToken,
-				sourceDocumentId: c.req.param(
-					"sourceDocumentId",
-				) as Id<"sourceDocuments">,
+				documentId: c.req.param("documentId") as Id<"documents">,
 			}),
 		);
 	} catch {
-		return c.json({ error: "Source Document not found" }, 404);
+		return c.json({ error: "Document not found" }, 404);
 	}
 });
 
-sourceDocumentsRoute.post("/:sourceDocumentId/image-urls", async (c) => {
+documentsRoute.post("/:documentId/image-urls", async (c) => {
 	const authToken = bearerToken(c.req.header("Authorization"));
 	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
 
@@ -116,11 +112,9 @@ sourceDocumentsRoute.post("/:sourceDocumentId/image-urls", async (c) => {
 		}
 
 		return c.json(
-			await createSourceDocumentImageAccess({
+			await createDocumentImageAccess({
 				authToken,
-				sourceDocumentId: c.req.param(
-					"sourceDocumentId",
-				) as Id<"sourceDocuments">,
+				documentId: c.req.param("documentId") as Id<"documents">,
 				filenames: input.filenames,
 			}),
 		);

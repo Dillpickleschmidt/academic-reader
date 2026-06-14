@@ -2,10 +2,9 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import * as Pages from "../model/pages";
 
-export const listForSourceDocument = query({
+export const listForDocument = query({
 	args: {
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 	},
-	handler: (ctx, args) =>
-		Pages.listPagesForSourceDocument(ctx, args.sourceDocumentId),
+	handler: (ctx, args) => Pages.listPagesForDocument(ctx, args.documentId),
 });

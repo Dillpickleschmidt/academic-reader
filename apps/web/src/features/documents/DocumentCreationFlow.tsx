@@ -14,14 +14,14 @@ import { authClient } from "../../lib/auth-client";
 import { useConvexAuth } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
 import {
-	clearSourceDocumentDraft,
+	clearDocumentDraft,
+	type DocumentCreation,
 	formatBytes,
-	type SourceDocumentCreation,
 	uploadFile,
 	uploadStatusLabel,
-} from "./source-document-creation";
+} from "./document-creation";
 
-export function UploadPrompt(props: { state: SourceDocumentCreation }) {
+export function UploadPrompt(props: { state: DocumentCreation }) {
 	const state = props.state;
 
 	async function selectFile(selectedFile: File | undefined) {
@@ -37,7 +37,7 @@ export function UploadPrompt(props: { state: SourceDocumentCreation }) {
 			return;
 		}
 		if (selectedFile.size > sourceDocumentMaxSizeBytes) {
-			state.setError("Source Documents must be 50MB or smaller.");
+			state.setError("Source documents must be 50MB or smaller.");
 			state.setStatus("error");
 			return;
 		}
@@ -89,7 +89,7 @@ export function UploadPrompt(props: { state: SourceDocumentCreation }) {
 	return (
 		<div>
 			<label class="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-stone-700 bg-stone-950 p-6 text-center hover:border-amber-300">
-				<span class="font-medium text-stone-100">Choose source document</span>
+				<span class="font-medium text-stone-100">Choose PDF or image</span>
 				<span class="mt-2 text-sm text-stone-500">
 					PDF, PNG, JPEG, WebP, or TIFF up to 50MB
 				</span>
@@ -112,7 +112,7 @@ export function UploadPrompt(props: { state: SourceDocumentCreation }) {
 }
 
 export function ConfigureProcessingFlow(props: {
-	state: SourceDocumentCreation;
+	state: DocumentCreation;
 	onBack: () => void;
 }) {
 	const session = authClient.useSession();
@@ -178,10 +178,9 @@ export function ConfigureProcessingFlow(props: {
 				fetchOptions: { throw: false },
 			});
 			const token = data?.token;
-			if (!token)
-				throw new Error("Could not authenticate Source Document creation");
+			if (!token) throw new Error("Could not authenticate Document creation");
 
-			const response = await fetch("/api/source-documents", {
+			const response = await fetch("/api/documents", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -212,11 +211,11 @@ export function ConfigureProcessingFlow(props: {
 				throw new Error(payload.error || "Could not start processing");
 			}
 
-			clearSourceDocumentDraft(state);
+			clearDocumentDraft(state);
 			state.setSuccess(
 				payload.processingStarted
-					? "Source Document created and processing started."
-					: "Source Document created, but Marker did not start. Check Processing Events.",
+					? "Document created and processing started."
+					: "Document created, but Marker did not start. Check Processing Events.",
 			);
 		} catch (startError) {
 			state.setError(
@@ -370,10 +369,10 @@ export function ConfigureProcessingFlow(props: {
 					</div>
 
 					<aside class="rounded-3xl border border-stone-800 bg-stone-900/50 p-6">
-						<h3 class="font-semibold text-xl">Create Source Document</h3>
+						<h3 class="font-semibold text-xl">Create Document</h3>
 						<p class="mt-2 text-sm text-stone-400">
-							Processing starts only after the API creates the Source Document
-							and hands it to Marker.
+							Processing starts only after the API creates the Document and
+							hands it to Marker.
 						</p>
 
 						<div class="mt-6 rounded-xl border border-stone-800 bg-stone-950 p-4 text-sm">
@@ -404,8 +403,8 @@ export function ConfigureProcessingFlow(props: {
 										<div class="mt-6 space-y-4">
 											<p class="text-sm text-stone-400">
 												You can finish configuration before signing in. When you
-												start processing, sign in here and this Source Document
-												will be created automatically.
+												start processing, sign in here and this Document will be
+												created automatically.
 											</p>
 											<button
 												class="w-full rounded-lg bg-amber-300 px-4 py-2 font-medium text-stone-950 disabled:opacity-50"

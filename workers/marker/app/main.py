@@ -25,7 +25,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 class RunRequest(BaseModel):
     fileUrl: str
     appApiUrl: str
-    sourceDocumentId: str
+    documentId: str
     ingestToken: str
     useLlm: bool = False
     forceOcr: bool = False
@@ -44,7 +44,7 @@ async def run(request: RunRequest, background_tasks: BackgroundTasks):
         MarkerProcessingRunRequest(
             file_url=request.fileUrl,
             app_api_url=request.appApiUrl,
-            source_document_id=request.sourceDocumentId,
+            document_id=request.documentId,
             ingest_token=request.ingestToken,
             use_llm=request.useLlm,
             force_ocr=request.forceOcr,

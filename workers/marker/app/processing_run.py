@@ -19,7 +19,7 @@ from .progress import install_tqdm_progress_hook
 class MarkerProcessingRunRequest:
     file_url: str
     app_api_url: str
-    source_document_id: str
+    document_id: str
     ingest_token: str
     use_llm: bool = False
     force_ocr: bool = False
@@ -40,7 +40,7 @@ def run_marker_processing_run(
 ) -> None:
     event_client = ProcessingEventClient(
         request.app_api_url,
-        request.source_document_id,
+        request.document_id,
         request.ingest_token,
     )
     run_id = str(uuid.uuid4())

@@ -47,7 +47,7 @@ class Marker:
             MarkerProcessingRunRequest(
                 file_url=request["fileUrl"],
                 app_api_url=request["appApiUrl"],
-                source_document_id=request["sourceDocumentId"],
+                document_id=request["documentId"],
                 ingest_token=request["ingestToken"],
                 use_llm=request.get("useLlm", False),
                 force_ocr=request.get("forceOcr", False),
@@ -74,7 +74,7 @@ def api():
     class RunRequest(BaseModel):
         fileUrl: str
         appApiUrl: str
-        sourceDocumentId: str
+        documentId: str
         ingestToken: str
         useLlm: bool = False
         forceOcr: bool = False

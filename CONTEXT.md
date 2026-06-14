@@ -1,20 +1,20 @@
 # Academic Reader
 
-Academic Reader is a research workbench for importing, inspecting, and reading source documents.
+Academic Reader is for importing, inspecting, and reading Documents.
 
 ## Language
 
-**Research Workbench**:
-A private workspace where a reader turns source documents into inspectable, readable material for study.
-_Avoid_: SaaS app, document platform
-
 **Reader**:
-A signed-in person using the workbench to inspect and read Source Documents.
+A signed-in person using Academic Reader to inspect and read Documents.
 _Avoid_: user, account holder
 
+**Document**:
+The persisted reading object in Academic Reader. A Document has a Source Document, Pages, Blocks, Processing Events, and a Reader View.
+_Avoid_: Source Document, upload, file
+
 **Source Document**:
-A PDF or single image that the reader brings into the workbench as the material to inspect and read.
-_Avoid_: upload, file, asset
+The original PDF or single image that the reader brings into Academic Reader.
+_Avoid_: Document, upload, file, asset
 
 **Page**:
 One visual surface from a Source Document. A single-image Source Document has exactly one Page.
@@ -49,19 +49,19 @@ The observable details that explain what is known about a Block, including its t
 _Avoid_: metadata, properties
 
 **Source View**:
-The page-faithful view of the original Source Document.
+The page-faithful view of the Source Document.
 _Avoid_: original PDF viewer, image preview
 
-**Readable View**:
+**Reader View**:
 The reader-facing presentation derived from Blocks after inspection and cleanup.
-_Avoid_: final HTML, rendered output
+_Avoid_: Readable View, final HTML, rendered output
 
 **Debug Overlay**:
-A reader-facing view that draws visible metadata directly on Blocks so the reader can inspect what the workbench knows without leaving the document.
+A reader-facing view that draws visible metadata directly on Blocks so the reader can inspect what Academic Reader knows without leaving the document.
 _Avoid_: inspector panel, admin console, hidden devtools
 
 **Narration**:
-Spoken audio generated from Blocks in the Readable View.
+Spoken audio generated from Blocks in the Reader View.
 _Avoid_: TTS, audio generation
 
 **Narration Text**:
@@ -69,14 +69,14 @@ The spoken form of a Block used to produce Narration.
 _Avoid_: TTS text, rewrite, script
 
 **Chat**:
-A conversation with an AI model from inside the workbench.
+A conversation with an AI model from inside the Document page.
 
 **Cross-view Link**:
-A direct relationship between the same Block in the Source View and Readable View.
+A direct relationship between the same Block in the Source View and Reader View.
 _Avoid_: inferred match, fuzzy match
 
 **Conversion Model**:
-The document-understanding model chosen to turn a Source Document into Blocks and a Readable View, such as Marker, LightOnOCR, or Chandra.
+The document-understanding model chosen to turn a Source Document into Blocks and a Reader View, such as Marker, LightOnOCR, or Chandra.
 _Avoid_: processing mode, backend
 
 **Processing Configuration**:
@@ -88,7 +88,7 @@ A saved default for a Processing Configuration choice, reused for future Process
 _Avoid_: setting, preset
 
 **Processing Run**:
-The single attempt to turn a Source Document into Pages, Blocks, and a Readable View.
+The single attempt to turn a Source Document into Pages, Blocks, and a Reader View for a Document.
 _Avoid_: job, task, pipeline
 
 **Processing Event**:

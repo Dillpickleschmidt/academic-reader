@@ -3,7 +3,7 @@ import { mutation } from "../_generated/server";
 import { blockInputValidator } from "../blockValidators";
 import { pageInputValidator } from "../pageValidators";
 import { processingEventDocumentValidator } from "../processingEventValidators";
-import * as SourceDocumentProjections from "../model/sourceDocumentProjections";
+import * as DocumentProjections from "../model/documentProjections";
 
 const projectionStatusValidator = v.union(
 	v.literal("ready"),
@@ -13,7 +13,7 @@ const projectionStatusValidator = v.union(
 export const replaceFromApi = mutation({
 	args: {
 		serviceSecret: v.string(),
-		sourceDocumentId: v.id("sourceDocuments"),
+		documentId: v.id("documents"),
 		pages: v.array(pageInputValidator),
 		blocks: v.array(blockInputValidator),
 		warnings: v.array(v.string()),
@@ -31,5 +31,5 @@ export const replaceFromApi = mutation({
 		}),
 	),
 	handler: (ctx, args) =>
-		SourceDocumentProjections.replaceSourceDocumentProjectionFromApi(ctx, args),
+		DocumentProjections.replaceDocumentProjectionFromApi(ctx, args),
 });

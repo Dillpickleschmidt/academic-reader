@@ -3,15 +3,15 @@ import type { ProcessingEventInput } from "@academic-reader/shared/processing-ev
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { insertProcessingEvent } from "./processingEvents";
-import { requireServiceSecret } from "./sourceDocuments";
+import { requireServiceSecret } from "./documents";
 
-export interface SourceDocumentProjectionPageInput {
+export interface DocumentProjectionPageInput {
 	physicalPageNumber: number;
 	width: number;
 	height: number;
 }
 
-export interface SourceDocumentProjectionBlockInput {
+export interface DocumentProjectionBlockInput {
 	blockId: string;
 	blockType: BlockType;
 	rawBlockType: string;
@@ -27,7 +27,7 @@ export interface SourceDocumentProjectionBlockInput {
 	};
 }
 
-export type ReplaceSourceDocumentProjectionResult =
+export type ReplaceDocumentProjectionResult =
 	| { ignored: true }
 	| {
 			ignored: false;
@@ -37,35 +37,32 @@ export type ReplaceSourceDocumentProjectionResult =
 			events: Doc<"processingEvents">[];
 	  };
 
-export async function replaceSourceDocumentProjectionFromApi(
+export async function replaceDocumentProjectionFromApi(
 	ctx: MutationCtx,
 	input: {
 		serviceSecret: string;
-		sourceDocumentId: Id<"sourceDocuments">;
-		pages: SourceDocumentProjectionPageInput[];
-		blocks: SourceDocumentProjectionBlockInput[];
+		documentId: Id<"documents">;
+		pages: DocumentProjectionPageInput[];
+		blocks: DocumentProjectionBlockInput[];
 		warnings: string[];
 		imageCount: number;
 		emittedAt: number;
 	},
-): Promise<ReplaceSourceDocumentProjectionResult> {
+): Promise<ReplaceDocumentProjectionResult> {
 	requireServiceSecret(input.serviceSecret);
-	const sourceDocument = await ctx.db.get(
-		"sourceDocuments",
-		input.sourceDocumentId,
-	);
+	const document = await ctx.db.get("documents", input.documentId);
 
-	if (!sourceDocument) {
-		throw new Error("Source Document not found");
+	if (!document) {
+		throw new Error("Document not found");
 	}
-	if (sourceDocument.processingStatus !== "processing") {
+	if (document.processingStatus !== "processing") {
 		return { ignored: true };
 	}
 
 	for (const page of await ctx.db
 		.query("pages")
-		.withIndex("by_source_document_physical_page", (q) =>
-			q.eq("sourceDocumentId", input.sourceDocumentId),
+		.withIndex("by_document_physical_page", (q) =>
+			q.eq("documentId", input.documentId),
 		)
 		.collect()) {
 		await ctx.db.delete("pages", page._id);
@@ -73,16 +70,14 @@ export async function replaceSourceDocumentProjectionFromApi(
 
 	for (const block of await ctx.db
 		.query("blocks")
-		.withIndex("by_source_document_order", (q) =>
-			q.eq("sourceDocumentId", input.sourceDocumentId),
-		)
+		.withIndex("by_document_order", (q) => q.eq("documentId", input.documentId))
 		.collect()) {
 		await ctx.db.delete("blocks", block._id);
 	}
 
 	for (const page of input.pages) {
 		await ctx.db.insert("pages", {
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 			physicalPageNumber: page.physicalPageNumber,
 			width: page.width,
 			height: page.height,
@@ -91,7 +86,7 @@ export async function replaceSourceDocumentProjectionFromApi(
 
 	for (const block of input.blocks) {
 		await ctx.db.insert("blocks", {
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 			blockId: block.blockId,
 			blockType: block.blockType,
 			rawBlockType: block.rawBlockType,
@@ -111,11 +106,11 @@ export async function replaceSourceDocumentProjectionFromApi(
 
 	const status = input.warnings.length ? "readyWithWarnings" : "ready";
 	const now = Date.now();
-	await ctx.db.patch("sourceDocuments", input.sourceDocumentId, {
+	await ctx.db.patch("documents", input.documentId, {
 		pageCount: input.pages.length,
 		processingStatus: status,
 		processingRun: {
-			...sourceDocument.processingRun,
+			...document.processingRun,
 			finishedAt: now,
 		},
 		updatedAt: now,
@@ -125,14 +120,14 @@ export async function replaceSourceDocumentProjectionFromApi(
 	if (input.warnings.length) {
 		events.push(
 			await insertProcessingEvent(ctx, {
-				sourceDocumentId: input.sourceDocumentId,
+				documentId: input.documentId,
 				...conversionWarningEvent(input.warnings, input.emittedAt),
 			}),
 		);
 	}
 	events.push(
 		await insertProcessingEvent(ctx, {
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 			...conversionCompletedEvent({
 				status,
 				pageCount: input.pages.length,

@@ -1,3 +1,0 @@
-# Authenticated self-hostable workbench
-
-Academic Reader requires authentication to create, process, read, and manage Source Documents from v1 even though it is personal-first, because the workbench may later be shared and avoiding a no-auth/auth split keeps the code simpler. Temporary upload/configuration may happen before sign-in, but a Source Document and Processing Run are created only after authentication. The deployment must remain self-hostable: Convex may be self-hosted, object storage may be MinIO, and external hosted services should be optional or replaceable through Processing Configuration and environment configuration.

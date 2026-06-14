@@ -3,15 +3,15 @@ import { createFileRoute } from "@tanstack/solid-router";
 import { useQuery } from "convex-solidjs";
 import { Show } from "solid-js";
 import { AuthPanel } from "../features/auth/AuthPanel";
-import { ConfigureProcessingFlow } from "../features/source-documents/SourceDocumentCreationFlow";
+import { ConfigureProcessingFlow } from "../features/documents/DocumentCreationFlow";
 import {
-	SignedInWorkbench,
-	SignedOutWorkbench,
-} from "../features/source-documents/SourceDocumentLibrary";
+	SignedInDocuments,
+	SignedOutDocuments,
+} from "../features/documents/DocumentLibrary";
 import {
-	clearSourceDocumentDraft,
-	createSourceDocumentCreation,
-} from "../features/source-documents/source-document-creation";
+	clearDocumentDraft,
+	createDocumentCreation,
+} from "../features/documents/document-creation";
 import { authClient } from "../lib/auth-client";
 import { useConvexAuth } from "../providers/convex";
 
@@ -20,8 +20,8 @@ export const Route = createFileRoute("/")({ component: Home });
 function Home() {
 	const session = authClient.useSession();
 	const convexAuth = useConvexAuth();
-	const creation = createSourceDocumentCreation();
-	const sourceDocuments = useQuery(api.api.sourceDocuments.list, {}, () => ({
+	const creation = createDocumentCreation();
+	const documents = useQuery(api.api.documents.list, {}, () => ({
 		enabled: convexAuth.isAuthenticated(),
 	}));
 
@@ -34,11 +34,11 @@ function Home() {
 							Academic Reader
 						</p>
 						<h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
-							Private research workbench
+							Private document reader
 						</h1>
 						<p class="mt-4 max-w-2xl text-stone-400">
 							Import source documents, inspect processing evidence, and read
-							clean readable views without hiding the conversion details.
+							clean Reader Views without hiding the conversion details.
 						</p>
 					</div>
 					<Show when={!creation.file()}>
@@ -51,7 +51,7 @@ function Home() {
 					fallback={
 						<section class="rounded-3xl border border-stone-800 bg-stone-900/50 p-8">
 							<h2 class="text-2xl font-semibold">Checking session</h2>
-							<p class="mt-3 text-stone-400">Preparing your workbench…</p>
+							<p class="mt-3 text-stone-400">Preparing Academic Reader…</p>
 						</section>
 					}
 				>
@@ -60,13 +60,13 @@ function Home() {
 						fallback={
 							<Show
 								when={session().data?.user}
-								fallback={<SignedOutWorkbench creation={creation} />}
+								fallback={<SignedOutDocuments creation={creation} />}
 							>
 								{(reader) => (
-									<SignedInWorkbench
+									<SignedInDocuments
 										readerName={reader().name || reader().email}
-										documents={sourceDocuments.data()}
-										error={sourceDocuments.error()}
+										documents={documents.data()}
+										error={documents.error()}
 										creation={creation}
 									/>
 								)}
@@ -75,7 +75,7 @@ function Home() {
 					>
 						<ConfigureProcessingFlow
 							state={creation}
-							onBack={() => clearSourceDocumentDraft(creation)}
+							onBack={() => clearDocumentDraft(creation)}
 						/>
 					</Show>
 				</Show>

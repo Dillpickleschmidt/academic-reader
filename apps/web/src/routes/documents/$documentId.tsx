@@ -17,14 +17,14 @@ import {
 } from "solid-js";
 import * as UTIF from "utif";
 import { AuthPanel } from "../../features/auth/AuthPanel";
-import { ProcessingEventsPanel } from "../../features/source-documents/ProcessingEventsPanel";
+import { ProcessingEventsPanel } from "../../features/documents/ProcessingEventsPanel";
 import { authClient } from "../../lib/auth-client";
 import { useConvexAuth } from "../../providers/convex";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-export const Route = createFileRoute("/documents/$sourceDocumentId")({
-	component: DocumentWorkbenchRoute,
+export const Route = createFileRoute("/documents/$documentId")({
+	component: DocumentRoute,
 });
 
 interface SourceAccess {
@@ -39,44 +39,43 @@ interface ImageAccess {
 	expiresAt: string;
 }
 
-function DocumentWorkbenchRoute() {
+function DocumentRoute() {
 	const params = Route.useParams();
 	const session = authClient.useSession();
 	const convexAuth = useConvexAuth();
 	const [activeMobileView, setActiveMobileView] = createSignal<
-		"source" | "readable"
+		"source" | "reader"
 	>("source");
-	const sourceDocumentId = createMemo(
-		() => params().sourceDocumentId as Id<"sourceDocuments">,
-	);
-	const sourceDocument = useQuery(
-		api.api.sourceDocuments.get,
-		() => ({ sourceDocumentId: sourceDocumentId() }),
+	const [eventsOpen, setEventsOpen] = createSignal(false);
+	const documentId = createMemo(() => params().documentId as Id<"documents">);
+	const document = useQuery(
+		api.api.documents.get,
+		() => ({ documentId: documentId() }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const pages = useQuery(
-		api.api.pages.listForSourceDocument,
-		() => ({ sourceDocumentId: sourceDocumentId() }),
+		api.api.pages.listForDocument,
+		() => ({ documentId: documentId() }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const blocks = useQuery(
-		api.api.blocks.listForSourceDocument,
-		() => ({ sourceDocumentId: sourceDocumentId() }),
+		api.api.blocks.listForDocument,
+		() => ({ documentId: documentId() }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const [sourceAccess, { refetch: refetchSourceAccess }] = createResource(
-		() => (convexAuth.isAuthenticated() ? sourceDocumentId() : undefined),
+		() => (convexAuth.isAuthenticated() ? documentId() : undefined),
 		fetchSourceAccess,
 	);
 
 	return (
-		<main class="flex h-screen flex-col overflow-hidden bg-stone-950 text-stone-100">
+		<main class="h-screen overflow-hidden bg-stone-950 text-stone-100">
 			<Show
 				when={!session().isPending}
 				fallback={
 					<FullPageMessage
 						title="Checking session"
-						body="Preparing your workbench…"
+						body="Preparing Academic Reader…"
 					/>
 				}
 			>
@@ -85,8 +84,8 @@ function DocumentWorkbenchRoute() {
 					fallback={
 						<div class="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center gap-6 px-6">
 							<FullPageMessage
-								title="Sign in to open this Source Document"
-								body="Source Documents are private to each Reader."
+								title="Sign in to open this Document"
+								body="Documents are private to each Reader."
 							/>
 							<AuthPanel />
 						</div>
@@ -97,38 +96,88 @@ function DocumentWorkbenchRoute() {
 						fallback={
 							<FullPageMessage
 								title="Finishing sign-in"
-								body="Connecting to your workbench…"
+								body="Connecting to Academic Reader…"
 							/>
 						}
 					>
 						<Show
-							when={
-								!sourceDocument.error() && !pages.error() && !blocks.error()
-							}
+							when={!document.error() && !pages.error() && !blocks.error()}
 							fallback={
 								<FullPageMessage
-									title="Could not open Source Document"
+									title="Could not open Document"
 									body={
-										sourceDocument.error()?.message ??
+										document.error()?.message ??
 										pages.error()?.message ??
 										blocks.error()?.message ??
-										"The Source Document could not be loaded."
+										"The Document could not be loaded."
 									}
 								/>
 							}
 						>
-							<WorkbenchShell
-								activeMobileView={activeMobileView()}
-								blocks={blocks.data()}
-								pages={pages.data()}
-								sourceAccess={sourceAccess()}
-								sourceAccessError={sourceAccess.error}
-								sourceAccessLoading={sourceAccess.loading}
-								sourceDocument={sourceDocument.data()}
-								sourceDocumentId={sourceDocumentId()}
-								onMobileViewChange={setActiveMobileView}
-								onRetrySourceAccess={refetchSourceAccess}
-							/>
+							<div class="relative h-screen overflow-hidden">
+								<Link
+									class="fixed top-3 left-3 z-30 rounded-full border border-stone-700 bg-stone-950/80 px-3 py-1.5 text-sm text-stone-200 shadow-lg backdrop-blur hover:bg-stone-900"
+									to="/"
+								>
+									←
+								</Link>
+
+								<div class="fixed top-3 left-1/2 z-30 grid -translate-x-1/2 grid-cols-2 rounded-full border border-stone-700 bg-stone-950/80 p-1 text-sm shadow-lg backdrop-blur lg:hidden">
+									<button
+										class={mobileViewButtonClass(
+											activeMobileView() === "source",
+										)}
+										type="button"
+										onClick={() => setActiveMobileView("source")}
+									>
+										Source
+									</button>
+									<button
+										class={mobileViewButtonClass(
+											activeMobileView() === "reader",
+										)}
+										type="button"
+										onClick={() => setActiveMobileView("reader")}
+									>
+										Reader
+									</button>
+								</div>
+
+								<div class="grid h-full lg:grid-cols-2">
+									<section class={paneClass(activeMobileView() === "source")}>
+										<SourceView
+											document={document.data()}
+											pages={pages.data()}
+											sourceAccess={sourceAccess()}
+											sourceAccessError={sourceAccess.error}
+											sourceAccessLoading={sourceAccess.loading}
+											onRetrySourceAccess={refetchSourceAccess}
+										/>
+									</section>
+
+									<section class={paneClass(activeMobileView() === "reader")}>
+										<ReaderView
+											blocks={blocks.data()}
+											documentId={documentId()}
+										/>
+									</section>
+								</div>
+
+								<button
+									class="fixed right-4 bottom-4 z-30 rounded-full border border-stone-700 bg-stone-950/85 px-4 py-2 text-sm text-stone-100 shadow-lg backdrop-blur hover:bg-stone-900"
+									type="button"
+									onClick={() => setEventsOpen(true)}
+								>
+									Events
+								</button>
+
+								<EventsDrawer
+									document={document.data()}
+									documentId={documentId()}
+									open={eventsOpen()}
+									onClose={() => setEventsOpen(false)}
+								/>
+							</div>
 						</Show>
 					</Show>
 				</Show>
@@ -137,119 +186,8 @@ function DocumentWorkbenchRoute() {
 	);
 }
 
-function WorkbenchShell(props: {
-	activeMobileView: "source" | "readable";
-	sourceDocumentId: Id<"sourceDocuments">;
-	sourceDocument: Doc<"sourceDocuments"> | undefined;
-	pages: Doc<"pages">[] | undefined;
-	blocks: Doc<"blocks">[] | undefined;
-	sourceAccess: SourceAccess | undefined;
-	sourceAccessLoading: boolean;
-	sourceAccessError: unknown;
-	onRetrySourceAccess: () => void;
-	onMobileViewChange: (view: "source" | "readable") => void;
-}) {
-	return (
-		<div class="flex min-h-0 flex-1 flex-col">
-			<header class="shrink-0 border-stone-800 border-b px-4 py-4 md:px-6">
-				<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-					<div class="min-w-0">
-						<Link class="text-sm text-stone-400 hover:text-amber-200" to="/">
-							← Source Documents
-						</Link>
-						<Show
-							when={props.sourceDocument}
-							fallback={
-								<div class="mt-3 h-8 w-72 animate-pulse rounded bg-stone-800" />
-							}
-						>
-							{(sourceDocument) => (
-								<div class="mt-2 min-w-0">
-									<h1 class="truncate font-semibold text-2xl">
-										{sourceDocument().filename}
-									</h1>
-									<p class="mt-1 text-sm text-stone-500">
-										{sourceDocument().mimeType} ·{" "}
-										{formatBytes(sourceDocument().sizeBytes)}
-									</p>
-								</div>
-							)}
-						</Show>
-					</div>
-
-					<div class="flex flex-wrap items-center gap-2 text-sm">
-						<Show when={props.sourceDocument}>
-							{(sourceDocument) => (
-								<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-300">
-									{sourceDocument().processingStatus}
-								</span>
-							)}
-						</Show>
-						<Show when={props.pages !== undefined}>
-							<span class="rounded-full border border-stone-800 px-3 py-1 text-stone-500">
-								{props.pages?.length ?? 0} Pages
-							</span>
-						</Show>
-						<Show when={props.blocks !== undefined}>
-							<span class="rounded-full border border-stone-800 px-3 py-1 text-stone-500">
-								{props.blocks?.length ?? 0} Blocks
-							</span>
-						</Show>
-					</div>
-				</div>
-
-				<div class="mt-4 grid grid-cols-2 rounded-xl border border-stone-800 p-1 lg:hidden">
-					<button
-						class={mobileViewButtonClass(props.activeMobileView === "source")}
-						type="button"
-						onClick={() => props.onMobileViewChange("source")}
-					>
-						Source View
-					</button>
-					<button
-						class={mobileViewButtonClass(props.activeMobileView === "readable")}
-						type="button"
-						onClick={() => props.onMobileViewChange("readable")}
-					>
-						Readable View
-					</button>
-				</div>
-			</header>
-
-			<div class="grid min-h-0 flex-1 lg:grid-cols-2">
-				<section class={paneClass(props.activeMobileView === "source")}>
-					<PaneHeader eyebrow="Source View" title="Original Source Document" />
-					<SourceView
-						pages={props.pages}
-						sourceAccess={props.sourceAccess}
-						sourceAccessError={props.sourceAccessError}
-						sourceAccessLoading={props.sourceAccessLoading}
-						sourceDocument={props.sourceDocument}
-						onRetrySourceAccess={props.onRetrySourceAccess}
-					/>
-				</section>
-
-				<section class={paneClass(props.activeMobileView === "readable")}>
-					<PaneHeader eyebrow="Readable View" title="Blocks projection" />
-					<ReadableView
-						blocks={props.blocks}
-						sourceDocumentId={props.sourceDocumentId}
-					/>
-				</section>
-			</div>
-
-			<div class="max-h-80 shrink-0 overflow-y-auto border-stone-800 border-t px-4 py-4 md:px-6">
-				<ProcessingEventsPanel
-					isLive={props.sourceDocument?.processingStatus === "processing"}
-					sourceDocumentId={props.sourceDocumentId}
-				/>
-			</div>
-		</div>
-	);
-}
-
 function SourceView(props: {
-	sourceDocument: Doc<"sourceDocuments"> | undefined;
+	document: Doc<"documents"> | undefined;
 	pages: Doc<"pages">[] | undefined;
 	sourceAccess: SourceAccess | undefined;
 	sourceAccessLoading: boolean;
@@ -257,9 +195,9 @@ function SourceView(props: {
 	onRetrySourceAccess: () => void;
 }) {
 	return (
-		<div class="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+		<div class="h-full overflow-auto bg-stone-900 p-4 pt-14 lg:pt-4">
 			<Show
-				when={props.sourceDocument && props.pages !== undefined}
+				when={props.document && props.pages !== undefined}
 				fallback={<PaneSkeleton />}
 			>
 				<Show
@@ -276,10 +214,10 @@ function SourceView(props: {
 				>
 					{(sourceAccess) => (
 						<Show
-							when={props.sourceDocument?.mimeType === "application/pdf"}
+							when={props.document?.mimeType === "application/pdf"}
 							fallback={
 								<ImageSourceView
-									mimeType={props.sourceDocument?.mimeType ?? ""}
+									mimeType={props.document?.mimeType ?? ""}
 									pages={props.pages ?? []}
 									url={sourceAccess().url}
 								/>
@@ -297,10 +235,16 @@ function SourceView(props: {
 	);
 }
 
+const defaultPdfZoom = 1;
+const minPdfZoom = 0.75;
+const maxPdfZoom = 2.5;
+const pdfZoomStep = 0.25;
+
 function PdfSourceView(props: { url: string; pages: Doc<"pages">[] }) {
 	const [pdfDocument, setPdfDocument] = createSignal<PDFDocumentProxy>();
 	const [error, setError] = createSignal<string>();
 	const [loading, setLoading] = createSignal(true);
+	const [zoom, setZoom] = createSignal(defaultPdfZoom);
 	const pageNumbers = createMemo(() => {
 		if (props.pages.length) {
 			return props.pages.map((page) => page.physicalPageNumber);
@@ -358,12 +302,56 @@ function PdfSourceView(props: { url: string; pages: Doc<"pages">[] }) {
 					}
 				>
 					{(pdf) => (
-						<div class="mx-auto flex max-w-5xl flex-col gap-6">
-							<For each={pageNumbers()}>
-								{(pageNumber) => (
-									<PdfPageCanvas pageNumber={pageNumber} pdfDocument={pdf()} />
-								)}
-							</For>
+						<div class="min-w-full">
+							<div class="sticky top-2 z-20 mb-3 flex justify-end">
+								<div class="inline-flex items-center overflow-hidden rounded-full border border-stone-700 bg-stone-950/85 text-sm shadow-lg backdrop-blur">
+									<button
+										class="px-3 py-1.5 text-stone-100 hover:bg-stone-800 disabled:text-stone-600"
+										disabled={zoom() <= minPdfZoom}
+										type="button"
+										onClick={() =>
+											setZoom((value) =>
+												Math.max(minPdfZoom, value - pdfZoomStep),
+											)
+										}
+									>
+										−
+									</button>
+									<button
+										class="border-stone-700 border-x px-3 py-1.5 text-stone-300 hover:bg-stone-800"
+										type="button"
+										onClick={() => setZoom(1)}
+									>
+										Fit
+									</button>
+									<span class="min-w-14 px-3 py-1.5 text-center text-stone-400">
+										{Math.round(zoom() * 100)}%
+									</span>
+									<button
+										class="border-stone-700 border-l px-3 py-1.5 text-stone-100 hover:bg-stone-800 disabled:text-stone-600"
+										disabled={zoom() >= maxPdfZoom}
+										type="button"
+										onClick={() =>
+											setZoom((value) =>
+												Math.min(maxPdfZoom, value + pdfZoomStep),
+											)
+										}
+									>
+										+
+									</button>
+								</div>
+							</div>
+							<div class="flex min-w-full flex-col items-center gap-5">
+								<For each={pageNumbers()}>
+									{(pageNumber) => (
+										<PdfPageCanvas
+											pageNumber={pageNumber}
+											pdfDocument={pdf()}
+											zoom={zoom()}
+										/>
+									)}
+								</For>
+							</div>
 						</div>
 					)}
 				</Show>
@@ -375,6 +363,7 @@ function PdfSourceView(props: { url: string; pages: Doc<"pages">[] }) {
 function PdfPageCanvas(props: {
 	pdfDocument: PDFDocumentProxy;
 	pageNumber: number;
+	zoom: number;
 }) {
 	let container: HTMLDivElement | undefined;
 	let canvas: HTMLCanvasElement | undefined;
@@ -382,6 +371,7 @@ function PdfPageCanvas(props: {
 	const [page, setPage] = createSignal<PDFPageProxy>();
 	const [width, setWidth] = createSignal(0);
 	const [height, setHeight] = createSignal(0);
+	const [displayWidth, setDisplayWidth] = createSignal(0);
 	const [error, setError] = createSignal<string>();
 
 	onMount(() => {
@@ -415,8 +405,8 @@ function PdfPageCanvas(props: {
 
 	createEffect(() => {
 		const loadedPage = page();
-		const targetWidth = width();
-		if (!loadedPage || !canvas || targetWidth <= 0) return;
+		const fitWidth = width();
+		if (!loadedPage || !canvas || fitWidth <= 0) return;
 
 		if (renderTask) {
 			renderTask.cancel();
@@ -424,6 +414,7 @@ function PdfPageCanvas(props: {
 		}
 
 		const baseViewport = loadedPage.getViewport({ scale: 1 });
+		const targetWidth = fitWidth * props.zoom;
 		const cssScale = targetWidth / baseViewport.width;
 		const outputScale = cssScale * window.devicePixelRatio;
 		const viewport = loadedPage.getViewport({ scale: outputScale });
@@ -435,6 +426,7 @@ function PdfPageCanvas(props: {
 			return;
 		}
 
+		setDisplayWidth(targetWidth);
 		setHeight(cssHeight);
 		canvas.width = viewport.width;
 		canvas.height = viewport.height;
@@ -466,18 +458,22 @@ function PdfPageCanvas(props: {
 	});
 
 	return (
-		<article class="rounded-2xl border border-stone-800 bg-stone-900/40 p-3 shadow-2xl shadow-black/30">
-			<div class="mb-2 flex items-center justify-between px-1 text-xs text-stone-500">
-				<span>Physical Page {props.pageNumber}</span>
-				<Show when={error()}>
-					{(message) => <span class="text-red-300">{message()}</span>}
-				</Show>
-			</div>
+		<div ref={container} class="w-full">
 			<div
-				ref={container}
-				class="relative w-full overflow-hidden rounded-xl bg-white"
+				class="relative mx-auto bg-white shadow-xl shadow-black/30"
+				style={{ width: `${displayWidth()}px` }}
 			>
-				<div style={{ height: `${height()}px` }}>
+				<Show when={error()}>
+					{(message) => (
+						<p class="absolute inset-x-0 top-0 z-10 bg-red-950/90 p-2 text-red-200 text-sm">
+							{message()}
+						</p>
+					)}
+				</Show>
+				<div
+					class="relative overflow-hidden"
+					style={{ height: `${height()}px` }}
+				>
 					<canvas ref={canvas} class="block" />
 					<div
 						class="pointer-events-none absolute inset-0"
@@ -486,7 +482,7 @@ function PdfPageCanvas(props: {
 					/>
 				</div>
 			</div>
-		</article>
+		</div>
 	);
 }
 
@@ -498,25 +494,20 @@ function ImageSourceView(props: {
 	const pageNumber = createMemo(() => props.pages[0]?.physicalPageNumber ?? 1);
 
 	return (
-		<div class="mx-auto max-w-5xl rounded-2xl border border-stone-800 bg-stone-900/40 p-3 shadow-2xl shadow-black/30">
-			<div class="mb-2 px-1 text-xs text-stone-500">
-				Physical Page {pageNumber()}
-			</div>
-			<div class="relative overflow-hidden rounded-xl bg-white">
-				<Show
-					when={props.mimeType === "image/tiff"}
-					fallback={
-						<img alt="Source Document" class="block w-full" src={props.url} />
-					}
-				>
-					<TiffCanvas url={props.url} />
-				</Show>
-				<div
-					class="pointer-events-none absolute inset-0"
-					data-page-number={pageNumber()}
-					data-source-overlay-layer=""
-				/>
-			</div>
+		<div class="relative mx-auto max-w-5xl overflow-hidden bg-white shadow-xl shadow-black/30">
+			<Show
+				when={props.mimeType === "image/tiff"}
+				fallback={
+					<img alt="Source Document" class="block w-full" src={props.url} />
+				}
+			>
+				<TiffCanvas url={props.url} />
+			</Show>
+			<div
+				class="pointer-events-none absolute inset-0"
+				data-page-number={pageNumber()}
+				data-source-overlay-layer=""
+			/>
 		</div>
 	);
 }
@@ -532,8 +523,7 @@ function TiffCanvas(props: { url: string }) {
 
 		void fetch(url)
 			.then((response) => {
-				if (!response.ok)
-					throw new Error("Could not load TIFF Source Document");
+				if (!response.ok) throw new Error("Could not load Source Document");
 				return response.arrayBuffer();
 			})
 			.then((buffer) => {
@@ -572,18 +562,18 @@ function TiffCanvas(props: { url: string }) {
 	);
 }
 
-function ReadableView(props: {
-	sourceDocumentId: Id<"sourceDocuments">;
+function ReaderView(props: {
+	documentId: Id<"documents">;
 	blocks: Doc<"blocks">[] | undefined;
 }) {
 	const imageFilenames = createMemo(() => {
 		if (props.blocks === undefined) return undefined;
-		return extractBlockImageFilenames(props.blocks, props.sourceDocumentId);
+		return extractBlockImageFilenames(props.blocks, props.documentId);
 	});
 	const [imageAccess] = createResource(() => {
 		const filenames = imageFilenames();
 		if (filenames === undefined || filenames.length === 0) return undefined;
-		return { sourceDocumentId: props.sourceDocumentId, filenames };
+		return { documentId: props.documentId, filenames };
 	}, fetchImageAccess);
 	const imageUrls = createMemo(() => {
 		const filenames = imageFilenames();
@@ -599,14 +589,14 @@ function ReadableView(props: {
 			...block,
 			contentHtml: rewriteBlockImageUrls(
 				block.contentHtml,
-				props.sourceDocumentId,
+				props.documentId,
 				urls,
 			),
 		}));
 	});
 
 	return (
-		<div class="readable-view min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+		<div class="reader-view h-full overflow-y-auto bg-stone-950 p-6 pt-16 lg:p-10">
 			<Show when={imageAccess.error}>
 				<p class="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-100 text-sm">
 					Some Block images could not be signed for direct storage access.
@@ -618,11 +608,11 @@ function ReadableView(props: {
 					fallback={
 						<EmptyPane
 							title="No Blocks yet"
-							body="Readable View will appear after conversion persists Blocks."
+							body="Reader View will appear after conversion persists Blocks."
 						/>
 					}
 				>
-					<div class="mx-auto max-w-3xl rounded-2xl border border-stone-800 bg-stone-950 px-5 py-8 md:px-8">
+					<div class="mx-auto max-w-3xl">
 						<For each={renderedBlocks()}>
 							{(block) => (
 								<article
@@ -640,14 +630,35 @@ function ReadableView(props: {
 	);
 }
 
-function PaneHeader(props: { eyebrow: string; title: string }) {
+function EventsDrawer(props: {
+	open: boolean;
+	documentId: Id<"documents">;
+	document: Doc<"documents"> | undefined;
+	onClose: () => void;
+}) {
 	return (
-		<div class="shrink-0 border-stone-800 border-b px-4 py-3 md:px-6">
-			<p class="font-medium text-amber-300 text-xs tracking-[0.18em] uppercase">
-				{props.eyebrow}
-			</p>
-			<h2 class="mt-1 font-semibold text-lg">{props.title}</h2>
-		</div>
+		<aside
+			class={`fixed inset-y-0 right-0 z-40 w-full max-w-md border-stone-800 border-l bg-stone-950 p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
+				props.open ? "translate-x-0" : "translate-x-full"
+			}`}
+		>
+			<div class="flex items-center justify-between gap-4">
+				<h2 class="font-semibold text-lg">Processing Events</h2>
+				<button
+					class="rounded-full border border-stone-700 px-3 py-1 text-stone-300 text-sm hover:bg-stone-900"
+					type="button"
+					onClick={props.onClose}
+				>
+					Close
+				</button>
+			</div>
+			<div class="h-[calc(100%-3rem)] overflow-y-auto">
+				<ProcessingEventsPanel
+					documentId={props.documentId}
+					isLive={props.document?.processingStatus === "processing"}
+				/>
+			</div>
+		</aside>
 	);
 }
 
@@ -662,7 +673,7 @@ function PaneSkeleton() {
 
 function EmptyPane(props: { title: string; body: string | undefined }) {
 	return (
-		<div class="rounded-2xl border border-stone-800 bg-stone-900/50 p-8 text-center">
+		<div class="m-8 rounded-2xl border border-stone-800 bg-stone-900/50 p-8 text-center">
 			<h3 class="font-semibold text-xl">{props.title}</h3>
 			<p class="mt-2 text-stone-500">{props.body}</p>
 		</div>
@@ -675,7 +686,7 @@ function RetryMessage(props: {
 	onRetry: () => void;
 }) {
 	return (
-		<div class="rounded-2xl border border-stone-800 bg-stone-900/50 p-8 text-center">
+		<div class="m-8 rounded-2xl border border-stone-800 bg-stone-900/50 p-8 text-center">
 			<h3 class="font-semibold text-xl">{props.title}</h3>
 			<p class="mt-2 text-stone-500">{props.body}</p>
 			<button
@@ -698,7 +709,7 @@ function FullPageMessage(props: { title: string; body: string }) {
 	);
 }
 
-async function fetchSourceAccess(sourceDocumentId: Id<"sourceDocuments">) {
+async function fetchSourceAccess(documentId: Id<"documents">) {
 	const { data } = await authClient.convex.token({
 		fetchOptions: { throw: false },
 	});
@@ -706,7 +717,7 @@ async function fetchSourceAccess(sourceDocumentId: Id<"sourceDocuments">) {
 	if (!token) throw new Error("Could not authenticate Source View access");
 
 	const response = await fetch(
-		`/api/source-documents/${encodeURIComponent(sourceDocumentId)}/source-url`,
+		`/api/documents/${encodeURIComponent(documentId)}/source-url`,
 		{ headers: { Authorization: `Bearer ${token}` } },
 	);
 	const payload = await response.json();
@@ -718,7 +729,7 @@ async function fetchSourceAccess(sourceDocumentId: Id<"sourceDocuments">) {
 }
 
 async function fetchImageAccess(input: {
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 	filenames: string[];
 }) {
 	const { data } = await authClient.convex.token({
@@ -728,7 +739,7 @@ async function fetchImageAccess(input: {
 	if (!token) throw new Error("Could not authenticate Block image access");
 
 	const response = await fetch(
-		`/api/source-documents/${encodeURIComponent(input.sourceDocumentId)}/image-urls`,
+		`/api/documents/${encodeURIComponent(input.documentId)}/image-urls`,
 		{
 			method: "POST",
 			headers: {
@@ -746,22 +757,19 @@ async function fetchImageAccess(input: {
 	return payload as ImageAccess;
 }
 
-async function loadPdfDocument(url: string) {
-	const response = await fetch(url);
-	if (!response.ok) throw new Error("Could not load PDF Source Document");
-	const data = await response.arrayBuffer();
-	return pdfjs.getDocument({ data }).promise;
+function loadPdfDocument(url: string) {
+	return pdfjs.getDocument({ url }).promise;
 }
 
 function extractBlockImageFilenames(
 	blocks: Doc<"blocks">[],
-	sourceDocumentId: string,
+	documentId: string,
 ) {
 	const filenames = new Set<string>();
 
 	for (const block of blocks) {
 		for (const src of imageSources(block.contentHtml)) {
-			const filename = sourceDocumentImageFilename(sourceDocumentId, src);
+			const filename = documentImageFilename(documentId, src);
 			if (filename) filenames.add(filename);
 		}
 	}
@@ -771,13 +779,13 @@ function extractBlockImageFilenames(
 
 function rewriteBlockImageUrls(
 	html: string,
-	sourceDocumentId: string,
+	documentId: string,
 	imageUrls: Record<string, string>,
 ) {
 	return html.replace(
 		/(<img\b[^>]*\bsrc=)(["'])([^"']+)\2/gi,
 		(match, prefix: string, quote: string, src: string) => {
-			const filename = sourceDocumentImageFilename(sourceDocumentId, src);
+			const filename = documentImageFilename(documentId, src);
 			const url = filename ? imageUrls[filename] : undefined;
 			if (!url) return match;
 
@@ -799,7 +807,7 @@ function imageSources(html: string) {
 	return sources;
 }
 
-function sourceDocumentImageFilename(sourceDocumentId: string, src: string) {
+function documentImageFilename(documentId: string, src: string) {
 	let pathname: string;
 	try {
 		pathname = new URL(src, window.location.origin).pathname;
@@ -807,11 +815,9 @@ function sourceDocumentImageFilename(sourceDocumentId: string, src: string) {
 		return undefined;
 	}
 
-	const match = pathname.match(
-		/^\/api\/source-documents\/([^/]+)\/images\/(.+)$/,
-	);
+	const match = pathname.match(/^\/api\/documents\/([^/]+)\/images\/(.+)$/);
 	if (!match) return undefined;
-	if (decodeURIComponent(match[1]) !== sourceDocumentId) return undefined;
+	if (decodeURIComponent(match[1]) !== documentId) return undefined;
 	return decodeURIComponent(match[2]);
 }
 
@@ -823,18 +829,13 @@ function escapeAttributeValue(value: string, quote: string) {
 }
 
 function paneClass(isActiveMobileView: boolean) {
-	return `${isActiveMobileView ? "flex" : "hidden"} min-h-0 flex-col border-stone-800 lg:flex lg:border-r`;
+	return `${isActiveMobileView ? "block" : "hidden"} h-full min-h-0 lg:block`;
 }
 
 function mobileViewButtonClass(isActive: boolean) {
 	return isActive
-		? "rounded-lg bg-amber-300 px-3 py-2 font-medium text-stone-950"
-		: "rounded-lg px-3 py-2 text-stone-400";
-}
-
-function formatBytes(bytes: number) {
-	if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)}KB`;
-	return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+		? "rounded-full bg-amber-300 px-3 py-1 font-medium text-stone-950"
+		: "rounded-full px-3 py-1 text-stone-400";
 }
 
 function errorMessage(error: unknown) {

@@ -22,11 +22,11 @@ import {
 	getWorkerPresignedReadUrl,
 	promoteTemporaryUpload,
 	saveObject,
-	sourceDocumentImageObjectKey,
-	sourceDocumentImageUrl,
+	documentImageObjectKey,
+	documentImageUrl,
 } from "./storage";
 
-export interface SourceDocumentProcessingConfiguration {
+export interface DocumentProcessingConfiguration {
 	conversionModel: string;
 	pageRange: string;
 	markerOptions: {
@@ -39,22 +39,22 @@ export interface SourceDocumentProcessingConfiguration {
 	};
 }
 
-export interface CreateSourceDocumentAndStartProcessingInput {
+export interface CreateDocumentAndStartProcessingInput {
 	authToken: string;
 	temporaryUploadId: string;
 	filename: string;
 	mimeType: SourceDocumentMimeType;
 	sizeBytes: number;
-	processingConfiguration: SourceDocumentProcessingConfiguration;
+	processingConfiguration: DocumentProcessingConfiguration;
 }
 
-export type CreateSourceDocumentAndStartProcessingResult =
+export type CreateDocumentAndStartProcessingResult =
 	| {
-			sourceDocumentId: Id<"sourceDocuments">;
+			documentId: Id<"documents">;
 			processingStarted: true;
 	  }
 	| {
-			sourceDocumentId: Id<"sourceDocuments">;
+			documentId: Id<"documents">;
 			processingStarted: false;
 			error: string;
 	  };
@@ -64,35 +64,36 @@ export type AcceptMarkerResultResult =
 	| { failed: true }
 	| { status: "ready" | "readyWithWarnings" };
 
-export async function createSourceDocumentAndStartProcessing(
-	input: CreateSourceDocumentAndStartProcessingInput,
-): Promise<CreateSourceDocumentAndStartProcessingResult> {
+export async function createDocumentAndStartProcessing(
+	input: CreateDocumentAndStartProcessingInput,
+): Promise<CreateDocumentAndStartProcessingResult> {
 	const promotedUpload = await promoteTemporaryUpload({
 		temporaryUploadId: input.temporaryUploadId,
 		filename: input.filename,
 	});
-	const sourceDocumentId = await createConvexHttpClient(
-		input.authToken,
-	).mutation(api.api.sourceDocuments.createFromPromotedUpload, {
-		filename: input.filename,
-		mimeType: input.mimeType,
-		sizeBytes: input.sizeBytes,
-		storageObjectKey: promotedUpload.objectKey,
-		processingConfiguration: input.processingConfiguration,
-	});
+	const documentId = await createConvexHttpClient(input.authToken).mutation(
+		api.api.documents.createFromPromotedSourceDocument,
+		{
+			filename: input.filename,
+			mimeType: input.mimeType,
+			sizeBytes: input.sizeBytes,
+			storageObjectKey: promotedUpload.objectKey,
+			processingConfiguration: input.processingConfiguration,
+		},
+	);
 
 	try {
-		await startMarkerProcessing(sourceDocumentId);
-		return { sourceDocumentId, processingStarted: true };
+		await startMarkerProcessing(documentId);
+		return { documentId, processingStarted: true };
 	} catch (startError) {
 		const message = errorMessage(startError);
-		await failProcessing(sourceDocumentId, message);
-		return { sourceDocumentId, processingStarted: false, error: message };
+		await failProcessing(documentId, message);
+		return { documentId, processingStarted: false, error: message };
 	}
 }
 
 export async function acceptMarkerResult(input: {
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 	ingestToken: string;
 	result?: unknown;
 	error?: string;
@@ -101,7 +102,7 @@ export async function acceptMarkerResult(input: {
 
 	try {
 		const metadata = await getValidatedIngestMetadata({
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 			ingestToken: input.ingestToken,
 		});
 		isValidatedCallback = true;
@@ -111,7 +112,7 @@ export async function acceptMarkerResult(input: {
 		}
 
 		if (input.error) {
-			await failProcessing(input.sourceDocumentId, input.error);
+			await failProcessing(input.documentId, input.error);
 			return { failed: true };
 		}
 		if (input.result === undefined) {
@@ -120,15 +121,15 @@ export async function acceptMarkerResult(input: {
 
 		const result = normalizeMarkerConversionResult(input.result);
 		const imageUrls = await saveMarkerImages(
-			input.sourceDocumentId,
+			input.documentId,
 			collectMarkerImages(result),
 		);
 		const adapted = adaptMarkerConversionResult({ result, imageUrls });
 		const projection = await createConvexHttpClient().mutation(
-			api.api.sourceDocumentProjections.replaceFromApi,
+			api.api.documentProjections.replaceFromApi,
 			{
 				serviceSecret: readApiToConvexServiceSecret(),
-				sourceDocumentId: input.sourceDocumentId,
+				documentId: input.documentId,
 				pages: adapted.pages,
 				blocks: adapted.blocks,
 				warnings: adapted.warnings,
@@ -143,7 +144,7 @@ export async function acceptMarkerResult(input: {
 		return { status: projection.status };
 	} catch (error) {
 		if (isValidatedCallback) {
-			await failProcessing(input.sourceDocumentId, errorMessage(error)).catch(
+			await failProcessing(input.documentId, errorMessage(error)).catch(
 				() => undefined,
 			);
 		}
@@ -151,44 +152,39 @@ export async function acceptMarkerResult(input: {
 	}
 }
 
-export async function createSourceDocumentSourceAccess(input: {
+export async function createDocumentSourceAccess(input: {
 	authToken: string;
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 }) {
-	const sourceDocument = await createConvexHttpClient(input.authToken).query(
-		api.api.sourceDocuments.get,
+	const document = await createConvexHttpClient(input.authToken).query(
+		api.api.documents.get,
 		{
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 		},
 	);
-	const access = await getBrowserPresignedReadUrl(
-		sourceDocument.storageObjectKey,
-	);
+	const access = await getBrowserPresignedReadUrl(document.storageObjectKey);
 
 	return {
 		...access,
-		filename: sourceDocument.filename,
-		mimeType: sourceDocument.mimeType,
+		filename: document.filename,
+		mimeType: document.mimeType,
 	};
 }
 
-export async function createSourceDocumentImageAccess(input: {
+export async function createDocumentImageAccess(input: {
 	authToken: string;
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 	filenames: string[];
 }) {
-	await createConvexHttpClient(input.authToken).query(
-		api.api.sourceDocuments.get,
-		{
-			sourceDocumentId: input.sourceDocumentId,
-		},
-	);
+	await createConvexHttpClient(input.authToken).query(api.api.documents.get, {
+		documentId: input.documentId,
+	});
 	const urls: Record<string, string> = {};
 	let expiresAt = new Date().toISOString();
 
 	for (const filename of new Set(input.filenames)) {
 		const access = await getBrowserPresignedReadUrl(
-			sourceDocumentImageObjectKey(input.sourceDocumentId, filename),
+			documentImageObjectKey(input.documentId, filename),
 		);
 		urls[filename] = access.url;
 		expiresAt = access.expiresAt;
@@ -197,25 +193,22 @@ export async function createSourceDocumentImageAccess(input: {
 	return { urls, expiresAt };
 }
 
-async function startMarkerProcessing(sourceDocumentId: Id<"sourceDocuments">) {
+async function startMarkerProcessing(documentId: Id<"documents">) {
 	const serviceSecret = readApiToConvexServiceSecret();
 	const client = createConvexHttpClient();
-	const input = await client.query(
-		api.api.sourceDocuments.getProcessingInputForApi,
-		{
-			serviceSecret,
-			sourceDocumentId,
-		},
-	);
+	const input = await client.query(api.api.documents.getProcessingInputForApi, {
+		serviceSecret,
+		documentId,
+	});
 	const ingestToken = createProcessingEventIngestToken({
 		serviceSecret,
-		sourceDocumentId,
+		documentId,
 		processingRunStartedAt: input.processingRunStartedAt,
 	});
 	const fileUrl = await getWorkerPresignedReadUrl(input.storageObjectKey);
 
 	await submitMarkerProcessing({
-		sourceDocumentId,
+		documentId,
 		fileUrl,
 		ingestToken,
 		useLlm: input.processingConfiguration.markerOptions.useLlm,
@@ -224,15 +217,12 @@ async function startMarkerProcessing(sourceDocumentId: Id<"sourceDocuments">) {
 	});
 }
 
-async function failProcessing(
-	sourceDocumentId: Id<"sourceDocuments">,
-	message: string,
-) {
+async function failProcessing(documentId: Id<"documents">, message: string) {
 	const failed = await createConvexHttpClient().mutation(
-		api.api.sourceDocuments.failProcessingFromApi,
+		api.api.documents.failProcessingFromApi,
 		{
 			serviceSecret: readApiToConvexServiceSecret(),
-			sourceDocumentId,
+			documentId,
 			message,
 			emittedAt: Date.now(),
 		},
@@ -241,20 +231,20 @@ async function failProcessing(
 }
 
 async function getValidatedIngestMetadata(input: {
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 	ingestToken: string;
 }) {
 	const serviceSecret = readApiToConvexServiceSecret();
 	const metadata = await createConvexHttpClient().query(
-		api.api.sourceDocuments.getProcessingInputForApi,
+		api.api.documents.getProcessingInputForApi,
 		{
 			serviceSecret,
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 		},
 	);
 	const expectedToken = createProcessingEventIngestToken({
 		serviceSecret,
-		sourceDocumentId: metadata.sourceDocumentId,
+		documentId: metadata.documentId,
 		processingRunStartedAt: metadata.processingRunStartedAt,
 	});
 
@@ -271,21 +261,21 @@ async function getValidatedIngestMetadata(input: {
 }
 
 async function saveMarkerImages(
-	sourceDocumentId: string,
+	documentId: string,
 	images: Record<string, string>,
 ) {
 	const imageUrls: Record<string, string> = {};
 
 	for (const [filename, base64] of Object.entries(images)) {
 		await saveObject(
-			sourceDocumentImageObjectKey(sourceDocumentId, filename),
+			documentImageObjectKey(documentId, filename),
 			decodeBase64Image(base64),
 			{
 				contentType: imageContentType(filename),
 				cacheControl: "private, max-age=31536000, immutable",
 			},
 		);
-		imageUrls[filename] = sourceDocumentImageUrl(sourceDocumentId, filename);
+		imageUrls[filename] = documentImageUrl(documentId, filename);
 	}
 
 	return imageUrls;

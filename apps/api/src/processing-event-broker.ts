@@ -1,18 +1,19 @@
-import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
-
-export interface ProcessingEventMessage extends ProcessingEventInput {
+type ProcessingEvent = {
 	_id: string;
-	_creationTime: number;
-	sourceDocumentId: string;
-}
+	documentId: string;
+};
+
+export type ProcessingEventMessage = ProcessingEvent & Record<string, unknown>;
+
+type ProcessingEventSubscriber = (event: ProcessingEventMessage) => void;
 
 const processingEventSubscribers = new Map<
 	string,
-	Set<(event: ProcessingEventMessage) => void>
+	Set<ProcessingEventSubscriber>
 >();
 
 export function publishProcessingEvent(event: ProcessingEventMessage) {
-	const subscribers = processingEventSubscribers.get(event.sourceDocumentId);
+	const subscribers = processingEventSubscribers.get(event.documentId);
 	if (!subscribers) return;
 
 	for (const subscriber of subscribers) {
@@ -21,18 +22,17 @@ export function publishProcessingEvent(event: ProcessingEventMessage) {
 }
 
 export function subscribeToProcessingEvents(
-	sourceDocumentId: string,
-	notify: (event: ProcessingEventMessage) => void,
+	documentId: string,
+	subscriber: ProcessingEventSubscriber,
 ) {
-	const subscribers =
-		processingEventSubscribers.get(sourceDocumentId) ?? new Set();
-	subscribers.add(notify);
-	processingEventSubscribers.set(sourceDocumentId, subscribers);
+	const subscribers = processingEventSubscribers.get(documentId) ?? new Set();
+	subscribers.add(subscriber);
+	processingEventSubscribers.set(documentId, subscribers);
 
 	return () => {
-		subscribers.delete(notify);
+		subscribers.delete(subscriber);
 		if (subscribers.size === 0) {
-			processingEventSubscribers.delete(sourceDocumentId);
+			processingEventSubscribers.delete(documentId);
 		}
 	};
 }

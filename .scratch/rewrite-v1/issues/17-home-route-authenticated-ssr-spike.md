@@ -16,7 +16,7 @@ Use the existing Hono API server as a narrow SSR entrypoint for `/`:
 
 - Read Better Auth cookies from the request.
 - Resolve the current Better Auth session/token through Convex Better Auth HTTP actions or server utilities if available.
-- Query Convex for the current Reader and Source Document library.
+- Query Convex for the current Reader and Document library.
 - Render the home route HTML with Solid server rendering.
 - Serialize minimal initial auth/library state for hydration.
 - Hydrate the existing Solid client without mismatch.

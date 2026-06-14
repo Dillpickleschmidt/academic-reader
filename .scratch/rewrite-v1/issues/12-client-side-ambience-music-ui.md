@@ -8,11 +8,11 @@ Add functional client-side ambience/music controls using static tracks. This is 
 
 ## Acceptance criteria
 
-- [ ] Reader can choose ambience and music tracks from the document workbench UI.
+- [ ] Reader can choose ambience and music tracks from the Document page UI.
 - [ ] Controls support play/pause and volume for local static tracks.
-- [ ] Ambience/music state does not affect Source Document processing.
+- [ ] Ambience/music state does not affect Document processing.
 - [ ] UI is integrated without blocking Narration playback work.
 
 ## Blocked by
 
-- `.scratch/rewrite-v1/issues/07-document-workbench-route.md`
+- `.scratch/rewrite-v1/issues/07-document-page-route.md`

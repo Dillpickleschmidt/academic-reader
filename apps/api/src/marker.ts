@@ -2,7 +2,7 @@ const localMarkerUrl = "http://localhost:8800";
 const localWorkerAppApiUrl = "http://localhost:8787";
 
 export interface MarkerProcessingInput {
-	sourceDocumentId: string;
+	documentId: string;
 	fileUrl: string;
 	ingestToken: string;
 	useLlm: boolean;
@@ -18,7 +18,7 @@ export async function submitMarkerProcessing(input: MarkerProcessingInput) {
 		body: JSON.stringify({
 			fileUrl: input.fileUrl,
 			appApiUrl: workerAppApiUrl(backend),
-			sourceDocumentId: input.sourceDocumentId,
+			documentId: input.documentId,
 			ingestToken: input.ingestToken,
 			useLlm: input.useLlm,
 			forceOcr: input.forceOcr,

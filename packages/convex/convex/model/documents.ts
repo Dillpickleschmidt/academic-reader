@@ -9,24 +9,21 @@ import {
 	insertProcessingEvent,
 } from "./processingEvents";
 
-export async function listSourceDocuments(ctx: QueryCtx) {
+export async function listDocuments(ctx: QueryCtx) {
 	const reader = await requireReader(ctx);
 
 	return ctx.db
-		.query("sourceDocuments")
+		.query("documents")
 		.withIndex("by_reader", (q) => q.eq("readerId", reader._id))
 		.order("desc")
 		.collect();
 }
 
-export async function getSourceDocument(
-	ctx: QueryCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
-) {
-	return requireOwnedSourceDocument(ctx, sourceDocumentId);
+export async function getDocument(ctx: QueryCtx, documentId: Id<"documents">) {
+	return requireOwnedDocument(ctx, documentId);
 }
 
-export async function createSourceDocumentFromPromotedUpload(
+export async function createDocumentFromPromotedSourceDocument(
 	ctx: MutationCtx,
 	input: {
 		filename: string;
@@ -62,7 +59,7 @@ export async function createSourceDocumentFromPromotedUpload(
 		narrationVoice: processingConfiguration.narration.voice,
 	});
 
-	const sourceDocumentId = await ctx.db.insert("sourceDocuments", {
+	const documentId = await ctx.db.insert("documents", {
 		readerId: reader._id,
 		filename: input.filename,
 		mimeType: input.mimeType,
@@ -79,34 +76,31 @@ export async function createSourceDocumentFromPromotedUpload(
 		updatedAt: now,
 	});
 
-	await appendInitialProcessingStartedEvent(ctx, sourceDocumentId, now);
+	await appendInitialProcessingStartedEvent(ctx, documentId, now);
 
-	return sourceDocumentId;
+	return documentId;
 }
 
 export async function getProcessingInputForApi(
 	ctx: QueryCtx,
 	input: {
 		serviceSecret: string;
-		sourceDocumentId: Id<"sourceDocuments">;
+		documentId: Id<"documents">;
 	},
 ) {
 	requireServiceSecret(input.serviceSecret);
-	const sourceDocument = await ctx.db.get(
-		"sourceDocuments",
-		input.sourceDocumentId,
-	);
+	const document = await ctx.db.get("documents", input.documentId);
 
-	if (!sourceDocument) {
-		throw new Error("Source Document not found");
+	if (!document) {
+		throw new Error("Document not found");
 	}
 
 	return {
-		sourceDocumentId: sourceDocument._id,
-		storageObjectKey: sourceDocument.storageObjectKey,
-		processingConfiguration: sourceDocument.processingConfiguration,
-		processingRunStartedAt: sourceDocument.processingRun.startedAt,
-		processingStatus: sourceDocument.processingStatus,
+		documentId: document._id,
+		storageObjectKey: document.storageObjectKey,
+		processingConfiguration: document.processingConfiguration,
+		processingRunStartedAt: document.processingRun.startedAt,
+		processingStatus: document.processingStatus,
 	};
 }
 
@@ -114,7 +108,7 @@ export async function failProcessingFromApi(
 	ctx: MutationCtx,
 	input: {
 		serviceSecret: string;
-		sourceDocumentId: Id<"sourceDocuments">;
+		documentId: Id<"documents">;
 		message: string;
 		emittedAt: number;
 	},
@@ -122,48 +116,45 @@ export async function failProcessingFromApi(
 	{ ignored: true } | { ignored: false; event: Doc<"processingEvents"> }
 > {
 	requireServiceSecret(input.serviceSecret);
-	const sourceDocument = await ctx.db.get(
-		"sourceDocuments",
-		input.sourceDocumentId,
-	);
+	const document = await ctx.db.get("documents", input.documentId);
 
-	if (!sourceDocument) {
-		throw new Error("Source Document not found");
+	if (!document) {
+		throw new Error("Document not found");
 	}
-	if (sourceDocument.processingStatus !== "processing") {
+	if (document.processingStatus !== "processing") {
 		return { ignored: true };
 	}
 
 	const now = Date.now();
-	await ctx.db.patch("sourceDocuments", input.sourceDocumentId, {
+	await ctx.db.patch("documents", input.documentId, {
 		processingStatus: "failed",
 		processingRun: {
-			...sourceDocument.processingRun,
+			...document.processingRun,
 			finishedAt: now,
 		},
 		updatedAt: now,
 	});
 
 	const event = await insertProcessingEvent(ctx, {
-		sourceDocumentId: input.sourceDocumentId,
+		documentId: input.documentId,
 		...conversionFailedEvent(input.message, input.emittedAt),
 	});
 
 	return { ignored: false, event };
 }
 
-async function requireOwnedSourceDocument(
+async function requireOwnedDocument(
 	ctx: QueryCtx | MutationCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 ) {
 	const reader = await requireReader(ctx);
-	const sourceDocument = await ctx.db.get("sourceDocuments", sourceDocumentId);
+	const document = await ctx.db.get("documents", documentId);
 
-	if (!sourceDocument || sourceDocument.readerId !== reader._id) {
-		throw new Error("Source Document not found");
+	if (!document || document.readerId !== reader._id) {
+		throw new Error("Document not found");
 	}
 
-	return sourceDocument;
+	return document;
 }
 
 export function requireServiceSecret(serviceSecret: string) {

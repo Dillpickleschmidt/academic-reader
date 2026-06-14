@@ -2,31 +2,29 @@ import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { requireReader } from "./auth";
 
-export async function listBlocksForSourceDocument(
+export async function listBlocksForDocument(
 	ctx: QueryCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 ) {
-	await requireOwnedSourceDocument(ctx, sourceDocumentId);
+	await requireOwnedDocument(ctx, documentId);
 
 	return ctx.db
 		.query("blocks")
-		.withIndex("by_source_document_order", (q) =>
-			q.eq("sourceDocumentId", sourceDocumentId),
-		)
+		.withIndex("by_document_order", (q) => q.eq("documentId", documentId))
 		.order("asc")
 		.collect();
 }
 
-async function requireOwnedSourceDocument(
+async function requireOwnedDocument(
 	ctx: QueryCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
+	documentId: Id<"documents">,
 ) {
 	const reader = await requireReader(ctx);
-	const sourceDocument = await ctx.db.get("sourceDocuments", sourceDocumentId);
+	const document = await ctx.db.get("documents", documentId);
 
-	if (!sourceDocument || sourceDocument.readerId !== reader._id) {
-		throw new Error("Source Document not found");
+	if (!document || document.readerId !== reader._id) {
+		throw new Error("Document not found");
 	}
 
-	return sourceDocument;
+	return document;
 }

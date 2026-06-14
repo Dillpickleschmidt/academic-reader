@@ -30,7 +30,7 @@ const processingEventProgressSchema = v.object({
 });
 
 const processingEventIngestSchema = v.object({
-	sourceDocumentId: v.pipe(v.string(), v.minLength(1)),
+	documentId: v.pipe(v.string(), v.minLength(1)),
 	ingestToken: v.pipe(v.string(), v.minLength(1)),
 	type: v.picklist(processingEventTypes),
 	emitter: v.picklist(processingEventEmitters),
@@ -49,18 +49,18 @@ processingEventsRoute.post("/ingest", async (c) => {
 	try {
 		const input = v.parse(processingEventIngestSchema, await c.req.json());
 		const serviceSecret = readApiToConvexServiceSecret();
-		const sourceDocumentId = input.sourceDocumentId as Id<"sourceDocuments">;
+		const documentId = input.documentId as Id<"documents">;
 		const client = createConvexHttpClient();
 		const ingestMetadata = await client.query(
 			api.api.processingEvents.getIngestMetadata,
 			{
 				serviceSecret,
-				sourceDocumentId,
+				documentId,
 			},
 		);
 		const expectedToken = createProcessingEventIngestToken({
 			serviceSecret,
-			sourceDocumentId: ingestMetadata.sourceDocumentId,
+			documentId: ingestMetadata.documentId,
 			processingRunStartedAt: ingestMetadata.processingRunStartedAt,
 		});
 
@@ -77,7 +77,7 @@ processingEventsRoute.post("/ingest", async (c) => {
 			api.api.processingEvents.appendFromApi,
 			{
 				serviceSecret,
-				sourceDocumentId,
+				documentId,
 				event: {
 					type: input.type,
 					emitter: input.emitter,
@@ -110,10 +110,8 @@ processingEventsRoute.post("/ingest", async (c) => {
 	}
 });
 
-processingEventsRoute.get("/stream/:sourceDocumentId", async (c) => {
-	const sourceDocumentId = c.req.param(
-		"sourceDocumentId",
-	) as Id<"sourceDocuments">;
+processingEventsRoute.get("/stream/:documentId", async (c) => {
+	const documentId = c.req.param("documentId") as Id<"documents">;
 	const authToken = bearerToken(c.req.header("Authorization"));
 
 	if (!authToken) {
@@ -123,10 +121,10 @@ processingEventsRoute.get("/stream/:sourceDocumentId", async (c) => {
 	try {
 		await createConvexHttpClient(authToken).query(
 			api.api.processingEvents.authorizeStream,
-			{ sourceDocumentId },
+			{ documentId },
 		);
 	} catch {
-		return c.json({ error: "Source Document not found" }, 404);
+		return c.json({ error: "Document not found" }, 404);
 	}
 
 	return streamSSE(c, async (stream) => {
@@ -171,7 +169,7 @@ processingEventsRoute.get("/stream/:sourceDocumentId", async (c) => {
 			});
 		}
 
-		const unsubscribe = subscribeToProcessingEvents(sourceDocumentId, notify);
+		const unsubscribe = subscribeToProcessingEvents(documentId, notify);
 		stream.onAbort(() => {
 			unsubscribe();
 			cleanupPendingWait();

@@ -15,4 +15,4 @@ Use PDF-provided Page Labels and resolved PDF outline/bookmarks when available. 
 
 ## Blocked by
 
-- `.scratch/rewrite-v1/issues/07-document-workbench-route.md`
+- `.scratch/rewrite-v1/issues/07-document-page-route.md`

@@ -8,7 +8,7 @@ Implement persisted Processing Events, worker event ingest, and live delivery vi
 
 ## Acceptance criteria
 
-- [x] Convex stores Processing Events for each Source Document.
+- [x] Convex stores Processing Events for each Document.
 - [x] Events are ordered and displayed by Convex `_creationTime`.
 - [x] Worker/app emitted events include required `emittedAt`.
 - [x] API exposes authenticated worker event ingest using a per-run ingest token.

@@ -14,58 +14,58 @@ body {
 	margin: 0;
 }
 
-.readable-view article + article {
+.reader-view article + article {
 	margin-top: 1.25rem;
 }
 
-.readable-view :is(h1, h2, h3, h4, h5, h6) {
+.reader-view :is(h1, h2, h3, h4, h5, h6) {
 	margin: 1.5rem 0 0.75rem;
 	font-weight: 650;
 	line-height: 1.2;
 	color: rgb(245 245 244);
 }
 
-.readable-view h1 {
+.reader-view h1 {
 	font-size: 1.875rem;
 }
 
-.readable-view h2 {
+.reader-view h2 {
 	font-size: 1.5rem;
 }
 
-.readable-view h3 {
+.reader-view h3 {
 	font-size: 1.25rem;
 }
 
-.readable-view :is(p, ul, ol, blockquote, figure, table, pre) {
+.reader-view :is(p, ul, ol, blockquote, figure, table, pre) {
 	margin: 0.85rem 0;
 }
 
-.readable-view p {
+.reader-view p {
 	line-height: 1.75;
 	color: rgb(214 211 209);
 }
 
-.readable-view :is(ul, ol) {
+.reader-view :is(ul, ol) {
 	padding-left: 1.5rem;
 	color: rgb(214 211 209);
 }
 
-.readable-view ul {
+.reader-view ul {
 	list-style: disc;
 }
 
-.readable-view ol {
+.reader-view ol {
 	list-style: decimal;
 }
 
-.readable-view img {
+.reader-view img {
 	max-width: 100%;
 	height: auto;
 	border-radius: 0.75rem;
 }
 
-.readable-view table {
+.reader-view table {
 	display: block;
 	max-width: 100%;
 	overflow-x: auto;
@@ -73,18 +73,18 @@ body {
 	color: rgb(214 211 209);
 }
 
-.readable-view :is(th, td) {
+.reader-view :is(th, td) {
 	border: 1px solid rgb(68 64 60);
 	padding: 0.5rem 0.75rem;
 }
 
-.readable-view pre {
+.reader-view pre {
 	overflow-x: auto;
 	border-radius: 0.75rem;
 	background: rgb(28 25 23);
 	padding: 1rem;
 }
 
-.readable-view code {
+.reader-view code {
 	color: rgb(253 230 138);
 }

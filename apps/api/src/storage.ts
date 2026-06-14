@@ -46,7 +46,7 @@ export async function promoteTemporaryUpload(input: {
 		input.temporaryUploadId,
 		input.filename,
 	);
-	const objectKey = `source-documents/${randomUUID()}/${safeFilename(input.filename)}`;
+	const objectKey = `documents/${randomUUID()}/source/${safeFilename(input.filename)}`;
 	await copyObject(config, sourceObjectKey, objectKey);
 	await deleteObject(config, sourceObjectKey);
 
@@ -102,18 +102,12 @@ export async function saveObject(
 	}
 }
 
-export function sourceDocumentImageObjectKey(
-	sourceDocumentId: string,
-	filename: string,
-) {
-	return `source-documents/${sourceDocumentId}/images/${safeFilename(filename)}`;
+export function documentImageObjectKey(documentId: string, filename: string) {
+	return `documents/${documentId}/images/${safeFilename(filename)}`;
 }
 
-export function sourceDocumentImageUrl(
-	sourceDocumentId: string,
-	filename: string,
-) {
-	return `/api/source-documents/${encodeURIComponent(sourceDocumentId)}/images/${encodeURIComponent(safeFilename(filename))}`;
+export function documentImageUrl(documentId: string, filename: string) {
+	return `/api/documents/${encodeURIComponent(documentId)}/images/${encodeURIComponent(safeFilename(filename))}`;
 }
 
 function readStorageConfig() {

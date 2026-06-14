@@ -16,17 +16,17 @@ import { useConvexAuth } from "../../providers/convex";
 interface ProcessingEvent extends ProcessingEventInput {
 	_id: string;
 	_creationTime: number;
-	sourceDocumentId: string;
+	documentId: string;
 }
 
 export function ProcessingEventsPanel(props: {
-	sourceDocumentId: Id<"sourceDocuments">;
+	documentId: Id<"documents">;
 	isLive: boolean;
 }) {
 	const convexAuth = useConvexAuth();
 	const persistedEvents = useQuery(
-		api.api.processingEvents.listForSourceDocument,
-		() => ({ sourceDocumentId: props.sourceDocumentId }),
+		api.api.processingEvents.listForDocument,
+		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const [liveEvents, setLiveEvents] = createSignal<ProcessingEvent[]>([]);
@@ -54,7 +54,7 @@ export function ProcessingEventsPanel(props: {
 		const abortController = new AbortController();
 		setStreamError(undefined);
 		void connectProcessingEventStream({
-			sourceDocumentId: props.sourceDocumentId,
+			documentId: props.documentId,
 			signal: abortController.signal,
 			onEvent: (event) => {
 				setLiveEvents((currentEvents) => [...currentEvents, event]);
@@ -141,7 +141,7 @@ function ProcessingEventItem(props: { event: ProcessingEvent }) {
 }
 
 async function connectProcessingEventStream(input: {
-	sourceDocumentId: string;
+	documentId: string;
 	signal: AbortSignal;
 	onEvent: (event: ProcessingEvent) => void;
 }) {
@@ -155,7 +155,7 @@ async function connectProcessingEventStream(input: {
 	}
 
 	const response = await fetch(
-		`/api/processing-events/stream/${input.sourceDocumentId}`,
+		`/api/processing-events/stream/${input.documentId}`,
 		{
 			headers: { Authorization: `Bearer ${token}` },
 			signal: input.signal,
