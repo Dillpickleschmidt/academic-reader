@@ -37,7 +37,10 @@ export async function saveConfigurationPreferences(
 	const now = Date.now();
 
 	if (existing) {
-		await ctx.db.patch(existing._id, { ...input, updatedAt: now });
+		await ctx.db.patch("configurationPreferences", existing._id, {
+			...input,
+			updatedAt: now,
+		});
 		return existing._id;
 	}
 

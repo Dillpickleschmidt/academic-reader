@@ -35,3 +35,18 @@ export const processingEventInputValidator = v.object({
 	progress: v.optional(processingEventProgressValidator),
 	data: v.optional(v.record(v.string(), v.any())),
 });
+
+export const processingEventDocumentValidator = v.object({
+	_id: v.id("processingEvents"),
+	_creationTime: v.number(),
+	sourceDocumentId: v.id("sourceDocuments"),
+	type: processingEventTypeValidator,
+	emitter: processingEventEmitterValidator,
+	severity: processingEventSeverityValidator,
+	message: v.string(),
+	emittedAt: v.number(),
+	pageNumber: v.optional(v.number()),
+	blockId: v.optional(v.string()),
+	progress: v.optional(processingEventProgressValidator),
+	data: v.optional(v.record(v.string(), v.any())),
+});

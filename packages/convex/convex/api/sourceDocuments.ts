@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
+import { processingEventDocumentValidator } from "../processingEventValidators";
 import * as SourceDocuments from "../model/sourceDocuments";
 
 export const list = query({
@@ -46,21 +47,19 @@ export const getProcessingInputForApi = query({
 	handler: (ctx, args) => SourceDocuments.getProcessingInputForApi(ctx, args),
 });
 
-export const finishProcessingFromApi = mutation({
+export const failProcessingFromApi = mutation({
 	args: {
 		serviceSecret: v.string(),
 		sourceDocumentId: v.id("sourceDocuments"),
-		status: v.union(v.literal("ready"), v.literal("readyWithWarnings")),
-		pageCount: v.number(),
+		message: v.string(),
+		emittedAt: v.number(),
 	},
-	handler: (ctx, args) => SourceDocuments.finishProcessingFromApi(ctx, args),
-});
-
-export const markProcessingFailedFromApi = mutation({
-	args: {
-		serviceSecret: v.string(),
-		sourceDocumentId: v.id("sourceDocuments"),
-	},
-	handler: (ctx, args) =>
-		SourceDocuments.markProcessingFailedFromApi(ctx, args),
+	returns: v.union(
+		v.object({ ignored: v.literal(true) }),
+		v.object({
+			ignored: v.literal(false),
+			event: processingEventDocumentValidator,
+		}),
+	),
+	handler: (ctx, args) => SourceDocuments.failProcessingFromApi(ctx, args),
 });

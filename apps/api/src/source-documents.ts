@@ -1,5 +1,4 @@
 import type { Id } from "@academic-reader/convex/data-model";
-import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
 import type { SourceDocumentMimeType } from "@academic-reader/shared/uploads";
 import {
 	api,
@@ -26,8 +25,6 @@ import {
 	sourceDocumentImageObjectKey,
 	sourceDocumentImageUrl,
 } from "./storage";
-
-const BLOCK_INSERT_BATCH_SIZE = 200;
 
 export interface SourceDocumentProcessingConfiguration {
 	conversionModel: string;
@@ -127,66 +124,23 @@ export async function acceptMarkerResult(input: {
 			collectMarkerImages(result),
 		);
 		const adapted = adaptMarkerConversionResult({ result, imageUrls });
-		const serviceSecret = readApiToConvexServiceSecret();
-		const client = createConvexHttpClient();
-		const pageReplace = await client.mutation(
-			api.api.pages.replaceForSourceDocumentFromApi,
+		const projection = await createConvexHttpClient().mutation(
+			api.api.sourceDocumentProjections.replaceFromApi,
 			{
-				serviceSecret,
+				serviceSecret: readApiToConvexServiceSecret(),
 				sourceDocumentId: input.sourceDocumentId,
 				pages: adapted.pages,
+				blocks: adapted.blocks,
+				warnings: adapted.warnings,
+				imageCount: Object.keys(imageUrls).length,
+				emittedAt: Date.now(),
 			},
 		);
 
-		if (pageReplace.ignored) return { ignored: true };
+		if (projection.ignored) return { ignored: true };
+		for (const event of projection.events) publishProcessingEvent(event);
 
-		for (let i = 0; i < adapted.blocks.length; i += BLOCK_INSERT_BATCH_SIZE) {
-			const batch = adapted.blocks.slice(i, i + BLOCK_INSERT_BATCH_SIZE);
-			const inserted = await client.mutation(
-				api.api.blocks.insertForSourceDocumentFromApi,
-				{
-					serviceSecret,
-					sourceDocumentId: input.sourceDocumentId,
-					blocks: batch,
-				},
-			);
-			if (inserted.ignored) return { ignored: true };
-		}
-
-		if (adapted.warnings.length) {
-			await appendProcessingEvent(input.sourceDocumentId, {
-				type: "conversion.warning",
-				emitter: "app",
-				severity: "warning",
-				message: "Marker conversion completed with warnings.",
-				emittedAt: Date.now(),
-				data: { warnings: adapted.warnings },
-			});
-		}
-
-		const status = adapted.warnings.length ? "readyWithWarnings" : "ready";
-		await client.mutation(api.api.sourceDocuments.finishProcessingFromApi, {
-			serviceSecret,
-			sourceDocumentId: input.sourceDocumentId,
-			status,
-			pageCount: adapted.pages.length,
-		});
-		await appendProcessingEvent(input.sourceDocumentId, {
-			type: "conversion.completed",
-			emitter: "app",
-			severity: "info",
-			message: "Marker conversion completed and Pages/Blocks were persisted.",
-			emittedAt: Date.now(),
-			data: {
-				status,
-				pageCount: adapted.pages.length,
-				blockCount: adapted.blocks.length,
-				imageCount: Object.keys(imageUrls).length,
-				warningCount: adapted.warnings.length,
-			},
-		});
-
-		return { status };
+		return { status: projection.status };
 	} catch (error) {
 		if (isValidatedCallback) {
 			await failProcessing(input.sourceDocumentId, errorMessage(error)).catch(
@@ -250,40 +204,16 @@ async function failProcessing(
 	sourceDocumentId: Id<"sourceDocuments">,
 	message: string,
 ) {
-	const serviceSecret = readApiToConvexServiceSecret();
-	const client = createConvexHttpClient();
-	const failed = await client.mutation(
-		api.api.sourceDocuments.markProcessingFailedFromApi,
+	const failed = await createConvexHttpClient().mutation(
+		api.api.sourceDocuments.failProcessingFromApi,
 		{
-			serviceSecret,
+			serviceSecret: readApiToConvexServiceSecret(),
 			sourceDocumentId,
+			message,
+			emittedAt: Date.now(),
 		},
 	);
-	if (failed.ignored) return;
-
-	await appendProcessingEvent(sourceDocumentId, {
-		type: "conversion.failed",
-		emitter: "app",
-		severity: "error",
-		message,
-		emittedAt: Date.now(),
-	});
-}
-
-async function appendProcessingEvent(
-	sourceDocumentId: Id<"sourceDocuments">,
-	event: ProcessingEventInput,
-) {
-	const serviceSecret = readApiToConvexServiceSecret();
-	const insertedEvent = await createConvexHttpClient().mutation(
-		api.api.processingEvents.appendFromApi,
-		{
-			serviceSecret,
-			sourceDocumentId,
-			event,
-		},
-	);
-	publishProcessingEvent(insertedEvent);
+	if (!failed.ignored) publishProcessingEvent(failed.event);
 }
 
 async function getValidatedIngestMetadata(input: {

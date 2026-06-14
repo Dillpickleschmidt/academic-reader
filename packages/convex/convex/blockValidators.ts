@@ -22,3 +22,14 @@ export const normalizedBoundingBoxValidator = v.object({
 	width: v.number(),
 	height: v.number(),
 });
+
+export const blockInputValidator = v.object({
+	blockId: v.string(),
+	blockType: blockTypeValidator,
+	rawBlockType: v.string(),
+	order: v.number(),
+	contentHtml: v.string(),
+	contentMarkdown: v.optional(v.string()),
+	pageNumber: v.optional(v.number()),
+	normalizedBoundingBox: v.optional(normalizedBoundingBoxValidator),
+});

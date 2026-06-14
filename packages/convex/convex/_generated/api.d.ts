@@ -12,6 +12,7 @@ import type * as api_blocks from "../api/blocks.js";
 import type * as api_configurationPreferences from "../api/configurationPreferences.js";
 import type * as api_pages from "../api/pages.js";
 import type * as api_processingEvents from "../api/processingEvents.js";
+import type * as api_sourceDocumentProjections from "../api/sourceDocumentProjections.js";
 import type * as api_sourceDocuments from "../api/sourceDocuments.js";
 import type * as auth from "../auth.js";
 import type * as blockValidators from "../blockValidators.js";
@@ -22,7 +23,9 @@ import type * as model_blocks from "../model/blocks.js";
 import type * as model_configurationPreferences from "../model/configurationPreferences.js";
 import type * as model_pages from "../model/pages.js";
 import type * as model_processingEvents from "../model/processingEvents.js";
+import type * as model_sourceDocumentProjections from "../model/sourceDocumentProjections.js";
 import type * as model_sourceDocuments from "../model/sourceDocuments.js";
+import type * as pageValidators from "../pageValidators.js";
 import type * as processingEventValidators from "../processingEventValidators.js";
 
 import type {
@@ -36,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   "api/configurationPreferences": typeof api_configurationPreferences;
   "api/pages": typeof api_pages;
   "api/processingEvents": typeof api_processingEvents;
+  "api/sourceDocumentProjections": typeof api_sourceDocumentProjections;
   "api/sourceDocuments": typeof api_sourceDocuments;
   auth: typeof auth;
   blockValidators: typeof blockValidators;
@@ -46,7 +50,9 @@ declare const fullApi: ApiFromModules<{
   "model/configurationPreferences": typeof model_configurationPreferences;
   "model/pages": typeof model_pages;
   "model/processingEvents": typeof model_processingEvents;
+  "model/sourceDocumentProjections": typeof model_sourceDocumentProjections;
   "model/sourceDocuments": typeof model_sourceDocuments;
+  pageValidators: typeof pageValidators;
   processingEventValidators: typeof processingEventValidators;
 }>;
 

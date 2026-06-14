@@ -53,12 +53,10 @@ export default defineSchema({
 		physicalPageNumber: v.number(),
 		width: v.number(),
 		height: v.number(),
-	})
-		.index("by_source_document", ["sourceDocumentId"])
-		.index("by_source_document_physical_page", [
-			"sourceDocumentId",
-			"physicalPageNumber",
-		]),
+	}).index("by_source_document_physical_page", [
+		"sourceDocumentId",
+		"physicalPageNumber",
+	]),
 
 	blocks: defineTable({
 		sourceDocumentId: v.id("sourceDocuments"),
@@ -71,7 +69,6 @@ export default defineSchema({
 		pageNumber: v.optional(v.number()),
 		normalizedBoundingBox: v.optional(normalizedBoundingBoxValidator),
 	})
-		.index("by_source_document", ["sourceDocumentId"])
 		.index("by_source_document_order", ["sourceDocumentId", "order"])
 		.index("by_source_document_block", ["sourceDocumentId", "blockId"]),
 

@@ -40,7 +40,10 @@ export async function getProcessingEventIngestMetadata(
 ) {
 	requireServiceSecret(input.serviceSecret);
 
-	const sourceDocument = await ctx.db.get(input.sourceDocumentId);
+	const sourceDocument = await ctx.db.get(
+		"sourceDocuments",
+		input.sourceDocumentId,
+	);
 	if (!sourceDocument) {
 		throw new Error("Source Document not found");
 	}
@@ -61,7 +64,10 @@ export async function appendProcessingEventFromApi(
 ) {
 	requireServiceSecret(input.serviceSecret);
 
-	const sourceDocument = await ctx.db.get(input.sourceDocumentId);
+	const sourceDocument = await ctx.db.get(
+		"sourceDocuments",
+		input.sourceDocumentId,
+	);
 	if (!sourceDocument) {
 		throw new Error("Source Document not found");
 	}
@@ -87,21 +93,7 @@ export function appendInitialProcessingStartedEvent(
 	});
 }
 
-async function requireOwnedSourceDocument(
-	ctx: QueryCtx | MutationCtx,
-	sourceDocumentId: Id<"sourceDocuments">,
-) {
-	const reader = await requireReader(ctx);
-	const sourceDocument = await ctx.db.get(sourceDocumentId);
-
-	if (!sourceDocument || sourceDocument.readerId !== reader._id) {
-		throw new Error("Source Document not found");
-	}
-
-	return sourceDocument;
-}
-
-async function insertProcessingEvent(
+export async function insertProcessingEvent(
 	ctx: MutationCtx,
 	input: ProcessingEventInsert,
 ): Promise<Doc<"processingEvents">> {
@@ -124,13 +116,27 @@ async function insertProcessingEvent(
 		...(input.progress !== undefined ? { progress: input.progress } : {}),
 		...(input.data !== undefined ? { data: input.data } : {}),
 	});
-	const insertedEvent = await ctx.db.get(eventId);
+	const insertedEvent = await ctx.db.get("processingEvents", eventId);
 
 	if (!insertedEvent) {
 		throw new Error("Could not load inserted Processing Event");
 	}
 
 	return insertedEvent;
+}
+
+async function requireOwnedSourceDocument(
+	ctx: QueryCtx | MutationCtx,
+	sourceDocumentId: Id<"sourceDocuments">,
+) {
+	const reader = await requireReader(ctx);
+	const sourceDocument = await ctx.db.get("sourceDocuments", sourceDocumentId);
+
+	if (!sourceDocument || sourceDocument.readerId !== reader._id) {
+		throw new Error("Source Document not found");
+	}
+
+	return sourceDocument;
 }
 
 function requireServiceSecret(serviceSecret: string) {

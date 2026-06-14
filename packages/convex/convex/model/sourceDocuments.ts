@@ -1,9 +1,13 @@
-import type { Id } from "../_generated/dataModel";
+import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requiredEnv } from "../env";
 import { requireReader } from "./auth";
 import { saveConfigurationPreferences } from "./configurationPreferences";
-import { appendInitialProcessingStartedEvent } from "./processingEvents";
+import {
+	appendInitialProcessingStartedEvent,
+	insertProcessingEvent,
+} from "./processingEvents";
 
 export async function listSourceDocuments(ctx: QueryCtx) {
 	const reader = await requireReader(ctx);
@@ -88,7 +92,10 @@ export async function getProcessingInputForApi(
 	},
 ) {
 	requireServiceSecret(input.serviceSecret);
-	const sourceDocument = await ctx.db.get(input.sourceDocumentId);
+	const sourceDocument = await ctx.db.get(
+		"sourceDocuments",
+		input.sourceDocumentId,
+	);
 
 	if (!sourceDocument) {
 		throw new Error("Source Document not found");
@@ -103,65 +110,46 @@ export async function getProcessingInputForApi(
 	};
 }
 
-export async function finishProcessingFromApi(
+export async function failProcessingFromApi(
 	ctx: MutationCtx,
 	input: {
 		serviceSecret: string;
 		sourceDocumentId: Id<"sourceDocuments">;
-		status: "ready" | "readyWithWarnings";
-		pageCount: number;
+		message: string;
+		emittedAt: number;
 	},
-) {
+): Promise<
+	{ ignored: true } | { ignored: false; event: Doc<"processingEvents"> }
+> {
 	requireServiceSecret(input.serviceSecret);
-	const sourceDocument = await ctx.db.get(input.sourceDocumentId);
+	const sourceDocument = await ctx.db.get(
+		"sourceDocuments",
+		input.sourceDocumentId,
+	);
 
 	if (!sourceDocument) {
 		throw new Error("Source Document not found");
 	}
 	if (sourceDocument.processingStatus !== "processing") {
-		return { ignored: true as const };
+		return { ignored: true };
 	}
 
-	await ctx.db.patch(input.sourceDocumentId, {
-		pageCount: input.pageCount,
-		processingStatus: input.status,
-		processingRun: {
-			...sourceDocument.processingRun,
-			finishedAt: Date.now(),
-		},
-		updatedAt: Date.now(),
-	});
-
-	return { ignored: false as const };
-}
-
-export async function markProcessingFailedFromApi(
-	ctx: MutationCtx,
-	input: {
-		serviceSecret: string;
-		sourceDocumentId: Id<"sourceDocuments">;
-	},
-) {
-	requireServiceSecret(input.serviceSecret);
-	const sourceDocument = await ctx.db.get(input.sourceDocumentId);
-
-	if (!sourceDocument) {
-		throw new Error("Source Document not found");
-	}
-	if (sourceDocument.processingStatus !== "processing") {
-		return { ignored: true as const };
-	}
-
-	await ctx.db.patch(input.sourceDocumentId, {
+	const now = Date.now();
+	await ctx.db.patch("sourceDocuments", input.sourceDocumentId, {
 		processingStatus: "failed",
 		processingRun: {
 			...sourceDocument.processingRun,
-			finishedAt: Date.now(),
+			finishedAt: now,
 		},
-		updatedAt: Date.now(),
+		updatedAt: now,
 	});
 
-	return { ignored: false as const };
+	const event = await insertProcessingEvent(ctx, {
+		sourceDocumentId: input.sourceDocumentId,
+		...conversionFailedEvent(input.message, input.emittedAt),
+	});
+
+	return { ignored: false, event };
 }
 
 async function requireOwnedSourceDocument(
@@ -169,7 +157,7 @@ async function requireOwnedSourceDocument(
 	sourceDocumentId: Id<"sourceDocuments">,
 ) {
 	const reader = await requireReader(ctx);
-	const sourceDocument = await ctx.db.get(sourceDocumentId);
+	const sourceDocument = await ctx.db.get("sourceDocuments", sourceDocumentId);
 
 	if (!sourceDocument || sourceDocument.readerId !== reader._id) {
 		throw new Error("Source Document not found");
@@ -182,4 +170,17 @@ export function requireServiceSecret(serviceSecret: string) {
 	if (serviceSecret !== requiredEnv("API_TO_CONVEX_SERVICE_SECRET")) {
 		throw new Error("Unauthenticated");
 	}
+}
+
+function conversionFailedEvent(
+	message: string,
+	emittedAt: number,
+): ProcessingEventInput {
+	return {
+		type: "conversion.failed",
+		emitter: "app",
+		severity: "error",
+		message,
+		emittedAt,
+	};
 }
