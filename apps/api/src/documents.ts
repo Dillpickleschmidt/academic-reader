@@ -1,17 +1,18 @@
 import type { Id } from "@academic-reader/convex/data-model";
 import type { SourceDocumentMimeType } from "@academic-reader/shared/uploads";
+import { markInlineCitationsInHtml } from "./block-content";
 import {
 	api,
 	createConvexHttpClient,
 	readApiToConvexServiceSecret,
 } from "./convex";
+import { submitMarkerProcessing } from "./marker";
 import {
 	adaptMarkerConversionResult,
 	collectMarkerImages,
 	decodeBase64Image,
 	normalizeMarkerConversionResult,
 } from "./marker-result";
-import { submitMarkerProcessing } from "./marker";
 import {
 	extractPdfPageLabelsAndOutline,
 	type PdfMetadataBlockCandidate,
@@ -22,13 +23,13 @@ import {
 	isMatchingProcessingEventIngestToken,
 } from "./processing-event-ingest-token";
 import {
+	documentImageObjectKey,
+	documentImageUrl,
 	getBrowserPresignedReadUrl,
 	getObjectBytes,
 	getWorkerPresignedReadUrl,
 	promoteTemporaryUpload,
 	saveObject,
-	documentImageObjectKey,
-	documentImageUrl,
 } from "./storage";
 
 export interface DocumentProcessingConfiguration {
@@ -130,8 +131,12 @@ export async function acceptMarkerResult(input: {
 			collectMarkerImages(result),
 		);
 		const adapted = adaptMarkerConversionResult({ result, imageUrls });
+		const blocks = adapted.blocks.map((block) => ({
+			...block,
+			contentHtml: markInlineCitationsInHtml(block.contentHtml),
+		}));
 		const pdfMetadata = await documentPdfMetadata({
-			blocks: adapted.blocks,
+			blocks,
 			mimeType: metadata.mimeType,
 			storageObjectKey: metadata.storageObjectKey,
 			warnings: adapted.warnings,
@@ -147,7 +152,7 @@ export async function acceptMarkerResult(input: {
 					);
 					return pageLabel ? { ...page, pageLabel } : page;
 				}),
-				blocks: adapted.blocks,
+				blocks,
 				tableOfContentsEntries: pdfMetadata.tableOfContentsEntries,
 				warnings: adapted.warnings,
 				imageCount: Object.keys(imageUrls).length,

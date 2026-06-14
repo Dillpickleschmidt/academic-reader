@@ -88,3 +88,21 @@ body {
 .reader-view code {
 	color: rgb(253 230 138);
 }
+
+.reader-view .inline-citation {
+	background: rgb(41 37 36);
+	padding: 0.1em 0.3em;
+	border-radius: 0.25rem;
+	font-size: 0.85em;
+	color: rgb(168 162 158);
+	white-space: nowrap;
+}
+
+.reader-view .inline-citation a {
+	color: inherit;
+	text-decoration: none;
+}
+
+.reader-view .inline-citation a:hover {
+	text-decoration: underline;
+}

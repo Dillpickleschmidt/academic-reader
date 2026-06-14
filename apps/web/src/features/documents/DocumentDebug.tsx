@@ -306,8 +306,8 @@ function DebugMetadataCard(props: {
 				</span>
 				<span class="mt-1 block text-stone-100">
 					HTML {evidence().htmlLength} · text {evidence().textLength} · images{" "}
-					{evidence().imageCount} · markdown{" "}
-					{evidence().hasMarkdown ? "yes" : "no"}
+					{evidence().imageCount} · citations {evidence().inlineCitationCount} ·
+					markdown {evidence().hasMarkdown ? "yes" : "no"}
 				</span>
 				<span class="mt-1 block text-stone-100">
 					Narration: {narration().narration}
@@ -522,8 +522,36 @@ function blockContentEvidence(block: Doc<"blocks">) {
 		hasMarkdown: !!block.contentMarkdown,
 		htmlLength: block.contentHtml.length,
 		imageCount: imageSources(block.contentHtml).length,
+		inlineCitationCount: inlineCitationCount(block.contentHtml),
 		textLength: text.length,
 	};
+}
+
+function inlineCitationCount(html: string) {
+	const spanPattern = /<span\b[^>]*>/gi;
+	let count = 0;
+	let match = spanPattern.exec(html);
+
+	while (match) {
+		if (elementHasClass(match[0], "inline-citation")) count += 1;
+		match = spanPattern.exec(html);
+	}
+
+	return count;
+}
+
+function elementHasClass(rawOpen: string, className: string) {
+	const value = attributeValue(rawOpen, "class");
+	return value?.split(/\s+/).includes(className) ?? false;
+}
+
+function attributeValue(rawOpen: string, name: string) {
+	const pattern = new RegExp(
+		`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+		"i",
+	);
+	const match = rawOpen.match(pattern);
+	return match?.[1] ?? match?.[2] ?? match?.[3];
 }
 
 function blockNarrationEvidence(
