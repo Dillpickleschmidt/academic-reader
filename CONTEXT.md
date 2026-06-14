@@ -29,8 +29,12 @@ An optional label provided by a Source Document for a Physical Page, such as a r
 _Avoid_: page offset, inferred page
 
 **Table of Contents Entry**:
-A navigational entry that points directly to a Physical Page or Block when the Source Document provides an explicit destination.
+A source-provided outline entry for a Document. It may have a direct target when the Source Document provides a destination Academic Reader can resolve.
 _Avoid_: inferred TOC item, guessed heading
+
+**Table of Contents Target**:
+The resolved destination of a Table of Contents Entry, such as a Physical Page, optional Source Point, and optional Block. A missing target means the entry can be shown but not navigated.
+_Avoid_: guessed link, inferred heading match
 
 **Block**:
 A meaningful region on a Page, such as a paragraph, heading, table, figure, equation, caption, or list item.
@@ -43,6 +47,10 @@ _Avoid_: raw label, provider type
 **Source Geometry**:
 The location and shape of a Block on a Page.
 _Avoid_: bbox, coordinates
+
+**Source Point**:
+A precise point on a Page provided by the Source Document, such as a PDF outline destination point.
+_Avoid_: guessed coordinate, inferred heading location
 
 **Block Evidence**:
 The observable details that explain what is known about a Block, including its type, source geometry, text, confidence, and processing history.

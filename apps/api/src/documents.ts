@@ -12,6 +12,10 @@ import {
 	normalizeMarkerConversionResult,
 } from "./marker-result";
 import { submitMarkerProcessing } from "./marker";
+import {
+	extractPdfPageLabelsAndOutline,
+	type PdfMetadataBlockCandidate,
+} from "./pdf-metadata";
 import { publishProcessingEvent } from "./processing-event-broker";
 import {
 	createProcessingEventIngestToken,
@@ -19,6 +23,7 @@ import {
 } from "./processing-event-ingest-token";
 import {
 	getBrowserPresignedReadUrl,
+	getObjectBytes,
 	getWorkerPresignedReadUrl,
 	promoteTemporaryUpload,
 	saveObject,
@@ -125,13 +130,25 @@ export async function acceptMarkerResult(input: {
 			collectMarkerImages(result),
 		);
 		const adapted = adaptMarkerConversionResult({ result, imageUrls });
+		const pdfMetadata = await documentPdfMetadata({
+			blocks: adapted.blocks,
+			mimeType: metadata.mimeType,
+			storageObjectKey: metadata.storageObjectKey,
+			warnings: adapted.warnings,
+		});
 		const projection = await createConvexHttpClient().mutation(
 			api.api.documentProjections.replaceFromApi,
 			{
 				serviceSecret: readApiToConvexServiceSecret(),
 				documentId: input.documentId,
-				pages: adapted.pages,
+				pages: adapted.pages.map((page) => {
+					const pageLabel = pdfMetadata.pageLabelsByPhysicalPageNumber.get(
+						page.physicalPageNumber,
+					);
+					return pageLabel ? { ...page, pageLabel } : page;
+				}),
 				blocks: adapted.blocks,
+				tableOfContentsEntries: pdfMetadata.tableOfContentsEntries,
 				warnings: adapted.warnings,
 				imageCount: Object.keys(imageUrls).length,
 				emittedAt: Date.now(),
@@ -191,6 +208,33 @@ export async function createDocumentImageAccess(input: {
 	}
 
 	return { urls, expiresAt };
+}
+
+async function documentPdfMetadata(input: {
+	blocks: PdfMetadataBlockCandidate[];
+	mimeType: string;
+	storageObjectKey: string;
+	warnings: string[];
+}) {
+	if (input.mimeType !== "application/pdf") {
+		return {
+			pageLabelsByPhysicalPageNumber: new Map<number, string>(),
+			tableOfContentsEntries: [],
+		};
+	}
+
+	try {
+		return await extractPdfPageLabelsAndOutline({
+			bytes: await getObjectBytes(input.storageObjectKey),
+			blocks: input.blocks,
+		});
+	} catch (error) {
+		input.warnings.push(`PDF metadata ignored: ${errorMessage(error)}`);
+		return {
+			pageLabelsByPhysicalPageNumber: new Map<number, string>(),
+			tableOfContentsEntries: [],
+		};
+	}
 }
 
 async function startMarkerProcessing(documentId: Id<"documents">) {

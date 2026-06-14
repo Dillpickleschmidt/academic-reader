@@ -7,8 +7,23 @@ import { requireServiceSecret } from "./documents";
 
 export interface DocumentProjectionPageInput {
 	physicalPageNumber: number;
+	pageLabel?: string;
 	width: number;
 	height: number;
+}
+
+export interface DocumentProjectionTableOfContentsEntryInput {
+	order: number;
+	depth: number;
+	title: string;
+	target?: {
+		physicalPageNumber: number;
+		blockId?: string;
+		sourcePoint?: {
+			left: number;
+			top: number;
+		};
+	};
 }
 
 export interface DocumentProjectionBlockInput {
@@ -44,6 +59,7 @@ export async function replaceDocumentProjectionFromApi(
 		documentId: Id<"documents">;
 		pages: DocumentProjectionPageInput[];
 		blocks: DocumentProjectionBlockInput[];
+		tableOfContentsEntries: DocumentProjectionTableOfContentsEntryInput[];
 		warnings: string[];
 		imageCount: number;
 		emittedAt: number;
@@ -75,10 +91,18 @@ export async function replaceDocumentProjectionFromApi(
 		await ctx.db.delete("blocks", block._id);
 	}
 
+	for (const entry of await ctx.db
+		.query("tableOfContentsEntries")
+		.withIndex("by_document_order", (q) => q.eq("documentId", input.documentId))
+		.collect()) {
+		await ctx.db.delete("tableOfContentsEntries", entry._id);
+	}
+
 	for (const page of input.pages) {
 		await ctx.db.insert("pages", {
 			documentId: input.documentId,
 			physicalPageNumber: page.physicalPageNumber,
+			...(page.pageLabel !== undefined ? { pageLabel: page.pageLabel } : {}),
 			width: page.width,
 			height: page.height,
 		});
@@ -101,6 +125,16 @@ export async function replaceDocumentProjectionFromApi(
 			...(block.normalizedBoundingBox !== undefined
 				? { normalizedBoundingBox: block.normalizedBoundingBox }
 				: {}),
+		});
+	}
+
+	for (const entry of input.tableOfContentsEntries) {
+		await ctx.db.insert("tableOfContentsEntries", {
+			documentId: input.documentId,
+			order: entry.order,
+			depth: entry.depth,
+			title: entry.title,
+			...(entry.target !== undefined ? { target: entry.target } : {}),
 		});
 	}
 
@@ -133,6 +167,7 @@ export async function replaceDocumentProjectionFromApi(
 				pageCount: input.pages.length,
 				blockCount: input.blocks.length,
 				imageCount: input.imageCount,
+				tableOfContentsEntryCount: input.tableOfContentsEntries.length,
 				warningCount: input.warnings.length,
 				emittedAt: input.emittedAt,
 			}),
@@ -167,6 +202,7 @@ function conversionCompletedEvent(input: {
 	pageCount: number;
 	blockCount: number;
 	imageCount: number;
+	tableOfContentsEntryCount: number;
 	warningCount: number;
 	emittedAt: number;
 }): ProcessingEventInput {
@@ -181,6 +217,7 @@ function conversionCompletedEvent(input: {
 			pageCount: input.pageCount,
 			blockCount: input.blockCount,
 			imageCount: input.imageCount,
+			tableOfContentsEntryCount: input.tableOfContentsEntryCount,
 			warningCount: input.warningCount,
 		},
 	};

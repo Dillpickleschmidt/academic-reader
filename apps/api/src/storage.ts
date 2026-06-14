@@ -78,6 +78,20 @@ export async function getBrowserPresignedReadUrl(objectKey: string) {
 	};
 }
 
+export async function getObjectBytes(objectKey: string) {
+	const config = readStorageConfig();
+	const response = await storageClient(config).fetch(
+		objectUrl(config.endpoint, config.bucket, objectKey),
+		{ method: "GET" },
+	);
+
+	if (!response.ok) {
+		throw new Error(`Could not read object (${response.status})`);
+	}
+
+	return new Uint8Array(await response.arrayBuffer());
+}
+
 export async function saveObject(
 	objectKey: string,
 	content: string | Buffer | Uint8Array,

@@ -97,6 +97,7 @@ export async function getProcessingInputForApi(
 
 	return {
 		documentId: document._id,
+		mimeType: document.mimeType,
 		storageObjectKey: document.storageObjectKey,
 		processingConfiguration: document.processingConfiguration,
 		processingRunStartedAt: document.processingRun.startedAt,

@@ -14,6 +14,7 @@ import type * as api_documentProjections from "../api/documentProjections.js";
 import type * as api_documents from "../api/documents.js";
 import type * as api_pages from "../api/pages.js";
 import type * as api_processingEvents from "../api/processingEvents.js";
+import type * as api_tableOfContentsEntries from "../api/tableOfContentsEntries.js";
 import type * as auth from "../auth.js";
 import type * as blockValidators from "../blockValidators.js";
 import type * as env from "../env.js";
@@ -25,8 +26,10 @@ import type * as model_documentProjections from "../model/documentProjections.js
 import type * as model_documents from "../model/documents.js";
 import type * as model_pages from "../model/pages.js";
 import type * as model_processingEvents from "../model/processingEvents.js";
+import type * as model_tableOfContentsEntries from "../model/tableOfContentsEntries.js";
 import type * as pageValidators from "../pageValidators.js";
 import type * as processingEventValidators from "../processingEventValidators.js";
+import type * as tableOfContentsValidators from "../tableOfContentsValidators.js";
 
 import type {
   ApiFromModules,
@@ -41,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   "api/documents": typeof api_documents;
   "api/pages": typeof api_pages;
   "api/processingEvents": typeof api_processingEvents;
+  "api/tableOfContentsEntries": typeof api_tableOfContentsEntries;
   auth: typeof auth;
   blockValidators: typeof blockValidators;
   env: typeof env;
@@ -52,8 +56,10 @@ declare const fullApi: ApiFromModules<{
   "model/documents": typeof model_documents;
   "model/pages": typeof model_pages;
   "model/processingEvents": typeof model_processingEvents;
+  "model/tableOfContentsEntries": typeof model_tableOfContentsEntries;
   pageValidators: typeof pageValidators;
   processingEventValidators: typeof processingEventValidators;
+  tableOfContentsValidators: typeof tableOfContentsValidators;
 }>;
 
 /**

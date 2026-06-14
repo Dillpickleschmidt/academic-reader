@@ -36,6 +36,7 @@ export function SourceView(props: {
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	pages: Doc<"pages">[] | undefined;
+	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	sourceAccess: SourceAccess | undefined;
 	sourceAccessLoading: boolean;
 	sourceAccessError: unknown;
@@ -73,6 +74,7 @@ export function SourceView(props: {
 									document={props.document}
 									mimeType={props.document?.mimeType ?? ""}
 									pages={props.pages ?? []}
+									tableOfContentsEntries={props.tableOfContentsEntries}
 									url={sourceAccess().url}
 									onHoverDebugBlock={props.onHoverDebugBlock}
 									onShowReader={props.onShowReader}
@@ -86,6 +88,7 @@ export function SourceView(props: {
 								debugEvents={props.debugEvents}
 								document={props.document}
 								pages={props.pages ?? []}
+								tableOfContentsEntries={props.tableOfContentsEntries}
 								url={sourceAccess().url}
 								onHoverDebugBlock={props.onHoverDebugBlock}
 								onShowReader={props.onShowReader}
@@ -110,6 +113,7 @@ function PdfSourceView(props: {
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	pages: Doc<"pages">[];
+	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	url: string;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
@@ -127,6 +131,9 @@ function PdfSourceView(props: {
 			? Array.from({ length: pdf.numPages }, (_, index) => index + 1)
 			: [];
 	});
+	const pageByPhysicalPageNumber = createMemo(
+		() => new Map(props.pages.map((page) => [page.physicalPageNumber, page])),
+	);
 
 	createEffect(() => {
 		const url = props.url;
@@ -223,7 +230,11 @@ function PdfSourceView(props: {
 											debugEnabled={props.debugEnabled}
 											debugEvents={props.debugEvents}
 											document={props.document}
+											pageLabel={
+												pageByPhysicalPageNumber().get(pageNumber)?.pageLabel
+											}
 											pageNumber={pageNumber}
+											tableOfContentsEntries={props.tableOfContentsEntries}
 											pdfDocument={pdf()}
 											zoom={zoom()}
 											onHoverDebugBlock={props.onHoverDebugBlock}
@@ -246,8 +257,10 @@ function PdfPageCanvas(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	pageLabel: string | undefined;
 	pdfDocument: PDFDocumentProxy;
 	pageNumber: number;
+	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	zoom: number;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
@@ -346,6 +359,9 @@ function PdfPageCanvas(props: {
 
 	return (
 		<div ref={container} class="w-full">
+			<div class="mb-2 text-center text-stone-500 text-xs">
+				{sourcePageTitle(props.pageNumber, props.pageLabel)}
+			</div>
 			<div
 				class="relative mx-auto bg-white shadow-xl shadow-black/30"
 				style={{ width: `${displayWidth()}px` }}
@@ -369,6 +385,7 @@ function PdfPageCanvas(props: {
 						debugEvents={props.debugEvents}
 						document={props.document}
 						pageNumber={props.pageNumber}
+						tableOfContentsEntries={props.tableOfContentsEntries}
 						onHoverDebugBlock={props.onHoverDebugBlock}
 						onShowReader={props.onShowReader}
 					/>
@@ -376,6 +393,16 @@ function PdfPageCanvas(props: {
 			</div>
 		</div>
 	);
+}
+
+function sourcePageTitle(
+	physicalPageNumber: number,
+	pageLabel: string | undefined,
+) {
+	if (pageLabel && pageLabel !== String(physicalPageNumber)) {
+		return `Page ${pageLabel} · physical ${physicalPageNumber}`;
+	}
+	return `Page ${physicalPageNumber}`;
 }
 
 function ImageSourceView(props: {
@@ -386,6 +413,7 @@ function ImageSourceView(props: {
 	document: Doc<"documents"> | undefined;
 	mimeType: string;
 	pages: Doc<"pages">[];
+	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	url: string;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
@@ -409,6 +437,7 @@ function ImageSourceView(props: {
 				debugEvents={props.debugEvents}
 				document={props.document}
 				pageNumber={pageNumber()}
+				tableOfContentsEntries={props.tableOfContentsEntries}
 				onHoverDebugBlock={props.onHoverDebugBlock}
 				onShowReader={props.onShowReader}
 			/>

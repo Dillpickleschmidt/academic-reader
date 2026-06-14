@@ -21,6 +21,7 @@ import {
 } from "./DocumentDebug";
 import { ReaderView } from "./DocumentReaderView";
 import { type SourceAccess, SourceView } from "./DocumentSourceView";
+import { TableOfContentsDrawer } from "./DocumentTableOfContents";
 import { FullPageMessage } from "./document-page-ui";
 import { ProcessingEventsPanel } from "./ProcessingEventsPanel";
 
@@ -30,6 +31,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	const [activeMobileView, setActiveMobileView] = createSignal<
 		"source" | "reader"
 	>("source");
+	const [tableOfContentsOpen, setTableOfContentsOpen] = createSignal(false);
 	const [eventsOpen, setEventsOpen] = createSignal(false);
 	const [debugEnabled, setDebugEnabled] = createSignal(false);
 	const [hoveredDebugBlockId, setHoveredDebugBlockId] = createSignal<string>();
@@ -47,6 +49,11 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	);
 	const blocks = useQuery(
 		api.api.blocks.listForDocument,
+		() => ({ documentId: documentId() }),
+		() => ({ enabled: convexAuth.isAuthenticated() }),
+	);
+	const tableOfContentsEntries = useQuery(
+		api.api.tableOfContentsEntries.listTableOfContentsEntriesForDocument,
 		() => ({ documentId: documentId() }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
@@ -159,6 +166,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 											debugEvents={debugEvents.data()}
 											document={document.data()}
 											pages={pages.data()}
+											tableOfContentsEntries={tableOfContentsEntries.data()}
 											sourceAccess={sourceAccess()}
 											sourceAccessError={sourceAccess.error}
 											sourceAccessLoading={sourceAccess.loading}
@@ -190,6 +198,13 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 
 								<div class="fixed right-4 bottom-4 z-30 flex gap-2">
 									<button
+										class="rounded-full border border-stone-700 bg-stone-950/85 px-4 py-2 text-sm text-stone-100 shadow-lg backdrop-blur hover:bg-stone-900"
+										type="button"
+										onClick={() => setTableOfContentsOpen(true)}
+									>
+										TOC
+									</button>
+									<button
 										class={debugToggleButtonClass(debugEnabled())}
 										type="button"
 										onClick={() => setDebugEnabled((enabled) => !enabled)}
@@ -204,6 +219,15 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 										Events
 									</button>
 								</div>
+
+								<TableOfContentsDrawer
+									blocks={blocks.data()}
+									entries={tableOfContentsEntries.data()}
+									open={tableOfContentsOpen()}
+									pages={pages.data()}
+									onClose={() => setTableOfContentsOpen(false)}
+									onShowReaderBlock={showBlockInReader}
+								/>
 
 								<EventsDrawer
 									document={document.data()}

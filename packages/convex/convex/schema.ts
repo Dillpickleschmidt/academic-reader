@@ -51,9 +51,29 @@ export default defineSchema({
 	pages: defineTable({
 		documentId: v.id("documents"),
 		physicalPageNumber: v.number(),
+		pageLabel: v.optional(v.string()),
 		width: v.number(),
 		height: v.number(),
 	}).index("by_document_physical_page", ["documentId", "physicalPageNumber"]),
+
+	tableOfContentsEntries: defineTable({
+		documentId: v.id("documents"),
+		order: v.number(),
+		depth: v.number(),
+		title: v.string(),
+		target: v.optional(
+			v.object({
+				physicalPageNumber: v.number(),
+				blockId: v.optional(v.string()),
+				sourcePoint: v.optional(
+					v.object({
+						left: v.number(),
+						top: v.number(),
+					}),
+				),
+			}),
+		),
+	}).index("by_document_order", ["documentId", "order"]),
 
 	blocks: defineTable({
 		documentId: v.id("documents"),

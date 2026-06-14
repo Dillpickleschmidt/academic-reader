@@ -3,6 +3,7 @@ import { mutation } from "../_generated/server";
 import { blockInputValidator } from "../blockValidators";
 import { pageInputValidator } from "../pageValidators";
 import { processingEventDocumentValidator } from "../processingEventValidators";
+import { tableOfContentsEntryInputValidator } from "../tableOfContentsValidators";
 import * as DocumentProjections from "../model/documentProjections";
 
 const projectionStatusValidator = v.union(
@@ -16,6 +17,7 @@ export const replaceFromApi = mutation({
 		documentId: v.id("documents"),
 		pages: v.array(pageInputValidator),
 		blocks: v.array(blockInputValidator),
+		tableOfContentsEntries: v.array(tableOfContentsEntryInputValidator),
 		warnings: v.array(v.string()),
 		imageCount: v.number(),
 		emittedAt: v.number(),

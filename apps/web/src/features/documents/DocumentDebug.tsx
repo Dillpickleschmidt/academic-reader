@@ -17,6 +17,14 @@ interface ReaderOverlayRect {
 	height: number;
 }
 
+interface TableOfContentsSourcePoint {
+	left: number;
+	top: number;
+	pageNumber: number;
+	blockId?: string;
+	title: string;
+}
+
 export function SourceDebugOverlayLayer(props: {
 	activeDebugBlockId: string | undefined;
 	blocks: Doc<"blocks">[] | undefined;
@@ -24,12 +32,21 @@ export function SourceDebugOverlayLayer(props: {
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	pageNumber: number;
+	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
 }) {
 	const sourceBlocks = createMemo(() =>
 		props.debugEnabled
 			? blocksWithSourceGeometryForPage(props.blocks, props.pageNumber)
+			: [],
+	);
+	const tableOfContentsSourcePoints = createMemo(() =>
+		props.debugEnabled
+			? tableOfContentsSourcePointsForPage(
+					props.tableOfContentsEntries,
+					props.pageNumber,
+				)
 			: [],
 	);
 
@@ -39,6 +56,9 @@ export function SourceDebugOverlayLayer(props: {
 			data-page-number={props.pageNumber}
 			data-source-overlay-layer=""
 		>
+			<For each={tableOfContentsSourcePoints()}>
+				{(sourcePoint) => <SourceDebugCrosshair sourcePoint={sourcePoint} />}
+			</For>
 			<For each={sourceBlocks()}>
 				{(block) => (
 					<button
@@ -67,6 +87,68 @@ export function SourceDebugOverlayLayer(props: {
 				)}
 			</For>
 		</div>
+	);
+}
+
+function SourceDebugCrosshair(props: {
+	sourcePoint: TableOfContentsSourcePoint;
+}) {
+	return (
+		<div
+			aria-label={`Table of Contents jump target: ${props.sourcePoint.title}`}
+			class="group pointer-events-auto absolute z-40 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-red-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+			role="img"
+			style={sourcePointStyle(props.sourcePoint)}
+		>
+			<svg aria-hidden="true" class="h-full w-full" viewBox="0 0 20 20">
+				<line
+					x1="10"
+					y1="0"
+					x2="10"
+					y2="20"
+					stroke="currentColor"
+					stroke-width="1.5"
+					vector-effect="non-scaling-stroke"
+				/>
+				<line
+					x1="0"
+					y1="10"
+					x2="20"
+					y2="10"
+					stroke="currentColor"
+					stroke-width="1.5"
+					vector-effect="non-scaling-stroke"
+				/>
+				<circle cx="10" cy="10" r="3" fill="currentColor" />
+			</svg>
+			<TocSourcePointCard sourcePoint={props.sourcePoint} />
+		</div>
+	);
+}
+
+function TocSourcePointCard(props: {
+	sourcePoint: TableOfContentsSourcePoint;
+}) {
+	return (
+		<span
+			class={debugMetadataCardClass(false)}
+			style={{ "max-height": "10rem" }}
+		>
+			<span class="block">
+				<span class="block font-semibold">TOC target</span>
+				<span class="mt-1 block text-stone-100">{props.sourcePoint.title}</span>
+				<span class="block text-stone-100">
+					page {props.sourcePoint.pageNumber}
+				</span>
+				<span class="block text-stone-100">
+					point x{debugPercent(props.sourcePoint.left)} y
+					{debugPercent(props.sourcePoint.top)}
+				</span>
+				<span class="block text-stone-100">
+					Block {props.sourcePoint.blockId ?? "page-only"}
+				</span>
+			</span>
+		</span>
 	);
 }
 
@@ -208,21 +290,33 @@ function DebugMetadataCard(props: {
 			class={debugMetadataCardClass(props.forceVisible)}
 			style={{ "max-height": props.maxHeight }}
 		>
-			<span class="block font-semibold">
-				#{props.block.order + 1} {props.block.blockType}
+			<span class="block">
+				<span class="block font-semibold">
+					#{props.block.order + 1} {props.block.blockType}
+				</span>
+				<span class="mt-1 block text-stone-100">
+					Block {props.block.blockId}
+				</span>
+				<span class="block text-stone-100">raw {props.block.rawBlockType}</span>
+				<span class="block text-stone-100">
+					page {props.block.pageNumber ?? "—"}
+				</span>
+				<span class="block text-stone-100">
+					{bboxText(props.block.normalizedBoundingBox)}
+				</span>
+				<span class="mt-1 block text-stone-100">
+					HTML {evidence().htmlLength} · text {evidence().textLength} · images{" "}
+					{evidence().imageCount} · markdown{" "}
+					{evidence().hasMarkdown ? "yes" : "no"}
+				</span>
+				<span class="mt-1 block text-stone-100">
+					Narration: {narration().narration}
+				</span>
+				<span class="block text-stone-100">Audio: {narration().audio}</span>
+				<span class="block text-stone-100">
+					Alignment: {narration().alignment}
+				</span>
 			</span>
-			<span class="mt-1 block">Block {props.block.blockId}</span>
-			<span class="block">raw {props.block.rawBlockType}</span>
-			<span class="block">page {props.block.pageNumber ?? "—"}</span>
-			<span class="block">{bboxText(props.block.normalizedBoundingBox)}</span>
-			<span class="mt-1 block">
-				HTML {evidence().htmlLength} · text {evidence().textLength} · images{" "}
-				{evidence().imageCount} · markdown{" "}
-				{evidence().hasMarkdown ? "yes" : "no"}
-			</span>
-			<span class="mt-1 block">Narration: {narration().narration}</span>
-			<span class="block">Audio: {narration().audio}</span>
-			<span class="block">Alignment: {narration().alignment}</span>
 		</span>
 	);
 }
@@ -337,6 +431,34 @@ function blocksWithSourceGeometryForPage(
 			block.pageNumber === pageNumber &&
 			block.normalizedBoundingBox !== undefined,
 	);
+}
+
+function tableOfContentsSourcePointsForPage(
+	entries: Doc<"tableOfContentsEntries">[] | undefined,
+	pageNumber: number,
+): TableOfContentsSourcePoint[] {
+	return (entries ?? []).flatMap((entry) => {
+		const target = entry.target;
+		if (target?.physicalPageNumber !== pageNumber || !target.sourcePoint) {
+			return [];
+		}
+
+		return [
+			{
+				...target.sourcePoint,
+				blockId: target.blockId,
+				pageNumber,
+				title: entry.title,
+			},
+		];
+	});
+}
+
+function sourcePointStyle(sourcePoint: TableOfContentsSourcePoint) {
+	return {
+		left: `${sourcePoint.left * 100}%`,
+		top: `${sourcePoint.top * 100}%`,
+	};
 }
 
 function sourceBoxStyle(
