@@ -11,15 +11,16 @@ import {
 	narrationRewriteModel,
 } from "./ai";
 import { parseJsonObject } from "./ai-output";
-import {
-	api,
-	createConvexHttpClient,
-	readApiToConvexServiceSecret,
-} from "./convex";
 import type { HtmlNode } from "./html-fragment";
 import { parseHtmlFragment } from "./html-fragment";
 import { deriveNarrationCandidate } from "./narration-candidates";
-import { appendNarrationEvent } from "./narration-events";
+import {
+	appendNarrationEvent,
+	getNarrationProcessingInput,
+	listNarrationBlocks,
+	patchNarrationTexts,
+	setNarrationGuide,
+} from "./narration-persistence";
 
 export interface NarrationRewriteBlock {
 	blockId: string;
@@ -109,24 +110,13 @@ export async function runNarrationPreparationForDocument(input: {
 	generateGuide?: NarrationGuideGenerator;
 	rewriteBatch?: NarrationRewriteBatch;
 }): Promise<NarrationPreparationRunResult> {
-	const serviceSecret = readApiToConvexServiceSecret();
-	const client = createConvexHttpClient();
-	const metadata = await client.query(
-		api.api.documents.getProcessingInputForApi,
-		{
-			serviceSecret,
-			documentId: input.documentId,
-		},
-	);
+	const metadata = await getNarrationProcessingInput(input.documentId);
 
 	if (!metadata.processingConfiguration.narration.enabled) {
 		return { status: "skipped", reason: "narration-disabled" };
 	}
 
-	const blocks = await client.query(api.api.blocks.listForDocumentFromApi, {
-		serviceSecret,
-		documentId: input.documentId,
-	});
+	const blocks = await listNarrationBlocks(input.documentId);
 	const missingNarrationBlocks = blocks.filter(
 		(block) => block.narration === undefined,
 	);
@@ -469,14 +459,7 @@ async function generateNarrationGuide(input: {
 		);
 		if (!narrationGuide) throw new Error("Narration Guide was empty");
 
-		await createConvexHttpClient().mutation(
-			api.api.documents.setNarrationGuideFromApi,
-			{
-				serviceSecret: readApiToConvexServiceSecret(),
-				documentId: input.documentId,
-				narrationGuide,
-			},
-		);
+		await setNarrationGuide(input.documentId, narrationGuide);
 
 		await appendNarrationEvent(input.documentId, {
 			type: "narration.guide.completed",
@@ -729,44 +712,6 @@ async function rewriteNarrationBatchWithRetry(input: {
 
 		return { texts, failedBlockIds };
 	}
-}
-
-async function patchNarrationTexts(
-	documentId: Id<"documents">,
-	texts: NarrationTextPatch[],
-) {
-	if (!texts.length) {
-		return {
-			patchedCount: 0,
-			missingBlockIds: [],
-			ineligibleBlockIds: [],
-		};
-	}
-
-	const result = await createConvexHttpClient().mutation(
-		api.api.blocks.patchNarrationTextsFromApi,
-		{
-			serviceSecret: readApiToConvexServiceSecret(),
-			documentId,
-			texts,
-		},
-	);
-
-	if (result.missingBlockIds.length || result.ineligibleBlockIds.length) {
-		await appendNarrationEvent(documentId, {
-			type: "narration.rewrite.warning",
-			emitter: "app",
-			severity: "warning",
-			message: "Some Blocks were skipped while patching Narration Text.",
-			emittedAt: Date.now(),
-			data: {
-				missingBlockIds: result.missingBlockIds,
-				ineligibleBlockIds: result.ineligibleBlockIds,
-			},
-		});
-	}
-
-	return result;
 }
 
 async function appendNoEligibleBlocksEvents(documentId: Id<"documents">) {

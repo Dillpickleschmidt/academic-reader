@@ -10,16 +10,15 @@ import { generateText } from "ai";
 import { AiConfigurationError, narrationEligibilityModel } from "./ai";
 import { parseJsonObject } from "./ai-output";
 import {
-	api,
-	createConvexHttpClient,
-	readApiToConvexServiceSecret,
-} from "./convex";
-import {
 	deriveNarrationCandidate,
 	type NarrationCandidateFeatures,
 } from "./narration-candidates";
-import { appendNarrationEvent } from "./narration-events";
-import { runNarrationPreparationForDocument } from "./narration-preparation";
+import {
+	appendNarrationEvent,
+	getNarrationProcessingInput,
+	listNarrationBlocks,
+	patchNarrationDecisions,
+} from "./narration-persistence";
 
 export interface NarrationEligibilityCandidate {
 	blockId: string;
@@ -111,32 +110,11 @@ Return JSON only in this exact shape:
   ]
 }`;
 
-export function startNarrationInBackground(documentId: Id<"documents">) {
-	queueMicrotask(() => {
-		void runNarrationAfterProjection(documentId).catch(() => undefined);
-	});
-}
-
-async function runNarrationAfterProjection(documentId: Id<"documents">) {
-	const result = await runNarrationEligibilityForDocument({ documentId });
-	if (result.status === "completed" && result.eligibleCount > 0) {
-		await runNarrationPreparationForDocument({ documentId });
-	}
-}
-
 export async function runNarrationEligibilityForDocument(input: {
 	documentId: Id<"documents">;
 	reviewBatch?: EligibilityReviewBatch;
 }): Promise<NarrationEligibilityRunResult> {
-	const serviceSecret = readApiToConvexServiceSecret();
-	const client = createConvexHttpClient();
-	const metadata = await client.query(
-		api.api.documents.getProcessingInputForApi,
-		{
-			serviceSecret,
-			documentId: input.documentId,
-		},
-	);
+	const metadata = await getNarrationProcessingInput(input.documentId);
 
 	if (!metadata.processingConfiguration.narration.enabled) {
 		return { status: "skipped", reason: "narration-disabled" };
@@ -146,10 +124,7 @@ export async function runNarrationEligibilityForDocument(input: {
 	let hardExcludedCount = 0;
 
 	try {
-		const blocks = await client.query(api.api.blocks.listForDocumentFromApi, {
-			serviceSecret,
-			documentId: input.documentId,
-		});
+		const blocks = await listNarrationBlocks(input.documentId);
 		const unreviewedBlocks = blocks.filter(
 			(block) => block.narration === undefined,
 		);
@@ -177,7 +152,11 @@ export async function runNarrationEligibilityForDocument(input: {
 		}
 
 		if (hardExclusions.length) {
-			await patchNarrations(input.documentId, hardExclusions, "candidates");
+			await patchNarrationDecisions(
+				input.documentId,
+				hardExclusions,
+				"candidates",
+			);
 		}
 		hardExcludedCount = hardExclusions.length;
 
@@ -275,7 +254,11 @@ export async function runNarrationEligibilityForDocument(input: {
 			candidates,
 			reviewBatch,
 			onDecisions: async (decisions, progress) => {
-				await patchNarrations(input.documentId, decisions, "eligibility");
+				await patchNarrationDecisions(
+					input.documentId,
+					decisions,
+					"eligibility",
+				);
 				for (const decision of decisions) {
 					if (decision.narration.decision === "eligible") eligibleCount += 1;
 					else ineligibleCount += 1;
@@ -567,33 +550,6 @@ function validPreparation(value: unknown): NarrationPreparation[] {
 		);
 	}
 	return Array.from(new Set(preparations));
-}
-
-async function patchNarrations(
-	documentId: Id<"documents">,
-	narrations: NarrationDecisionPatch[],
-	phase: "candidates" | "eligibility",
-) {
-	if (!narrations.length) return;
-	const result = await createConvexHttpClient().mutation(
-		api.api.blocks.patchNarrationsFromApi,
-		{
-			serviceSecret: readApiToConvexServiceSecret(),
-			documentId,
-			narrations,
-		},
-	);
-
-	if (result.missingBlockIds.length) {
-		await appendNarrationEvent(documentId, {
-			type: `narration.${phase}.warning`,
-			emitter: "app",
-			severity: "warning",
-			message: "Some Blocks were missing while patching Narration Eligibility.",
-			emittedAt: Date.now(),
-			data: { missingBlockIds: result.missingBlockIds },
-		});
-	}
 }
 
 function chunk<T>(values: T[], size: number) {

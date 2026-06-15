@@ -13,7 +13,7 @@ import {
 	decodeBase64Image,
 	normalizeMarkerConversionResult,
 } from "./marker-result";
-import { startNarrationInBackground } from "./narration-eligibility";
+import { startNarrationInBackground } from "./narration";
 import {
 	extractPdfPageLabelsAndOutline,
 	type PdfMetadataBlockCandidate,
