@@ -20,6 +20,7 @@ export default defineSchema({
 		sizeBytes: v.number(),
 		pageCount: v.union(v.number(), v.null()),
 		storageObjectKey: v.string(),
+		narrationGuide: v.optional(v.string()),
 		processingConfiguration: v.object({
 			conversionModel: v.string(),
 			pageRange: v.string(),

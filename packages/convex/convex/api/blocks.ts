@@ -35,3 +35,22 @@ export const patchNarrationsFromApi = mutation({
 	}),
 	handler: (ctx, args) => Blocks.patchBlockNarrationsFromApi(ctx, args),
 });
+
+export const patchNarrationTextsFromApi = mutation({
+	args: {
+		serviceSecret: v.string(),
+		documentId: v.id("documents"),
+		texts: v.array(
+			v.object({
+				blockId: v.string(),
+				text: v.string(),
+			}),
+		),
+	},
+	returns: v.object({
+		patchedCount: v.number(),
+		missingBlockIds: v.array(v.string()),
+		ineligibleBlockIds: v.array(v.string()),
+	}),
+	handler: (ctx, args) => Blocks.patchBlockNarrationTextsFromApi(ctx, args),
+});

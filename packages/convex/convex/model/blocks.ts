@@ -75,6 +75,53 @@ export async function patchBlockNarrationsFromApi(
 	return { patchedCount, missingBlockIds };
 }
 
+export async function patchBlockNarrationTextsFromApi(
+	ctx: MutationCtx,
+	input: {
+		serviceSecret: string;
+		documentId: Id<"documents">;
+		texts: Array<{
+			blockId: string;
+			text: string;
+		}>;
+	},
+) {
+	requireServiceSecret(input.serviceSecret);
+	await requireExistingDocument(ctx, input.documentId);
+
+	let patchedCount = 0;
+	const missingBlockIds: string[] = [];
+	const ineligibleBlockIds: string[] = [];
+
+	for (const item of input.texts) {
+		const text = item.text.trim();
+		if (!text) throw new Error("Narration Text cannot be empty");
+
+		const block = await ctx.db
+			.query("blocks")
+			.withIndex("by_document_block", (q) =>
+				q.eq("documentId", input.documentId).eq("blockId", item.blockId),
+			)
+			.first();
+
+		if (!block) {
+			missingBlockIds.push(item.blockId);
+			continue;
+		}
+		if (block.narration?.decision !== "eligible") {
+			ineligibleBlockIds.push(item.blockId);
+			continue;
+		}
+
+		await ctx.db.patch(block._id, {
+			narration: { ...block.narration, text },
+		});
+		patchedCount += 1;
+	}
+
+	return { patchedCount, missingBlockIds, ineligibleBlockIds };
+}
+
 const narrationPreparationSet = new Set<string>(narrationPreparations);
 
 function assertValidBlockNarration(narration: BlockNarration) {

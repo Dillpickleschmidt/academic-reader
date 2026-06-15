@@ -105,6 +105,34 @@ export async function getProcessingInputForApi(
 	};
 }
 
+export async function setNarrationGuideFromApi(
+	ctx: MutationCtx,
+	input: {
+		serviceSecret: string;
+		documentId: Id<"documents">;
+		narrationGuide: string;
+	},
+): Promise<{ ok: true }> {
+	requireServiceSecret(input.serviceSecret);
+	const document = await ctx.db.get("documents", input.documentId);
+
+	if (!document) {
+		throw new Error("Document not found");
+	}
+
+	const narrationGuide = input.narrationGuide.trim();
+	if (!narrationGuide) {
+		throw new Error("Narration Guide cannot be empty");
+	}
+
+	await ctx.db.patch("documents", input.documentId, {
+		narrationGuide,
+		updatedAt: Date.now(),
+	});
+
+	return { ok: true };
+}
+
 export async function failProcessingFromApi(
 	ctx: MutationCtx,
 	input: {

@@ -13,7 +13,7 @@ import {
 	decodeBase64Image,
 	normalizeMarkerConversionResult,
 } from "./marker-result";
-import { startNarrationEligibilityInBackground } from "./narration-eligibility";
+import { startNarrationInBackground } from "./narration-eligibility";
 import {
 	extractPdfPageLabelsAndOutline,
 	type PdfMetadataBlockCandidate,
@@ -162,7 +162,7 @@ export async function acceptMarkerResult(input: {
 
 		if (projection.ignored) return { ignored: true };
 		if (metadata.processingConfiguration.narration.enabled) {
-			startNarrationEligibilityInBackground(input.documentId);
+			startNarrationInBackground(input.documentId);
 		}
 
 		return { status: projection.status };

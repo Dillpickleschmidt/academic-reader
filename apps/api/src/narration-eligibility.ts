@@ -6,9 +6,9 @@ import {
 	type SoftIneligibleNarrationReason,
 	softIneligibleNarrationReasons,
 } from "@academic-reader/shared/narration";
-import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
 import { generateText } from "ai";
 import { AiConfigurationError, narrationEligibilityModel } from "./ai";
+import { parseJsonObject } from "./ai-output";
 import {
 	api,
 	createConvexHttpClient,
@@ -18,6 +18,8 @@ import {
 	deriveNarrationCandidate,
 	type NarrationCandidateFeatures,
 } from "./narration-candidates";
+import { appendNarrationEvent } from "./narration-events";
+import { runNarrationPreparationForDocument } from "./narration-preparation";
 
 export interface NarrationEligibilityCandidate {
 	blockId: string;
@@ -44,6 +46,15 @@ export interface NarrationDecisionPatch {
 	blockId: string;
 	narration: BlockNarration;
 }
+
+export type NarrationEligibilityRunResult =
+	| {
+			status: "completed";
+			eligibleCount: number;
+			ineligibleCount: number;
+	  }
+	| { status: "failed"; phase: "candidates" | "eligibility"; error: string }
+	| { status: "skipped"; reason: "narration-disabled" };
 
 export class EligibilityReviewOutputError extends Error {
 	constructor(message: string) {
@@ -100,20 +111,23 @@ Return JSON only in this exact shape:
   ]
 }`;
 
-export function startNarrationEligibilityInBackground(
-	documentId: Id<"documents">,
-) {
+export function startNarrationInBackground(documentId: Id<"documents">) {
 	queueMicrotask(() => {
-		void runNarrationEligibilityForDocument({ documentId }).catch(
-			() => undefined,
-		);
+		void runNarrationAfterProjection(documentId).catch(() => undefined);
 	});
+}
+
+async function runNarrationAfterProjection(documentId: Id<"documents">) {
+	const result = await runNarrationEligibilityForDocument({ documentId });
+	if (result.status === "completed" && result.eligibleCount > 0) {
+		await runNarrationPreparationForDocument({ documentId });
+	}
 }
 
 export async function runNarrationEligibilityForDocument(input: {
 	documentId: Id<"documents">;
 	reviewBatch?: EligibilityReviewBatch;
-}) {
+}): Promise<NarrationEligibilityRunResult> {
 	const serviceSecret = readApiToConvexServiceSecret();
 	const client = createConvexHttpClient();
 	const metadata = await client.query(
@@ -124,7 +138,9 @@ export async function runNarrationEligibilityForDocument(input: {
 		},
 	);
 
-	if (!metadata.processingConfiguration.narration.enabled) return;
+	if (!metadata.processingConfiguration.narration.enabled) {
+		return { status: "skipped", reason: "narration-disabled" };
+	}
 
 	const candidates: NarrationEligibilityCandidate[] = [];
 	let hardExcludedCount = 0;
@@ -182,18 +198,27 @@ export async function runNarrationEligibilityForDocument(input: {
 			},
 		});
 	} catch (error) {
+		const message = errorMessage(error);
 		await appendNarrationEvent(input.documentId, {
 			type: "narration.candidates.failed",
 			emitter: "app",
 			severity: "error",
-			message: errorMessage(error),
+			message,
 			emittedAt: Date.now(),
 		});
-		return;
+		return { status: "failed", phase: "candidates", error: message };
 	}
 
 	try {
 		if (!candidates.length) {
+			await appendNarrationEvent(input.documentId, {
+				type: "narration.eligibility.warning",
+				emitter: "app",
+				severity: "warning",
+				message: "No eligible Narration Blocks were found.",
+				emittedAt: Date.now(),
+				data: { candidateCount: 0, hardExcludedCount },
+			});
 			await appendNarrationEvent(input.documentId, {
 				type: "narration.eligibility.completed",
 				emitter: "app",
@@ -203,7 +228,11 @@ export async function runNarrationEligibilityForDocument(input: {
 				progress: { current: 0, total: 0, percent: 100 },
 				data: { eligibleCount: 0, ineligibleCount: hardExcludedCount },
 			});
-			return;
+			return {
+				status: "completed",
+				eligibleCount: 0,
+				ineligibleCount: hardExcludedCount,
+			};
 		}
 
 		let reviewBatch = input.reviewBatch;
@@ -220,7 +249,11 @@ export async function runNarrationEligibilityForDocument(input: {
 						emittedAt: Date.now(),
 						data: { phase: "configuration" },
 					});
-					return;
+					return {
+						status: "failed",
+						phase: "eligibility",
+						error: error.message,
+					};
 				}
 				throw error;
 			}
@@ -270,6 +303,17 @@ export async function runNarrationEligibilityForDocument(input: {
 			},
 		});
 
+		if (eligibleCount === 0) {
+			await appendNarrationEvent(input.documentId, {
+				type: "narration.eligibility.warning",
+				emitter: "app",
+				severity: "warning",
+				message: "No eligible Narration Blocks were found.",
+				emittedAt: Date.now(),
+				data: { candidateCount: candidates.length, ineligibleCount },
+			});
+		}
+
 		await appendNarrationEvent(input.documentId, {
 			type: "narration.eligibility.completed",
 			emitter: "app",
@@ -283,14 +327,18 @@ export async function runNarrationEligibilityForDocument(input: {
 			},
 			data: { eligibleCount, ineligibleCount },
 		});
+
+		return { status: "completed", eligibleCount, ineligibleCount };
 	} catch (error) {
+		const message = errorMessage(error);
 		await appendNarrationEvent(input.documentId, {
 			type: "narration.eligibility.failed",
 			emitter: "app",
 			severity: "error",
-			message: errorMessage(error),
+			message,
 			emittedAt: Date.now(),
 		});
+		return { status: "failed", phase: "eligibility", error: message };
 	}
 }
 
@@ -404,7 +452,7 @@ function createGroqEligibilityReview(): EligibilityReviewBatch {
 			providerOptions: configured.providerOptions,
 		});
 
-		return parseJsonObject(result.text);
+		return parseJsonObject<EligibilityReviewOutput>(result.text);
 	};
 }
 
@@ -546,27 +594,6 @@ async function patchNarrations(
 			data: { missingBlockIds: result.missingBlockIds },
 		});
 	}
-}
-
-async function appendNarrationEvent(
-	documentId: Id<"documents">,
-	event: ProcessingEventInput,
-) {
-	await createConvexHttpClient().mutation(
-		api.api.processingEvents.appendFromApi,
-		{
-			serviceSecret: readApiToConvexServiceSecret(),
-			documentId,
-			event,
-		},
-	);
-}
-
-function parseJsonObject(text: string): EligibilityReviewOutput {
-	const trimmed = text.trim();
-	const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1];
-	const jsonText = fenced ?? trimmed;
-	return JSON.parse(jsonText) as EligibilityReviewOutput;
 }
 
 function chunk<T>(values: T[], size: number) {

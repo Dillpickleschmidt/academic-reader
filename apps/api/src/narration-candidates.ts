@@ -38,10 +38,6 @@ export interface NarrationCandidateFeatures {
 	isStandaloneEquation: boolean;
 }
 
-const imageElementNames = new Set(["img"]);
-
-const ignoredElementNames = new Set(["script", "style"]);
-
 export function deriveNarrationCandidate(
 	block: NarrationCandidateBlock,
 ): NarrationCandidateResult {
@@ -49,10 +45,13 @@ export function deriveNarrationCandidate(
 	if (hardReason) return hardExcluded(block.blockId, hardReason);
 
 	const root = parseHtmlFragment(block.contentHtml);
-	removeElements(root.children, (node) => ignoredElementNames.has(node.name));
+	removeElements(
+		root.children,
+		(node) => node.name === "script" || node.name === "style",
+	);
 
 	const originalText = normalizedNodeText(root);
-	const hadImage = hasElement(root, (node) => imageElementNames.has(node.name));
+	const hadImage = hasElement(root, (node) => node.name === "img");
 
 	if (!originalText) {
 		return hardExcluded(block.blockId, hadImage ? "image-only" : "empty");
@@ -70,7 +69,7 @@ export function deriveNarrationCandidate(
 		return candidate(block, root);
 	}
 
-	removeElements(root.children, (node) => imageElementNames.has(node.name));
+	removeElements(root.children, (node) => node.name === "img");
 	const textAfterImageRemoval = normalizedNodeText(root);
 	if (!textAfterImageRemoval) {
 		return hardExcluded(block.blockId, hadImage ? "image-only" : "empty");

@@ -25,6 +25,20 @@ export function narrationEligibilityModel(): ConfiguredLanguageModel {
 	});
 }
 
+export function narrationGuideModel(): ConfiguredLanguageModel {
+	return groqModel({
+		modelEnvKey: "NARRATION_GUIDE_MODEL",
+		taskName: "Narration Guide generation",
+	});
+}
+
+export function narrationRewriteModel(): ConfiguredLanguageModel {
+	return groqModel({
+		modelEnvKey: "NARRATION_REWRITE_MODEL",
+		taskName: "Narration Text rewrite",
+	});
+}
+
 function groqModel(input: {
 	modelEnvKey: string;
 	taskName: string;

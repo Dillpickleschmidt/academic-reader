@@ -310,8 +310,9 @@ function DebugMetadataCard(props: {
 					markdown {evidence().hasMarkdown ? "yes" : "no"}
 				</span>
 				<span class="mt-1 block text-stone-100">
-					Narration: {narration().narration}
+					Narration State: {narration().narration}
 				</span>
+				<span class="block text-stone-100">Text: {narration().text}</span>
 				<span class="block text-stone-100">Audio: {narration().audio}</span>
 				<span class="block text-stone-100">
 					Alignment: {narration().alignment}
@@ -563,6 +564,7 @@ function blockNarrationEvidence(
 	if (!narration?.enabled) {
 		return {
 			narration: "off",
+			text: "not generated",
 			audio: "not recorded",
 			alignment: "not recorded",
 		};
@@ -571,6 +573,7 @@ function blockNarrationEvidence(
 	if (events === undefined) {
 		return {
 			narration: `${narration.voice} · events loading`,
+			text: "events loading",
 			audio: "events loading",
 			alignment: "events loading",
 		};
@@ -581,22 +584,12 @@ function blockNarrationEvidence(
 			event.blockId === block.blockId && event.type.startsWith("narration."),
 	);
 	const latestEvent = blockEvents.at(-1);
-	const audio = latestBlockDataValue(blockEvents, [
-		"audioStatus",
-		"audio",
-		"durationMs",
-		"durationSeconds",
-	]);
-	const alignment = latestBlockDataValue(blockEvents, [
-		"alignmentStatus",
-		"alignment",
-		"wordTimings",
-	]);
 
 	return {
 		narration: blockNarrationText(block, narration.voice, latestEvent),
-		audio: audio ?? "not recorded",
-		alignment: alignment ?? "not recorded",
+		text: blockNarrationGeneratedText(block),
+		audio: "not recorded",
+		alignment: "not recorded",
 	};
 }
 
@@ -617,18 +610,14 @@ function blockNarrationText(
 	return `${voice} · ineligible · ${persisted.reason}`;
 }
 
-function latestBlockDataValue(
-	events: Doc<"processingEvents">[] | undefined,
-	keys: string[],
-) {
-	for (const event of [...(events ?? [])].reverse()) {
-		if (!event.data) continue;
-		for (const key of keys) {
-			const value = event.data[key];
-			if (value !== undefined) return String(value);
-		}
+function blockNarrationGeneratedText(block: Doc<"blocks">) {
+	const persisted = block.narration;
+	if (persisted?.decision !== "eligible" || !persisted.text) {
+		return "not generated";
 	}
-	return undefined;
+	return persisted.text.length > 160
+		? `${persisted.text.slice(0, 157)}…`
+		: persisted.text;
 }
 
 export function debugToggleButtonClass(isActive: boolean) {

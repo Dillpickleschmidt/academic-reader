@@ -45,6 +45,16 @@ export const getProcessingInputForApi = query({
 	handler: (ctx, args) => Documents.getProcessingInputForApi(ctx, args),
 });
 
+export const setNarrationGuideFromApi = mutation({
+	args: {
+		serviceSecret: v.string(),
+		documentId: v.id("documents"),
+		narrationGuide: v.string(),
+	},
+	returns: v.object({ ok: v.literal(true) }),
+	handler: (ctx, args) => Documents.setNarrationGuideFromApi(ctx, args),
+});
+
 export const failProcessingFromApi = mutation({
 	args: {
 		serviceSecret: v.string(),
