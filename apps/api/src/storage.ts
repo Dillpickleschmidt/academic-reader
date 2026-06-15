@@ -124,6 +124,14 @@ export function documentImageUrl(documentId: string, filename: string) {
 	return `/api/documents/${encodeURIComponent(documentId)}/images/${encodeURIComponent(safeFilename(filename))}`;
 }
 
+export function documentNarrationAudioObjectKey(
+	documentId: string,
+	voice: string,
+	blockId: string,
+) {
+	return `documents/${documentId}/narration-audio/${safeFilename(voice)}/${Buffer.from(blockId).toString("base64url")}.wav`;
+}
+
 function readStorageConfig() {
 	return {
 		endpoint: requireEnv("S3_API_ENDPOINT"),

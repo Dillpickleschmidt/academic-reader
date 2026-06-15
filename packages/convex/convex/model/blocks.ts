@@ -90,6 +90,7 @@ export async function patchBlockNarrationTextsFromApi(
 	await requireExistingDocument(ctx, input.documentId);
 
 	let patchedCount = 0;
+	const patchedBlockIds: string[] = [];
 	const missingBlockIds: string[] = [];
 	const ineligibleBlockIds: string[] = [];
 
@@ -117,9 +118,10 @@ export async function patchBlockNarrationTextsFromApi(
 			narration: { ...block.narration, text },
 		});
 		patchedCount += 1;
+		patchedBlockIds.push(item.blockId);
 	}
 
-	return { patchedCount, missingBlockIds, ineligibleBlockIds };
+	return { patchedCount, patchedBlockIds, missingBlockIds, ineligibleBlockIds };
 }
 
 const narrationPreparationSet = new Set<string>(narrationPreparations);

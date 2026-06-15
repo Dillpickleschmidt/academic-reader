@@ -47,6 +47,35 @@ export const ineligibleNarrationReasons = [
 export type IneligibleNarrationReason =
 	(typeof ineligibleNarrationReasons)[number];
 
+export const narrationAlignmentStatuses = [
+	"ok",
+	"unavailable",
+	"failed",
+] as const;
+
+export type NarrationAlignmentStatus =
+	(typeof narrationAlignmentStatuses)[number];
+
+export const narrationAlignmentSources = [
+	"native",
+	"forced-alignment",
+] as const;
+
+export type NarrationAlignmentSource =
+	(typeof narrationAlignmentSources)[number];
+
+export interface NarrationWordTimestamp {
+	word: string;
+	startMs: number;
+	endMs: number;
+}
+
+export interface NarrationAudioAlignment {
+	status: NarrationAlignmentStatus;
+	source?: NarrationAlignmentSource;
+	error?: string;
+}
+
 export type BlockNarration =
 	| {
 			decision: "eligible";

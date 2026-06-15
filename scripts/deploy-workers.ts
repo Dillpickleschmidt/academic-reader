@@ -40,6 +40,16 @@ const workers: ModalWorker[] = [
 			"workers/marker/requirements.txt",
 		],
 	},
+	{
+		appName: "kokoro-tts",
+		envKey: "MODAL_KOKORO_TTS_URL",
+		file: "workers/kokoro-tts/modal_app.py",
+		hashPaths: [
+			"workers/kokoro-tts/modal_app.py",
+			"workers/kokoro-tts/core",
+			"workers/kokoro-tts/requirements.txt",
+		],
+	},
 ];
 
 if (!existsSync(envPath)) {
@@ -64,8 +74,9 @@ for (const worker of workers) {
 	if (!forceDeploy && cachedHash === hash) {
 		console.log(`[workers] ${worker.appName} unchanged; skipping deploy`);
 	} else {
-		if (worker.appName === "marker")
+		if (worker.appName === "marker") {
 			await syncGoogleApiSecretIfPresent(env, modalCommand);
+		}
 		console.log(`[workers] Deploying ${worker.appName}...`);
 		await run(
 			modalCommand[0],

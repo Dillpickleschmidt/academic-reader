@@ -49,6 +49,7 @@ export const patchNarrationTextsFromApi = mutation({
 	},
 	returns: v.object({
 		patchedCount: v.number(),
+		patchedBlockIds: v.array(v.string()),
 		missingBlockIds: v.array(v.string()),
 		ineligibleBlockIds: v.array(v.string()),
 	}),

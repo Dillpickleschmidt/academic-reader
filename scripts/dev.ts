@@ -13,6 +13,7 @@ await run("setup", "bun", ["scripts/setup-dev.ts", "--no-sync"], root);
 const rootEnv = parseEnvFile(rootEnvPath);
 const services = ["minio"];
 if (rootEnv.CONVERSION_BACKEND === "local") services.push("marker");
+if (rootEnv.TTS_BACKEND === "local") services.push("kokoro-tts");
 await run(
 	"storage",
 	"docker",
@@ -21,6 +22,9 @@ await run(
 );
 if (rootEnv.CONVERSION_BACKEND === "local") {
 	await waitForHttp("marker", "http://localhost:8800/health", 120_000);
+}
+if (rootEnv.TTS_BACKEND === "local") {
+	await waitForHttp("kokoro", "http://localhost:8801/health", 180_000);
 }
 await run(
 	"storage",
@@ -47,6 +51,12 @@ if (rootEnv.CONVERSION_BACKEND === "modal") {
 	);
 	apiEnv.WORKER_APP_API_URL = apiTunnelUrl;
 	apiEnv.S3_WORKER_PRESIGNED_URL_ENDPOINT = minioTunnelUrl;
+}
+
+if (rootEnv.TTS_BACKEND === "modal" && !rootEnv.MODAL_KOKORO_TTS_URL) {
+	throw new Error(
+		"MODAL_KOKORO_TTS_URL is required when TTS_BACKEND=modal. Deploy workers/kokoro-tts/modal_app.py and set the URL in .env.local.",
+	);
 }
 
 const convexReady = deferred<void>();
@@ -201,6 +211,7 @@ function prefix(label: string) {
 		storage: "\x1b[33m",
 		"api-tun": "\x1b[36m",
 		"s3-tun": "\x1b[36m",
+		kokoro: "\x1b[36m",
 	};
 	const reset = "\x1b[0m";
 	return `${colors[label] ?? ""}${label.padEnd(7)}${reset}`;

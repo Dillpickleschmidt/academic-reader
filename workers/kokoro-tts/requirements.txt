@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+kokoro>=0.9.4
+numpy
+pydantic>=2.0.0
+scipy

@@ -1,5 +1,9 @@
 import type { Id } from "@academic-reader/convex/data-model";
-import type { BlockNarration } from "@academic-reader/shared/narration";
+import type {
+	BlockNarration,
+	NarrationAudioAlignment,
+	NarrationWordTimestamp,
+} from "@academic-reader/shared/narration";
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
 import {
 	api,
@@ -81,6 +85,7 @@ export async function patchNarrationTexts(
 	if (!texts.length) {
 		return {
 			patchedCount: 0,
+			patchedBlockIds: [],
 			missingBlockIds: [],
 			ineligibleBlockIds: [],
 		};
@@ -110,6 +115,27 @@ export async function patchNarrationTexts(
 	}
 
 	return result;
+}
+
+export async function upsertNarrationAudio(
+	documentId: Id<"documents">,
+	audio: {
+		blockId: string;
+		voice: string;
+		storageObjectKey: string;
+		durationMs: number;
+		wordTimestamps: NarrationWordTimestamp[];
+		alignment: NarrationAudioAlignment;
+	},
+) {
+	return createConvexHttpClient().mutation(
+		api.api.narrationAudio.upsertFromApi,
+		{
+			serviceSecret: readApiToConvexServiceSecret(),
+			documentId,
+			...audio,
+		},
+	);
 }
 
 export async function appendNarrationEvent(

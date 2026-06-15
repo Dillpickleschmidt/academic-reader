@@ -109,6 +109,9 @@ export async function runNarrationPreparationForDocument(input: {
 	documentId: Id<"documents">;
 	generateGuide?: NarrationGuideGenerator;
 	rewriteBatch?: NarrationRewriteBatch;
+	onNarrationTextsPersisted?: (
+		texts: NarrationTextPatch[],
+	) => Promise<void> | void;
 }): Promise<NarrationPreparationRunResult> {
 	const metadata = await getNarrationProcessingInput(input.documentId);
 
@@ -177,6 +180,7 @@ export async function runNarrationPreparationForDocument(input: {
 			narrationGuide,
 			blocks: preparedBlocks,
 			rewriteBatch: input.rewriteBatch,
+			onNarrationTextsPersisted: input.onNarrationTextsPersisted,
 		});
 	} catch (error) {
 		await appendNarrationEvent(input.documentId, {
@@ -492,6 +496,9 @@ async function generateNarrationTexts(input: {
 	narrationGuide: string;
 	blocks: PreparedNarrationBlock[];
 	rewriteBatch?: NarrationRewriteBatch;
+	onNarrationTextsPersisted?: (
+		texts: NarrationTextPatch[],
+	) => Promise<void> | void;
 }): Promise<NarrationPreparationRunResult> {
 	const plainBlocks = input.blocks.filter((block) =>
 		block.preparation.includes("plain"),
@@ -517,12 +524,14 @@ async function generateNarrationTexts(input: {
 	});
 
 	if (plainBlocks.length) {
-		const result = await patchNarrationTexts(
-			input.documentId,
-			plainBlocks.map((block) => ({
-				blockId: block.blockId,
-				text: block.plainText,
-			})),
+		const plainTexts = plainBlocks.map((block) => ({
+			blockId: block.blockId,
+			text: block.plainText,
+		}));
+		const result = await patchNarrationTexts(input.documentId, plainTexts);
+		const persistedPlainTexts = persistedTexts(
+			plainTexts,
+			result.patchedBlockIds,
 		);
 		textCount += result.patchedCount;
 		await appendNarrationEvent(input.documentId, {
@@ -539,6 +548,7 @@ async function generateNarrationTexts(input: {
 			},
 			data: { patchedCount: result.patchedCount },
 		});
+		await input.onNarrationTextsPersisted?.(persistedPlainTexts);
 	}
 
 	if (!rewriteBlocks.length) {
@@ -587,6 +597,10 @@ async function generateNarrationTexts(input: {
 				input.documentId,
 				result.texts,
 			);
+			const persistedRewriteTexts = persistedTexts(
+				result.texts,
+				patchResult.patchedBlockIds,
+			);
 			textCount += patchResult.patchedCount;
 			failedRewriteCount += result.failedBlockIds.length;
 
@@ -621,6 +635,7 @@ async function generateNarrationTexts(input: {
 					failedRewriteCount: result.failedBlockIds.length,
 				},
 			});
+			await input.onNarrationTextsPersisted?.(persistedRewriteTexts);
 		},
 	});
 
@@ -635,6 +650,14 @@ async function generateNarrationTexts(input: {
 		textCount,
 		failedRewriteCount,
 	};
+}
+
+function persistedTexts(
+	texts: NarrationTextPatch[],
+	patchedBlockIds: string[],
+) {
+	const patchedBlockIdSet = new Set(patchedBlockIds);
+	return texts.filter((text) => patchedBlockIdSet.has(text.blockId));
 }
 
 function createGroqNarrationGuide(): NarrationGuideGenerator {

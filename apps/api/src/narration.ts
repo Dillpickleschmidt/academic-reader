@@ -1,4 +1,5 @@
 import type { Id } from "@academic-reader/convex/data-model";
+import { createNarrationAudioQueue } from "./narration-audio";
 import {
 	type EligibilityReviewBatch,
 	runNarrationEligibilityForDocument,
@@ -8,12 +9,13 @@ import {
 	type NarrationRewriteBatch,
 	runNarrationPreparationForDocument,
 } from "./narration-preparation";
+import { getNarrationProcessingInput } from "./narration-persistence";
 
 export type NarrationRunResult =
 	| { status: "completed" }
 	| {
 			status: "failed";
-			phase: "candidates" | "eligibility" | "guide" | "rewrite";
+			phase: "candidates" | "eligibility" | "guide" | "rewrite" | "audio";
 			error: string;
 	  }
 	| { status: "skipped"; reason: "narration-disabled" | "no-eligible-blocks" };
@@ -40,13 +42,21 @@ export async function runNarrationForDocument(input: {
 		return { status: "skipped", reason: "no-eligible-blocks" };
 	}
 
+	const metadata = await getNarrationProcessingInput(input.documentId);
+	const audioQueue = createNarrationAudioQueue({
+		documentId: input.documentId,
+		voice: metadata.processingConfiguration.narration.voice,
+	});
 	const preparation = await runNarrationPreparationForDocument({
 		documentId: input.documentId,
 		generateGuide: input.generateGuide,
 		rewriteBatch: input.rewriteBatch,
+		onNarrationTextsPersisted: audioQueue.enqueue,
 	});
+	const audio = await audioQueue.closeAndDrain();
 
 	if (preparation.status !== "completed") return preparation;
+	if (audio.status !== "completed") return audio;
 
 	return { status: "completed" };
 }

@@ -31,6 +31,20 @@ services:
               count: 1
               capabilities: [gpu]
 
+  kokoro-tts:
+    build:
+      context: .
+      dockerfile: workers/kokoro-tts/Dockerfile
+    network_mode: host
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8801
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   minio-init:
     image: quay.io/minio/mc:latest
     depends_on:

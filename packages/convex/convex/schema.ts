@@ -6,6 +6,10 @@ import {
 	normalizedBoundingBoxValidator,
 } from "./blockValidators";
 import {
+	narrationAudioAlignmentValidator,
+	wordTimestampValidator,
+} from "./narrationAudioValidators";
+import {
 	processingEventEmitterValidator,
 	processingEventProgressValidator,
 	processingEventSeverityValidator,
@@ -91,6 +95,18 @@ export default defineSchema({
 	})
 		.index("by_document_order", ["documentId", "order"])
 		.index("by_document_block", ["documentId", "blockId"]),
+
+	narrationAudio: defineTable({
+		documentId: v.id("documents"),
+		blockId: v.string(),
+		voice: v.string(),
+		storageObjectKey: v.string(),
+		durationMs: v.number(),
+		wordTimestamps: v.array(wordTimestampValidator),
+		alignment: narrationAudioAlignmentValidator,
+	})
+		.index("by_document_block_voice", ["documentId", "blockId", "voice"])
+		.index("by_document_voice", ["documentId", "voice"]),
 
 	processingEvents: defineTable({
 		documentId: v.id("documents"),
