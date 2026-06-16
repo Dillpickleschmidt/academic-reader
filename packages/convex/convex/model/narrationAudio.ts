@@ -3,8 +3,58 @@ import type {
 	NarrationWordTimestamp,
 } from "@academic-reader/shared/narration";
 import type { Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { requireReader } from "./auth";
 import { requireServiceSecret } from "./documents";
+
+export async function listNarrationAudioForDocument(
+	ctx: QueryCtx,
+	input: { documentId: Id<"documents">; voice: string },
+) {
+	await requireOwnedDocument(ctx, input.documentId);
+
+	const audio = await ctx.db
+		.query("narrationAudio")
+		.withIndex("by_document_voice", (q) =>
+			q.eq("documentId", input.documentId).eq("voice", input.voice),
+		)
+		.collect();
+
+	return audio.map((item) => ({
+		blockId: item.blockId,
+		voice: item.voice,
+		durationMs: item.durationMs,
+		wordTimestampCount: item.wordTimestamps.length,
+		alignment: item.alignment,
+	}));
+}
+
+export async function getNarrationAudioObjectKeyForPlaybackFromApi(
+	ctx: QueryCtx,
+	input: {
+		serviceSecret: string;
+		documentId: Id<"documents">;
+		blockId: string;
+		voice: string;
+	},
+) {
+	requireServiceSecret(input.serviceSecret);
+	await requireOwnedDocument(ctx, input.documentId);
+
+	const audio = await ctx.db
+		.query("narrationAudio")
+		.withIndex("by_document_block_voice", (q) =>
+			q
+				.eq("documentId", input.documentId)
+				.eq("blockId", input.blockId)
+				.eq("voice", input.voice),
+		)
+		.first();
+
+	if (!audio) throw new Error("Narration audio not found");
+
+	return { storageObjectKey: audio.storageObjectKey };
+}
 
 export async function upsertNarrationAudioFromApi(
 	ctx: MutationCtx,
@@ -59,8 +109,22 @@ export async function upsertNarrationAudioFromApi(
 	return { narrationAudioId };
 }
 
+async function requireOwnedDocument(
+	ctx: QueryCtx,
+	documentId: Id<"documents">,
+) {
+	const reader = await requireReader(ctx);
+	const document = await ctx.db.get(documentId);
+
+	if (!document || document.readerId !== reader._id) {
+		throw new Error("Document not found");
+	}
+
+	return document;
+}
+
 async function requireExistingDocument(
-	ctx: MutationCtx,
+	ctx: QueryCtx | MutationCtx,
 	documentId: Id<"documents">,
 ) {
 	const document = await ctx.db.get(documentId);

@@ -62,6 +62,18 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 		() => ({ documentId: documentId() }),
 		() => ({ enabled: convexAuth.isAuthenticated() && debugEnabled() }),
 	);
+	const narrationAudio = useQuery(
+		api.api.narrationAudio.listForDocument,
+		() => ({
+			documentId: documentId(),
+			voice: document.data()?.processingConfiguration.narration.voice ?? "",
+		}),
+		() => ({
+			enabled:
+				convexAuth.isAuthenticated() &&
+				!!document.data()?.processingConfiguration.narration.enabled,
+		}),
+	);
 	const [sourceAccess, { refetch: refetchSourceAccess }] = createResource(
 		() => (convexAuth.isAuthenticated() ? documentId() : undefined),
 		fetchSourceAccess,
@@ -165,6 +177,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 											debugEnabled={debugEnabled()}
 											debugEvents={debugEvents.data()}
 											document={document.data()}
+											narrationAudio={narrationAudio.data()}
 											pages={pages.data()}
 											tableOfContentsEntries={tableOfContentsEntries.data()}
 											sourceAccess={sourceAccess()}
@@ -184,6 +197,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 											debugEvents={debugEvents.data()}
 											document={document.data()}
 											documentId={documentId()}
+											narrationAudio={narrationAudio.data()}
 											onHoverDebugBlock={setHoveredDebugBlockId}
 											onShowSource={showBlockInSource}
 										/>

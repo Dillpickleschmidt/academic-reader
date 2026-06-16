@@ -13,6 +13,7 @@ import {
 } from "solid-js";
 import * as UTIF from "utif";
 import { SourceDebugOverlayLayer } from "./DocumentDebug";
+import type { NarrationAudioMetadata } from "./document-narration-audio";
 import {
 	EmptyPane,
 	errorMessage,
@@ -35,6 +36,7 @@ export function SourceView(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	pages: Doc<"pages">[] | undefined;
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	sourceAccess: SourceAccess | undefined;
@@ -72,6 +74,7 @@ export function SourceView(props: {
 									debugEnabled={props.debugEnabled}
 									debugEvents={props.debugEvents}
 									document={props.document}
+									narrationAudio={props.narrationAudio}
 									mimeType={props.document?.mimeType ?? ""}
 									pages={props.pages ?? []}
 									tableOfContentsEntries={props.tableOfContentsEntries}
@@ -87,6 +90,7 @@ export function SourceView(props: {
 								debugEnabled={props.debugEnabled}
 								debugEvents={props.debugEvents}
 								document={props.document}
+								narrationAudio={props.narrationAudio}
 								pages={props.pages ?? []}
 								tableOfContentsEntries={props.tableOfContentsEntries}
 								url={sourceAccess().url}
@@ -112,6 +116,7 @@ function PdfSourceView(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	pages: Doc<"pages">[];
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	url: string;
@@ -230,6 +235,7 @@ function PdfSourceView(props: {
 											debugEnabled={props.debugEnabled}
 											debugEvents={props.debugEvents}
 											document={props.document}
+											narrationAudio={props.narrationAudio}
 											pageLabel={
 												pageByPhysicalPageNumber().get(pageNumber)?.pageLabel
 											}
@@ -257,6 +263,7 @@ function PdfPageCanvas(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	pageLabel: string | undefined;
 	pdfDocument: PDFDocumentProxy;
 	pageNumber: number;
@@ -384,6 +391,7 @@ function PdfPageCanvas(props: {
 						debugEnabled={props.debugEnabled}
 						debugEvents={props.debugEvents}
 						document={props.document}
+						narrationAudio={props.narrationAudio}
 						pageNumber={props.pageNumber}
 						tableOfContentsEntries={props.tableOfContentsEntries}
 						onHoverDebugBlock={props.onHoverDebugBlock}
@@ -411,6 +419,7 @@ function ImageSourceView(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	mimeType: string;
 	pages: Doc<"pages">[];
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
@@ -436,6 +445,7 @@ function ImageSourceView(props: {
 				debugEnabled={props.debugEnabled}
 				debugEvents={props.debugEvents}
 				document={props.document}
+				narrationAudio={props.narrationAudio}
 				pageNumber={pageNumber()}
 				tableOfContentsEntries={props.tableOfContentsEntries}
 				onHoverDebugBlock={props.onHoverDebugBlock}

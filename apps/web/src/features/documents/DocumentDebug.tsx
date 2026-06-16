@@ -8,6 +8,7 @@ import {
 	onCleanup,
 } from "solid-js";
 import { imageSources } from "./document-html";
+import type { NarrationAudioMetadata } from "./document-narration-audio";
 
 interface ReaderOverlayRect {
 	block: Doc<"blocks">;
@@ -31,6 +32,7 @@ export function SourceDebugOverlayLayer(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	pageNumber: number;
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
@@ -48,6 +50,9 @@ export function SourceDebugOverlayLayer(props: {
 					props.pageNumber,
 				)
 			: [],
+	);
+	const narrationAudioByBlockId = createMemo(() =>
+		narrationAudioByBlockIdMap(props.narrationAudio),
 	);
 
 	return (
@@ -80,6 +85,8 @@ export function SourceDebugOverlayLayer(props: {
 							block={block}
 							debugEvents={props.debugEvents}
 							document={props.document}
+							narrationAudio={narrationAudioByBlockId().get(block.blockId)}
+							narrationAudioLoaded={props.narrationAudio !== undefined}
 							forceVisible={props.activeDebugBlockId === block.blockId}
 							maxHeight="max(6rem, 100%)"
 						/>
@@ -159,10 +166,14 @@ export function ReaderDebugOverlayLayer(props: {
 	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowSource: (block: Doc<"blocks">) => void;
 }) {
 	const [rects, setRects] = createSignal<ReaderOverlayRect[]>([]);
+	const narrationAudioByBlockId = createMemo(() =>
+		narrationAudioByBlockIdMap(props.narrationAudio),
+	);
 
 	createEffect(() => {
 		const container = props.contentContainer;
@@ -205,6 +216,8 @@ export function ReaderDebugOverlayLayer(props: {
 						active={props.activeDebugBlockId === rect.block.blockId}
 						debugEvents={props.debugEvents}
 						document={props.document}
+						narrationAudio={narrationAudioByBlockId().get(rect.block.blockId)}
+						narrationAudioLoaded={props.narrationAudio !== undefined}
 						rect={rect}
 						onHoverDebugBlock={props.onHoverDebugBlock}
 						onShowSource={props.onShowSource}
@@ -219,6 +232,8 @@ function ReaderDebugOverlayBox(props: {
 	active: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata | undefined;
+	narrationAudioLoaded: boolean;
 	rect: ReaderOverlayRect;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowSource: (block: Doc<"blocks">) => void;
@@ -227,6 +242,17 @@ function ReaderDebugOverlayBox(props: {
 		props.rect.block.normalizedBoundingBox !== undefined;
 	const style = () => readerBoxStyle(props.rect);
 	const maxHeight = () => `${Math.max(props.rect.height, 96)}px`;
+	const card = () => (
+		<DebugMetadataCard
+			block={props.rect.block}
+			debugEvents={props.debugEvents}
+			document={props.document}
+			narrationAudio={props.narrationAudio}
+			narrationAudioLoaded={props.narrationAudioLoaded}
+			forceVisible={props.active}
+			maxHeight={maxHeight()}
+		/>
+	);
 
 	return isNavigable() ? (
 		<button
@@ -244,13 +270,7 @@ function ReaderDebugOverlayBox(props: {
 			onMouseEnter={() => props.onHoverDebugBlock(props.rect.block.blockId)}
 			onMouseLeave={() => props.onHoverDebugBlock(undefined)}
 		>
-			<DebugMetadataCard
-				block={props.rect.block}
-				debugEvents={props.debugEvents}
-				document={props.document}
-				forceVisible={props.active}
-				maxHeight={maxHeight()}
-			/>
+			{card()}
 		</button>
 	) : (
 		<div
@@ -262,13 +282,7 @@ function ReaderDebugOverlayBox(props: {
 			)}
 			style={style()}
 		>
-			<DebugMetadataCard
-				block={props.rect.block}
-				debugEvents={props.debugEvents}
-				document={props.document}
-				forceVisible={props.active}
-				maxHeight={maxHeight()}
-			/>
+			{card()}
 		</div>
 	);
 }
@@ -277,12 +291,20 @@ function DebugMetadataCard(props: {
 	block: Doc<"blocks">;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
+	narrationAudio: NarrationAudioMetadata | undefined;
+	narrationAudioLoaded: boolean;
 	forceVisible: boolean;
 	maxHeight: string;
 }) {
 	const evidence = createMemo(() => blockContentEvidence(props.block));
 	const narration = createMemo(() =>
-		blockNarrationEvidence(props.document, props.block, props.debugEvents),
+		blockNarrationEvidence(
+			props.document,
+			props.block,
+			props.debugEvents,
+			props.narrationAudio,
+			props.narrationAudioLoaded,
+		),
 	);
 
 	return (
@@ -559,6 +581,8 @@ function blockNarrationEvidence(
 	document: Doc<"documents"> | undefined,
 	block: Doc<"blocks">,
 	events: Doc<"processingEvents">[] | undefined,
+	audio: NarrationAudioMetadata | undefined,
+	audioLoaded: boolean,
 ) {
 	const narration = document?.processingConfiguration.narration;
 	if (!narration?.enabled) {
@@ -588,8 +612,8 @@ function blockNarrationEvidence(
 	return {
 		narration: blockNarrationText(block, narration.voice, latestEvent),
 		text: blockNarrationGeneratedText(block),
-		audio: "not recorded",
-		alignment: "not recorded",
+		audio: blockNarrationAudioText(audio, audioLoaded),
+		alignment: blockNarrationAlignmentText(audio, audioLoaded),
 	};
 }
 
@@ -618,6 +642,36 @@ function blockNarrationGeneratedText(block: Doc<"blocks">) {
 	return persisted.text.length > 160
 		? `${persisted.text.slice(0, 157)}…`
 		: persisted.text;
+}
+
+function blockNarrationAudioText(
+	audio: NarrationAudioMetadata | undefined,
+	loaded: boolean,
+) {
+	if (!loaded) return "loading";
+	if (!audio) return "missing";
+	return `present · ${formatDuration(audio.durationMs)} · timestamps ${audio.wordTimestampCount}`;
+}
+
+function blockNarrationAlignmentText(
+	audio: NarrationAudioMetadata | undefined,
+	loaded: boolean,
+) {
+	if (!loaded) return "loading";
+	if (!audio) return "missing";
+	return [audio.alignment.status, audio.alignment.source, audio.alignment.error]
+		.filter(Boolean)
+		.join(" · ");
+}
+
+function narrationAudioByBlockIdMap(
+	audio: NarrationAudioMetadata[] | undefined,
+) {
+	return new Map((audio ?? []).map((item) => [item.blockId, item]));
+}
+
+function formatDuration(durationMs: number) {
+	return `${Math.round(durationMs / 100) / 10}s`;
 }
 
 export function debugToggleButtonClass(isActive: boolean) {

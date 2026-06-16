@@ -10,6 +10,7 @@ import {
 	acceptMarkerResult,
 	createDocumentAndStartProcessing,
 	createDocumentImageAccess,
+	createDocumentNarrationAudioAccess,
 	createDocumentSourceAccess,
 } from "../documents";
 
@@ -46,6 +47,11 @@ const markerResultSchema = v.object({
 
 const imageUrlsSchema = v.object({
 	filenames: v.array(v.pipe(v.string(), v.minLength(1))),
+});
+
+const narrationAudioUrlSchema = v.object({
+	blockId: v.pipe(v.string(), v.minLength(1)),
+	voice: v.pipe(v.string(), v.minLength(1)),
 });
 
 export const documentsRoute = new Hono();
@@ -120,6 +126,35 @@ documentsRoute.post("/:documentId/image-urls", async (c) => {
 		);
 	} catch (error) {
 		return c.json({ error: errorMessage(error) }, 400);
+	}
+});
+
+documentsRoute.get("/:documentId/narration-audio-url", async (c) => {
+	const authToken = bearerToken(c.req.header("Authorization"));
+	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
+
+	let input: v.InferOutput<typeof narrationAudioUrlSchema>;
+	try {
+		input = v.parse(narrationAudioUrlSchema, {
+			blockId: c.req.query("blockId"),
+			voice: c.req.query("voice"),
+		});
+	} catch (error) {
+		return c.json({ error: errorMessage(error) }, 400);
+	}
+
+	try {
+		c.header("Cache-Control", "no-store");
+		return c.json(
+			await createDocumentNarrationAudioAccess({
+				authToken,
+				documentId: c.req.param("documentId") as Id<"documents">,
+				blockId: input.blockId,
+				voice: input.voice,
+			}),
+		);
+	} catch {
+		return c.json({ error: "Narration audio not found" }, 404);
 	}
 });
 

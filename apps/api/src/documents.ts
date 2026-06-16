@@ -217,6 +217,25 @@ export async function createDocumentImageAccess(input: {
 	return { urls, expiresAt };
 }
 
+export async function createDocumentNarrationAudioAccess(input: {
+	authToken: string;
+	documentId: Id<"documents">;
+	blockId: string;
+	voice: string;
+}) {
+	const audio = await createConvexHttpClient(input.authToken).query(
+		api.api.narrationAudio.getObjectKeyForPlaybackFromApi,
+		{
+			serviceSecret: readApiToConvexServiceSecret(),
+			documentId: input.documentId,
+			blockId: input.blockId,
+			voice: input.voice,
+		},
+	);
+
+	return getBrowserPresignedReadUrl(audio.storageObjectKey);
+}
+
 async function documentPdfMetadata(input: {
 	blocks: PdfMetadataBlockCandidate[];
 	mimeType: string;

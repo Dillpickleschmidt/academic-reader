@@ -1,16 +1,36 @@
 import type { Doc, Id } from "@academic-reader/convex/data-model";
-import { createMemo, createResource, createSignal, For, Show } from "solid-js";
+import {
+	createEffect,
+	createMemo,
+	createResource,
+	createSignal,
+	For,
+	onCleanup,
+	Show,
+} from "solid-js";
 import { authClient } from "../../lib/auth-client";
 import { ReaderDebugOverlayLayer, readerBlockElementId } from "./DocumentDebug";
 import {
 	extractBlockImageFilenames,
 	rewriteBlockImageUrls,
 } from "./document-html";
-import { EmptyPane, PaneSkeleton } from "./document-page-ui";
+import type { NarrationAudioMetadata } from "./document-narration-audio";
+import { EmptyPane, errorMessage, PaneSkeleton } from "./document-page-ui";
 
 interface ImageAccess {
 	urls: Record<string, string>;
 	expiresAt: string;
+}
+
+interface NarrationPlaybackState {
+	requestId: number;
+	blockId: string;
+	blockLabel: string;
+	audio: NarrationAudioMetadata;
+	captionText: string | undefined;
+	status: "loading" | "playing" | "paused" | "ended" | "error";
+	url?: string;
+	error?: string;
 }
 
 export function ReaderView(props: {
@@ -20,11 +40,18 @@ export function ReaderView(props: {
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	documentId: Id<"documents">;
+	narrationAudio: NarrationAudioMetadata[] | undefined;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowSource: (block: Doc<"blocks">) => void;
 }) {
 	const [contentContainer, setContentContainer] =
 		createSignal<HTMLDivElement>();
+	const [audioElement, setAudioElement] = createSignal<HTMLAudioElement>();
+	const [playback, setPlayback] = createSignal<NarrationPlaybackState>();
+	let playbackRequestId = 0;
+	let pointerDown:
+		| { blockId: string; clientX: number; clientY: number }
+		| undefined;
 	const imageFilenames = createMemo(() => {
 		if (props.blocks === undefined) return undefined;
 		return extractBlockImageFilenames(props.blocks, props.documentId);
@@ -53,6 +80,159 @@ export function ReaderView(props: {
 			),
 		}));
 	});
+	const narrationAudioByBlockId = createMemo(
+		() =>
+			new Map((props.narrationAudio ?? []).map((item) => [item.blockId, item])),
+	);
+	const narrationEnabled = createMemo(
+		() => props.document?.processingConfiguration.narration.enabled === true,
+	);
+
+	createEffect(() => {
+		const state = playback();
+		const element = audioElement();
+		if (!state?.url || state.status !== "loading" || !element) return;
+
+		element.src = state.url;
+		element.load();
+		void element
+			.play()
+			.then(() => updatePlayback(state.requestId, { status: "playing" }))
+			.catch((playError) =>
+				updatePlayback(state.requestId, {
+					status: "error",
+					error: errorMessage(playError),
+				}),
+			);
+	});
+
+	onCleanup(() => {
+		playbackRequestId += 1;
+		const element = audioElement();
+		if (!element) return;
+		element.pause();
+		element.removeAttribute("src");
+		element.load();
+	});
+
+	function handlePointerDown(event: PointerEvent, block: Doc<"blocks">) {
+		if (event.button !== 0) return;
+		pointerDown = {
+			blockId: block.blockId,
+			clientX: event.clientX,
+			clientY: event.clientY,
+		};
+	}
+
+	async function handleBlockClick(event: MouseEvent, block: Doc<"blocks">) {
+		const audio = narrationAudioByBlockId().get(block.blockId);
+		if (
+			!audio ||
+			props.debugEnabled ||
+			shouldIgnoreBlockClick(event, pointerDown)
+		) {
+			return;
+		}
+
+		await playNarrationBlock(block, audio);
+	}
+
+	async function handleBlockKeyDown(
+		event: KeyboardEvent,
+		block: Doc<"blocks">,
+	) {
+		if (event.key !== "Enter" && event.key !== " ") return;
+		const audio = narrationAudioByBlockId().get(block.blockId);
+		const target = event.target;
+		if (
+			!audio ||
+			props.debugEnabled ||
+			(target instanceof Element && isInteractiveElement(target))
+		) {
+			return;
+		}
+
+		event.preventDefault();
+		await playNarrationBlock(block, audio);
+	}
+
+	async function playNarrationBlock(
+		block: Doc<"blocks">,
+		audio: NarrationAudioMetadata,
+	) {
+		const voice = props.document?.processingConfiguration.narration.voice;
+		if (!voice) return;
+
+		const requestId = playbackRequestId + 1;
+		playbackRequestId = requestId;
+		audioElement()?.pause();
+		setPlayback({
+			requestId,
+			blockId: block.blockId,
+			blockLabel: `Block #${block.order + 1}`,
+			audio,
+			captionText:
+				block.narration?.decision === "eligible"
+					? block.narration.text
+					: undefined,
+			status: "loading",
+		});
+
+		try {
+			const access = await fetchNarrationAudioAccess({
+				documentId: props.documentId,
+				blockId: block.blockId,
+				voice,
+			});
+			updatePlayback(requestId, {
+				url: access.url,
+				status: "loading",
+				error: undefined,
+			});
+		} catch (fetchError) {
+			updatePlayback(requestId, {
+				status: "error",
+				error: errorMessage(fetchError),
+			});
+		}
+	}
+
+	async function retryPlayback() {
+		const state = playback();
+		if (!state) return;
+
+		const block = renderedBlocks()?.find(
+			(item) => item.blockId === state.blockId,
+		);
+		if (!block) return;
+		await playNarrationBlock(block, state.audio);
+	}
+
+	function stopPlayback() {
+		playbackRequestId += 1;
+		const element = audioElement();
+		if (element) {
+			element.pause();
+			element.removeAttribute("src");
+			element.load();
+		}
+		setPlayback(undefined);
+	}
+
+	function updatePlayback(
+		requestId: number,
+		patch: Partial<NarrationPlaybackState>,
+	) {
+		setPlayback((current) =>
+			current?.requestId === requestId ? { ...current, ...patch } : current,
+		);
+	}
+
+	function updateCurrentPlaybackStatus(
+		status: NarrationPlaybackState["status"],
+	) {
+		setPlayback((current) => (current ? { ...current, status } : current));
+	}
 
 	return (
 		<div class="reader-view h-full overflow-y-auto bg-stone-950 p-6 pt-16 lg:p-10">
@@ -74,15 +254,38 @@ export function ReaderView(props: {
 					>
 						<div ref={setContentContainer} class="relative mx-auto max-w-3xl">
 							<For each={loadedBlocks()}>
-								{(block) => (
-									<article
-										id={readerBlockElementId(block._id)}
-										data-block-id={block.blockId}
-										data-block-type={block.blockType}
-										data-page-number={block.pageNumber}
-										innerHTML={block.contentHtml}
-									/>
-								)}
+								{(block) => {
+									const audio = () =>
+										narrationAudioByBlockId().get(block.blockId);
+									const hasPlayback = () =>
+										!!audio() && narrationEnabled() && !props.debugEnabled;
+
+									return (
+										<article
+											id={readerBlockElementId(block._id)}
+											aria-label={
+												hasPlayback()
+													? `Play Narration for Block #${block.order + 1}`
+													: undefined
+											}
+											class={readerArticleClass(
+												hasPlayback(),
+												playback()?.blockId === block.blockId,
+											)}
+											data-block-id={block.blockId}
+											data-block-type={block.blockType}
+											data-page-number={block.pageNumber}
+											innerHTML={block.contentHtml}
+											role={hasPlayback() ? "button" : undefined}
+											tabIndex={hasPlayback() ? 0 : undefined}
+											onClick={(event) => void handleBlockClick(event, block)}
+											onKeyDown={(event) =>
+												void handleBlockKeyDown(event, block)
+											}
+											onPointerDown={(event) => handlePointerDown(event, block)}
+										/>
+									);
+								}}
 							</For>
 							<ReaderDebugOverlayLayer
 								activeDebugBlockId={props.activeDebugBlockId}
@@ -91,6 +294,7 @@ export function ReaderView(props: {
 								debugEnabled={props.debugEnabled}
 								debugEvents={props.debugEvents}
 								document={props.document}
+								narrationAudio={props.narrationAudio}
 								onHoverDebugBlock={props.onHoverDebugBlock}
 								onShowSource={props.onShowSource}
 							/>
@@ -98,6 +302,62 @@ export function ReaderView(props: {
 					</Show>
 				)}
 			</Show>
+			<div
+				class={
+					playback()
+						? "fixed inset-x-4 bottom-20 z-40 mx-auto max-w-3xl rounded-2xl border border-stone-700 bg-stone-950/95 p-3 shadow-2xl shadow-black/60 backdrop-blur"
+						: "hidden"
+				}
+			>
+				<Show when={playback()}>
+					{(state) => (
+						<div class="mb-2 flex items-start justify-between gap-3">
+							<div>
+								<div class="font-medium text-sm text-stone-100">
+									Narration · {state().blockLabel}
+								</div>
+								<div class="text-stone-400 text-xs">
+									{playbackStatusText(state())}
+								</div>
+							</div>
+							<div class="flex gap-2">
+								<Show when={state().status === "error"}>
+									<button
+										class="rounded-full border border-amber-300/50 px-3 py-1 text-amber-100 text-xs hover:bg-amber-300/10"
+										type="button"
+										onClick={() => void retryPlayback()}
+									>
+										Retry
+									</button>
+								</Show>
+								<button
+									class="rounded-full border border-stone-700 px-3 py-1 text-stone-300 text-xs hover:bg-stone-900"
+									type="button"
+									onClick={stopPlayback}
+								>
+									Close
+								</button>
+							</div>
+						</div>
+					)}
+				</Show>
+				<audio
+					ref={(element) => setAudioElement(element)}
+					class="w-full"
+					controls
+					onEnded={() => updateCurrentPlaybackStatus("ended")}
+					onError={() => updateCurrentPlaybackStatus("error")}
+					onPause={() => updateCurrentPlaybackStatus("paused")}
+					onPlay={() => updateCurrentPlaybackStatus("playing")}
+				>
+					<track
+						default
+						kind="captions"
+						label="Narration Text"
+						src={captionTrackUrl(playback())}
+					/>
+				</audio>
+			</div>
 		</div>
 	);
 }
@@ -129,4 +389,91 @@ async function fetchImageAccess(input: {
 	}
 
 	return payload as ImageAccess;
+}
+
+async function fetchNarrationAudioAccess(input: {
+	documentId: Id<"documents">;
+	blockId: string;
+	voice: string;
+}) {
+	const { data } = await authClient.convex.token({
+		fetchOptions: { throw: false },
+	});
+	const token = data?.token;
+	if (!token) throw new Error("Could not authenticate Narration audio access");
+
+	const params = new URLSearchParams({
+		blockId: input.blockId,
+		voice: input.voice,
+	});
+	const response = await fetch(
+		`/api/documents/${encodeURIComponent(input.documentId)}/narration-audio-url?${params}`,
+		{ headers: { Authorization: `Bearer ${token}` } },
+	);
+	const payload = await response.json();
+	if (!response.ok) {
+		throw new Error(payload.error || "Could not create Narration audio URL");
+	}
+
+	return payload as { url: string };
+}
+
+function shouldIgnoreBlockClick(
+	event: MouseEvent,
+	pointerDown:
+		| { blockId: string; clientX: number; clientY: number }
+		| undefined,
+) {
+	const target = event.target;
+	if (target instanceof Element && isInteractiveElement(target)) return true;
+	if (window.getSelection()?.toString().trim()) return true;
+	if (!pointerDown) return false;
+
+	const blockId =
+		event.currentTarget instanceof HTMLElement
+			? event.currentTarget.dataset.blockId
+			: undefined;
+	if (blockId && blockId !== pointerDown.blockId) return true;
+
+	return (
+		Math.hypot(
+			event.clientX - pointerDown.clientX,
+			event.clientY - pointerDown.clientY,
+		) > 6
+	);
+}
+
+function isInteractiveElement(element: Element) {
+	return !!element.closest(
+		"a, button, input, textarea, select, summary, label, [contenteditable]",
+	);
+}
+
+function captionTrackUrl(state: NarrationPlaybackState | undefined) {
+	if (!state?.captionText) return undefined;
+
+	const vtt = `WEBVTT\n\n00:00.000 --> ${vttTimestamp(state.audio.durationMs)}\n${state.captionText}\n`;
+	return `data:text/vtt;charset=utf-8,${encodeURIComponent(vtt)}`;
+}
+
+function vttTimestamp(durationMs: number) {
+	const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000));
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.000`;
+}
+
+function readerArticleClass(playable: boolean, active: boolean) {
+	const base = "-mx-3 rounded-xl px-3 py-1 transition-colors";
+	if (active) {
+		return `${base} bg-amber-300/10 ring-1 ring-amber-300/40`;
+	}
+	if (playable) return `${base} cursor-pointer hover:bg-stone-900/70`;
+	return base;
+}
+
+function playbackStatusText(state: NarrationPlaybackState) {
+	if (state.status === "error") return state.error ?? "Playback failed";
+	return `${state.status} · ${Math.round(state.audio.durationMs / 100) / 10}s`;
 }
