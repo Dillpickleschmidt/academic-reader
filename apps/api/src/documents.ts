@@ -224,7 +224,7 @@ export async function createDocumentNarrationAudioAccess(input: {
 	voice: string;
 }) {
 	const audio = await createConvexHttpClient(input.authToken).query(
-		api.api.narrationAudio.getObjectKeyForPlaybackFromApi,
+		api.api.narrationAudio.getPlaybackAudioFromApi,
 		{
 			serviceSecret: readApiToConvexServiceSecret(),
 			documentId: input.documentId,
@@ -232,8 +232,9 @@ export async function createDocumentNarrationAudioAccess(input: {
 			voice: input.voice,
 		},
 	);
+	const access = await getBrowserPresignedReadUrl(audio.storageObjectKey);
 
-	return getBrowserPresignedReadUrl(audio.storageObjectKey);
+	return { ...access, wordTimestamps: audio.wordTimestamps };
 }
 
 async function documentPdfMetadata(input: {

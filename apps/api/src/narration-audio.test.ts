@@ -58,6 +58,13 @@ describe("createNarrationAudioQueue", () => {
 			voice: "af_heart",
 			generateAudio: async (item) => {
 				if (item.blockId === "a") throw new Error("bad block");
+				if (item.blockId === "c") {
+					return {
+						durationMs: 100,
+						wordTimestampCount: 0,
+						alignment: { status: "failed", error: "alignment failed" },
+					};
+				}
 				return {
 					durationMs: 100,
 					wordTimestampCount: 0,
@@ -71,16 +78,23 @@ describe("createNarrationAudioQueue", () => {
 		blockQueue.enqueue([
 			{ blockId: "a", text: "A" },
 			{ blockId: "b", text: "B" },
+			{ blockId: "c", text: "C" },
 		]);
 
 		expect(await blockQueue.closeAndDrain()).toEqual({
 			status: "completed",
-			generatedCount: 1,
+			generatedCount: 2,
 			failedBlockCount: 1,
 		});
-		expect(blockEvents.map((event) => event.type)).toContain(
-			"narration.audio.warning",
-		);
+		expect(
+			blockEvents
+				.filter((event) => event.type === "narration.audio.warning")
+				.map((event) => event.message),
+		).toEqual([
+			"Narration audio generation failed for a Block.",
+			"Narration audio completed without Word Timing.",
+			"Narration Word Timing failed for a Block.",
+		]);
 
 		const fatalEvents: ProcessingEventInput[] = [];
 		const fatalQueue = createNarrationAudioQueue({

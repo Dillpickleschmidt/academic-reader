@@ -29,7 +29,7 @@ export async function listNarrationAudioForDocument(
 	}));
 }
 
-export async function getNarrationAudioObjectKeyForPlaybackFromApi(
+export async function getNarrationAudioForPlaybackFromApi(
 	ctx: QueryCtx,
 	input: {
 		serviceSecret: string;
@@ -53,7 +53,10 @@ export async function getNarrationAudioObjectKeyForPlaybackFromApi(
 
 	if (!audio) throw new Error("Narration audio not found");
 
-	return { storageObjectKey: audio.storageObjectKey };
+	return {
+		storageObjectKey: audio.storageObjectKey,
+		wordTimestamps: audio.wordTimestamps,
+	};
 }
 
 export async function upsertNarrationAudioFromApi(

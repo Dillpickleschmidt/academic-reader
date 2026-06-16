@@ -123,6 +123,9 @@ export function createNarrationAudioQueue(input: {
 				generatedCount += 1;
 				processedCount += 1;
 				await appendProgressEvent(item, result);
+				if (!hasUsableWordTiming(result)) {
+					await appendWordTimingWarning(item, result);
+				}
 			} catch (error) {
 				const message = errorMessage(error);
 				if (isFatalAudioError(error)) {
@@ -180,6 +183,28 @@ export function createNarrationAudioQueue(input: {
 				},
 			});
 		}
+	}
+
+	async function appendWordTimingWarning(
+		item: NarrationAudioQueueItem,
+		result: NarrationAudioGenerationResult,
+	) {
+		await appendEvent({
+			type: "narration.audio.warning",
+			emitter: "app",
+			severity: "warning",
+			message:
+				result.alignment.status === "failed"
+					? "Narration Word Timing failed for a Block."
+					: "Narration audio completed without Word Timing.",
+			emittedAt: Date.now(),
+			blockId: item.blockId,
+			data: {
+				...eventData,
+				wordTimestampCount: result.wordTimestampCount,
+				alignment: result.alignment,
+			},
+		});
 	}
 
 	async function appendProgressEvent(
@@ -268,6 +293,10 @@ export async function generateAndPersistNarrationAudio(input: {
 		wordTimestampCount: speech.wordTimestamps.length,
 		alignment: speech.alignment,
 	};
+}
+
+function hasUsableWordTiming(result: NarrationAudioGenerationResult) {
+	return result.alignment.status === "ok" && result.wordTimestampCount > 0;
 }
 
 function isFatalAudioError(error: unknown) {

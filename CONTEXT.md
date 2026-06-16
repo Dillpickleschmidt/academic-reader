@@ -96,6 +96,18 @@ _Avoid_: bibliography entry, reference entry, footnote
 A compact document-level guide that summarizes reading context, terminology, notation, and pronunciation conventions for Narration.
 _Avoid_: prompt, AI summary, classifier context
 
+**Narration Word Timing**:
+The time range for each spoken word in Narration, used to relate playback position back to the Reader View.
+_Avoid_: segment alignment, TTS timestamp, word timestamp
+
+**Narration Word Highlighting**:
+A Reader View behavior that marks the words currently being spoken during Narration playback.
+_Avoid_: segment highlighting, karaoke mode, TTS highlighting
+
+**Narration Word Seeking**:
+Starting or moving Narration playback from the word the Reader selected in the Reader View.
+_Avoid_: segment seek, TTS seek, timestamp jump
+
 **Chat**:
 A conversation with an AI model from inside the Document page.
 

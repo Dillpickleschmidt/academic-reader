@@ -1,4 +1,5 @@
 import type { Doc, Id } from "@academic-reader/convex/data-model";
+import type { NarrationWordTimestamp } from "@academic-reader/shared/narration";
 import {
 	createEffect,
 	createMemo,
@@ -16,6 +17,10 @@ import {
 } from "./document-html";
 import type { NarrationAudioMetadata } from "./document-narration-audio";
 import { EmptyPane, errorMessage, PaneSkeleton } from "./document-page-ui";
+import {
+	createNarrationWordHighlighter,
+	type NarrationWordHighlighter,
+} from "./narration-word-highlighting";
 
 interface ImageAccess {
 	urls: Record<string, string>;
@@ -28,8 +33,10 @@ interface NarrationPlaybackState {
 	blockLabel: string;
 	audio: NarrationAudioMetadata;
 	captionText: string | undefined;
+	hasWordTiming: boolean;
 	status: "loading" | "playing" | "paused" | "ended" | "error";
 	url?: string;
+	seekMs?: number;
 	error?: string;
 }
 
@@ -49,6 +56,8 @@ export function ReaderView(props: {
 	const [audioElement, setAudioElement] = createSignal<HTMLAudioElement>();
 	const [playback, setPlayback] = createSignal<NarrationPlaybackState>();
 	let playbackRequestId = 0;
+	let activeHighlighter: NarrationWordHighlighter | undefined;
+	let highlightFrame: number | undefined;
 	let pointerDown:
 		| { blockId: string; clientX: number; clientY: number }
 		| undefined;
@@ -93,21 +102,12 @@ export function ReaderView(props: {
 		const element = audioElement();
 		if (!state?.url || state.status !== "loading" || !element) return;
 
-		element.src = state.url;
-		element.load();
-		void element
-			.play()
-			.then(() => updatePlayback(state.requestId, { status: "playing" }))
-			.catch((playError) =>
-				updatePlayback(state.requestId, {
-					status: "error",
-					error: errorMessage(playError),
-				}),
-			);
+		void loadAndPlayNarration(state, element);
 	});
 
 	onCleanup(() => {
 		playbackRequestId += 1;
+		restoreActiveHighlighter();
 		const element = audioElement();
 		if (!element) return;
 		element.pause();
@@ -134,7 +134,10 @@ export function ReaderView(props: {
 			return;
 		}
 
-		await playNarrationBlock(block, audio);
+		await playNarrationBlock(block, audio, {
+			clientX: event.clientX,
+			clientY: event.clientY,
+		});
 	}
 
 	async function handleBlockKeyDown(
@@ -159,6 +162,7 @@ export function ReaderView(props: {
 	async function playNarrationBlock(
 		block: Doc<"blocks">,
 		audio: NarrationAudioMetadata,
+		clickPoint?: { clientX: number; clientY: number },
 	) {
 		const voice = props.document?.processingConfiguration.narration.voice;
 		if (!voice) return;
@@ -166,6 +170,22 @@ export function ReaderView(props: {
 		const requestId = playbackRequestId + 1;
 		playbackRequestId = requestId;
 		audioElement()?.pause();
+		restoreActiveHighlighter();
+
+		const blockElement = document.getElementById(
+			readerBlockElementId(block._id),
+		);
+		const highlighter = blockElement
+			? createNarrationWordHighlighter({ blockElement })
+			: undefined;
+		const visibleWordIndex = clickPoint
+			? highlighter?.visibleWordIndexFromPoint(
+					clickPoint.clientX,
+					clickPoint.clientY,
+				)
+			: undefined;
+		activeHighlighter = highlighter;
+
 		setPlayback({
 			requestId,
 			blockId: block.blockId,
@@ -175,6 +195,7 @@ export function ReaderView(props: {
 				block.narration?.decision === "eligible"
 					? block.narration.text
 					: undefined,
+			hasWordTiming: false,
 			status: "loading",
 		});
 
@@ -184,12 +205,32 @@ export function ReaderView(props: {
 				blockId: block.blockId,
 				voice,
 			});
+			if (playbackRequestId !== requestId) {
+				highlighter?.restore();
+				return;
+			}
+
+			let seekMs: number | undefined;
+			if (highlighter && access.wordTimestamps.length) {
+				highlighter.setWordTimestamps(access.wordTimestamps);
+				if (visibleWordIndex !== undefined) {
+					seekMs = highlighter.seekMsForVisibleWord(visibleWordIndex);
+				}
+			} else {
+				highlighter?.restore();
+				if (activeHighlighter === highlighter) activeHighlighter = undefined;
+			}
+
 			updatePlayback(requestId, {
 				url: access.url,
+				hasWordTiming: access.wordTimestamps.length > 0,
+				seekMs,
 				status: "loading",
 				error: undefined,
 			});
 		} catch (fetchError) {
+			highlighter?.restore();
+			if (activeHighlighter === highlighter) activeHighlighter = undefined;
 			updatePlayback(requestId, {
 				status: "error",
 				error: errorMessage(fetchError),
@@ -210,6 +251,7 @@ export function ReaderView(props: {
 
 	function stopPlayback() {
 		playbackRequestId += 1;
+		restoreActiveHighlighter();
 		const element = audioElement();
 		if (element) {
 			element.pause();
@@ -217,6 +259,54 @@ export function ReaderView(props: {
 			element.load();
 		}
 		setPlayback(undefined);
+	}
+
+	async function loadAndPlayNarration(
+		state: NarrationPlaybackState,
+		element: HTMLAudioElement,
+	) {
+		element.src = state.url ?? "";
+		element.load();
+		try {
+			if (state.seekMs !== undefined) {
+				await waitForAudioMetadata(element);
+				if (playback()?.requestId !== state.requestId) return;
+				element.currentTime = state.seekMs / 1000;
+			}
+			if (playback()?.requestId !== state.requestId) return;
+			await element.play();
+			if (playback()?.requestId !== state.requestId) return;
+			updatePlayback(state.requestId, { status: "playing" });
+		} catch (playError) {
+			if (playback()?.requestId !== state.requestId) return;
+			restoreActiveHighlighter();
+			updatePlayback(state.requestId, {
+				status: "error",
+				error: errorMessage(playError),
+			});
+		}
+	}
+
+	function startHighlightLoop(requestId: number) {
+		stopHighlightLoop();
+		const animate = () => {
+			if (playback()?.requestId !== requestId) return;
+			const element = audioElement();
+			if (element) activeHighlighter?.highlightAtMs(element.currentTime * 1000);
+			highlightFrame = requestAnimationFrame(animate);
+		};
+		highlightFrame = requestAnimationFrame(animate);
+	}
+
+	function stopHighlightLoop() {
+		if (highlightFrame !== undefined) cancelAnimationFrame(highlightFrame);
+		highlightFrame = undefined;
+	}
+
+	function restoreActiveHighlighter() {
+		stopHighlightLoop();
+		activeHighlighter?.restore();
+		activeHighlighter = undefined;
 	}
 
 	function updatePlayback(
@@ -231,6 +321,12 @@ export function ReaderView(props: {
 	function updateCurrentPlaybackStatus(
 		status: NarrationPlaybackState["status"],
 	) {
+		const state = playback();
+		if (status === "playing" && state?.hasWordTiming) {
+			startHighlightLoop(state.requestId);
+		}
+		if (status === "paused") stopHighlightLoop();
+		if (status === "ended" || status === "error") restoreActiveHighlighter();
 		setPlayback((current) => (current ? { ...current, status } : current));
 	}
 
@@ -415,7 +511,32 @@ async function fetchNarrationAudioAccess(input: {
 		throw new Error(payload.error || "Could not create Narration audio URL");
 	}
 
-	return payload as { url: string };
+	return payload as {
+		url: string;
+		wordTimestamps: NarrationWordTimestamp[];
+	};
+}
+
+function waitForAudioMetadata(element: HTMLAudioElement) {
+	if (element.readyState >= 1) return Promise.resolve();
+
+	return new Promise<void>((resolve, reject) => {
+		const cleanup = () => {
+			element.removeEventListener("loadedmetadata", handleLoaded);
+			element.removeEventListener("error", handleError);
+		};
+		const handleLoaded = () => {
+			cleanup();
+			resolve();
+		};
+		const handleError = () => {
+			cleanup();
+			reject(new Error("Could not load Narration audio metadata"));
+		};
+
+		element.addEventListener("loadedmetadata", handleLoaded, { once: true });
+		element.addEventListener("error", handleError, { once: true });
+	});
 }
 
 function shouldIgnoreBlockClick(

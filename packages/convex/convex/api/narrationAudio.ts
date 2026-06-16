@@ -24,7 +24,7 @@ export const listForDocument = query({
 		NarrationAudio.listNarrationAudioForDocument(ctx, args),
 });
 
-export const getObjectKeyForPlaybackFromApi = query({
+export const getPlaybackAudioFromApi = query({
 	args: {
 		serviceSecret: v.string(),
 		documentId: v.id("documents"),
@@ -33,9 +33,10 @@ export const getObjectKeyForPlaybackFromApi = query({
 	},
 	returns: v.object({
 		storageObjectKey: v.string(),
+		wordTimestamps: v.array(wordTimestampValidator),
 	}),
 	handler: (ctx, args) =>
-		NarrationAudio.getNarrationAudioObjectKeyForPlaybackFromApi(ctx, args),
+		NarrationAudio.getNarrationAudioForPlaybackFromApi(ctx, args),
 });
 
 export const upsertFromApi = mutation({
