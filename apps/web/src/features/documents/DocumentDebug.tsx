@@ -54,6 +54,9 @@ export function SourceDebugOverlayLayer(props: {
 	const narrationAudioByBlockId = createMemo(() =>
 		narrationAudioByBlockIdMap(props.narrationAudio),
 	);
+	const latestNarrationEventByBlockId = createMemo(() =>
+		latestNarrationEventByBlockIdMap(props.debugEvents),
+	);
 
 	return (
 		<div
@@ -83,8 +86,11 @@ export function SourceDebugOverlayLayer(props: {
 					>
 						<DebugMetadataCard
 							block={block}
-							debugEvents={props.debugEvents}
+							debugEventsLoaded={props.debugEvents !== undefined}
 							document={props.document}
+							latestNarrationEvent={latestNarrationEventByBlockId()?.get(
+								block.blockId,
+							)}
 							narrationAudio={narrationAudioByBlockId().get(block.blockId)}
 							narrationAudioLoaded={props.narrationAudio !== undefined}
 							forceVisible={props.activeDebugBlockId === block.blockId}
@@ -174,6 +180,9 @@ export function ReaderDebugOverlayLayer(props: {
 	const narrationAudioByBlockId = createMemo(() =>
 		narrationAudioByBlockIdMap(props.narrationAudio),
 	);
+	const latestNarrationEventByBlockId = createMemo(() =>
+		latestNarrationEventByBlockIdMap(props.debugEvents),
+	);
 
 	createEffect(() => {
 		const container = props.contentContainer;
@@ -214,8 +223,11 @@ export function ReaderDebugOverlayLayer(props: {
 				{(rect) => (
 					<ReaderDebugOverlayBox
 						active={props.activeDebugBlockId === rect.block.blockId}
-						debugEvents={props.debugEvents}
+						debugEventsLoaded={props.debugEvents !== undefined}
 						document={props.document}
+						latestNarrationEvent={latestNarrationEventByBlockId()?.get(
+							rect.block.blockId,
+						)}
 						narrationAudio={narrationAudioByBlockId().get(rect.block.blockId)}
 						narrationAudioLoaded={props.narrationAudio !== undefined}
 						rect={rect}
@@ -230,8 +242,9 @@ export function ReaderDebugOverlayLayer(props: {
 
 function ReaderDebugOverlayBox(props: {
 	active: boolean;
-	debugEvents: Doc<"processingEvents">[] | undefined;
+	debugEventsLoaded: boolean;
 	document: Doc<"documents"> | undefined;
+	latestNarrationEvent: Doc<"processingEvents"> | undefined;
 	narrationAudio: NarrationAudioMetadata | undefined;
 	narrationAudioLoaded: boolean;
 	rect: ReaderOverlayRect;
@@ -245,8 +258,9 @@ function ReaderDebugOverlayBox(props: {
 	const card = () => (
 		<DebugMetadataCard
 			block={props.rect.block}
-			debugEvents={props.debugEvents}
+			debugEventsLoaded={props.debugEventsLoaded}
 			document={props.document}
+			latestNarrationEvent={props.latestNarrationEvent}
 			narrationAudio={props.narrationAudio}
 			narrationAudioLoaded={props.narrationAudioLoaded}
 			forceVisible={props.active}
@@ -289,8 +303,9 @@ function ReaderDebugOverlayBox(props: {
 
 function DebugMetadataCard(props: {
 	block: Doc<"blocks">;
-	debugEvents: Doc<"processingEvents">[] | undefined;
+	debugEventsLoaded: boolean;
 	document: Doc<"documents"> | undefined;
+	latestNarrationEvent: Doc<"processingEvents"> | undefined;
 	narrationAudio: NarrationAudioMetadata | undefined;
 	narrationAudioLoaded: boolean;
 	forceVisible: boolean;
@@ -301,7 +316,8 @@ function DebugMetadataCard(props: {
 		blockNarrationEvidence(
 			props.document,
 			props.block,
-			props.debugEvents,
+			props.debugEventsLoaded,
+			props.latestNarrationEvent,
 			props.narrationAudio,
 			props.narrationAudioLoaded,
 		),
@@ -580,7 +596,8 @@ function attributeValue(rawOpen: string, name: string) {
 function blockNarrationEvidence(
 	document: Doc<"documents"> | undefined,
 	block: Doc<"blocks">,
-	events: Doc<"processingEvents">[] | undefined,
+	eventsLoaded: boolean,
+	latestEvent: Doc<"processingEvents"> | undefined,
 	audio: NarrationAudioMetadata | undefined,
 	audioLoaded: boolean,
 ) {
@@ -594,7 +611,7 @@ function blockNarrationEvidence(
 		};
 	}
 
-	if (events === undefined) {
+	if (!eventsLoaded) {
 		return {
 			narration: `${narration.voice} · events loading`,
 			text: "events loading",
@@ -602,12 +619,6 @@ function blockNarrationEvidence(
 			alignment: "events loading",
 		};
 	}
-
-	const blockEvents = events.filter(
-		(event) =>
-			event.blockId === block.blockId && event.type.startsWith("narration."),
-	);
-	const latestEvent = blockEvents.at(-1);
 
 	return {
 		narration: blockNarrationText(block, narration.voice, latestEvent),
@@ -668,6 +679,19 @@ function narrationAudioByBlockIdMap(
 	audio: NarrationAudioMetadata[] | undefined,
 ) {
 	return new Map((audio ?? []).map((item) => [item.blockId, item]));
+}
+
+function latestNarrationEventByBlockIdMap(
+	events: Doc<"processingEvents">[] | undefined,
+) {
+	if (events === undefined) return undefined;
+
+	const latestEventByBlockId = new Map<string, Doc<"processingEvents">>();
+	for (const event of events) {
+		if (!event.blockId || !event.type.startsWith("narration.")) continue;
+		latestEventByBlockId.set(event.blockId, event);
+	}
+	return latestEventByBlockId;
 }
 
 function formatDuration(durationMs: number) {

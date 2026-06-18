@@ -2,7 +2,6 @@ import { ConvexProvider, setupConvex } from "convex-solidjs";
 import {
 	createContext,
 	createEffect,
-	createMemo,
 	createSignal,
 	type JSX,
 	onCleanup,
@@ -25,10 +24,9 @@ const ConvexAuthContext = createContext<{
 export function AppConvexProvider(props: { children: JSX.Element }) {
 	const session = authClient.useSession();
 	const [convexAuthenticated, setConvexAuthenticated] = createSignal(false);
-	const sessionId = createMemo(() => session().data?.session.id ?? null);
 
 	createEffect(() => {
-		const currentSessionId = sessionId();
+		const currentSessionId = session().data?.session.id ?? null;
 
 		if (session().isPending) return;
 

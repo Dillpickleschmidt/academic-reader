@@ -35,47 +35,54 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	const [eventsOpen, setEventsOpen] = createSignal(false);
 	const [debugEnabled, setDebugEnabled] = createSignal(false);
 	const [hoveredDebugBlockId, setHoveredDebugBlockId] = createSignal<string>();
-	const activeDebugBlockId = createMemo(() => hoveredDebugBlockId());
-	const documentId = createMemo(() => props.documentId);
 	const document = useQuery(
 		api.api.documents.get,
-		() => ({ documentId: documentId() }),
+		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const pages = useQuery(
 		api.api.pages.listForDocument,
-		() => ({ documentId: documentId() }),
+		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const blocks = useQuery(
 		api.api.blocks.listForDocument,
-		() => ({ documentId: documentId() }),
+		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const tableOfContentsEntries = useQuery(
 		api.api.tableOfContentsEntries.listTableOfContentsEntriesForDocument,
-		() => ({ documentId: documentId() }),
+		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
 	const debugEvents = useQuery(
 		api.api.processingEvents.listForDocument,
-		() => ({ documentId: documentId() }),
+		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() && debugEnabled() }),
+	);
+	const narrationAudioArgs = createMemo(
+		() => {
+			const narration = document.data()?.processingConfiguration.narration;
+			if (!narration?.enabled) return undefined;
+			return { documentId: props.documentId, voice: narration.voice };
+		},
+		undefined,
+		{
+			equals: (previous, next) =>
+				previous?.documentId === next?.documentId &&
+				previous?.voice === next?.voice,
+		},
 	);
 	const narrationAudio = useQuery(
 		api.api.narrationAudio.listForDocument,
-		() => ({
-			documentId: documentId(),
-			voice: document.data()?.processingConfiguration.narration.voice ?? "",
-		}),
+		() => narrationAudioArgs() ?? { documentId: props.documentId, voice: "" },
 		() => ({
 			enabled:
-				convexAuth.isAuthenticated() &&
-				!!document.data()?.processingConfiguration.narration.enabled,
+				convexAuth.isAuthenticated() && narrationAudioArgs() !== undefined,
 		}),
 	);
 	const [sourceAccess, { refetch: refetchSourceAccess }] = createResource(
-		() => (convexAuth.isAuthenticated() ? documentId() : undefined),
+		() => (convexAuth.isAuthenticated() ? props.documentId : undefined),
 		fetchSourceAccess,
 	);
 
@@ -172,7 +179,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 								<div class="grid h-full lg:grid-cols-2">
 									<section class={paneClass(activeMobileView() === "source")}>
 										<SourceView
-											activeDebugBlockId={activeDebugBlockId()}
+											activeDebugBlockId={hoveredDebugBlockId()}
 											blocks={blocks.data()}
 											debugEnabled={debugEnabled()}
 											debugEvents={debugEvents.data()}
@@ -191,12 +198,12 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 
 									<section class={paneClass(activeMobileView() === "reader")}>
 										<ReaderView
-											activeDebugBlockId={activeDebugBlockId()}
+											activeDebugBlockId={hoveredDebugBlockId()}
 											blocks={blocks.data()}
 											debugEnabled={debugEnabled()}
 											debugEvents={debugEvents.data()}
 											document={document.data()}
-											documentId={documentId()}
+											documentId={props.documentId}
 											narrationAudio={narrationAudio.data()}
 											onHoverDebugBlock={setHoveredDebugBlockId}
 											onShowSource={showBlockInSource}
@@ -244,7 +251,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 								/>
 
 								<EventsDrawer
-									documentId={documentId()}
+									documentId={props.documentId}
 									open={eventsOpen()}
 									onClose={() => setEventsOpen(false)}
 								/>

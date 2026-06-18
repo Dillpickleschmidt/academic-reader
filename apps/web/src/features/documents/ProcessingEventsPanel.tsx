@@ -2,7 +2,7 @@ import { api } from "@academic-reader/convex/api";
 import type { Id } from "@academic-reader/convex/data-model";
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
 import { useQuery } from "convex-solidjs";
-import { createMemo, For, Show } from "solid-js";
+import { type Accessor, Index, Show } from "solid-js";
 import { useConvexAuth } from "../../providers/convex";
 
 interface ProcessingEvent extends ProcessingEventInput {
@@ -18,12 +18,6 @@ export function ProcessingEventsPanel(props: { documentId: Id<"documents"> }) {
 		() => ({ documentId: props.documentId }),
 		() => ({ enabled: convexAuth.isAuthenticated() }),
 	);
-	const events = createMemo(() => {
-		const persisted = persistedEvents.data();
-		if (persisted === undefined) return undefined;
-		return [...persisted].sort((a, b) => a._creationTime - b._creationTime);
-	});
-
 	return (
 		<div class="mt-4 rounded-xl border border-stone-800 bg-stone-950 p-4">
 			<div class="flex items-center justify-between gap-4">
@@ -35,41 +29,43 @@ export function ProcessingEventsPanel(props: { documentId: Id<"documents"> }) {
 			</Show>
 
 			<Show
-				when={events() !== undefined}
+				when={persistedEvents.data()}
 				fallback={
 					<div class="mt-4 h-16 animate-pulse rounded-lg bg-stone-800" />
 				}
 			>
-				<Show
-					when={events()?.length}
-					fallback={
-						<p class="mt-3 text-sm text-stone-500">No events recorded yet.</p>
-					}
-				>
-					<ol class="mt-4 space-y-3">
-						<For each={events()}>
-							{(event) => <ProcessingEventItem event={event} />}
-						</For>
-					</ol>
-				</Show>
+				{(events) => (
+					<Show
+						when={events().length > 0}
+						fallback={
+							<p class="mt-3 text-sm text-stone-500">No events recorded yet.</p>
+						}
+					>
+						<ol class="mt-4 space-y-3">
+							<Index each={events()}>
+								{(event) => <ProcessingEventItem event={event} />}
+							</Index>
+						</ol>
+					</Show>
+				)}
 			</Show>
 		</div>
 	);
 }
 
-function ProcessingEventItem(props: { event: ProcessingEvent }) {
+function ProcessingEventItem(props: { event: Accessor<ProcessingEvent> }) {
+	const event = () => props.event();
+
 	return (
 		<li class="rounded-lg border border-stone-800 bg-stone-900/60 p-3 text-sm">
 			<div class="flex flex-wrap items-center gap-2">
-				<span class={severityClass(props.event.severity)}>
-					{props.event.severity}
-				</span>
-				<span class="text-stone-500">{props.event.emitter}</span>
+				<span class={severityClass(event().severity)}>{event().severity}</span>
+				<span class="text-stone-500">{event().emitter}</span>
 				<span class="text-stone-600">·</span>
-				<span class="text-stone-400">{props.event.type}</span>
+				<span class="text-stone-400">{event().type}</span>
 			</div>
-			<p class="mt-2 text-stone-200">{props.event.message}</p>
-			<Show when={props.event.progress}>
+			<p class="mt-2 text-stone-200">{event().message}</p>
+			<Show when={event().progress}>
 				{(progress) => (
 					<p class="mt-2 text-stone-500 text-xs">
 						{progress().label ? `${progress().label} · ` : ""}
@@ -78,8 +74,8 @@ function ProcessingEventItem(props: { event: ProcessingEvent }) {
 				)}
 			</Show>
 			<p class="mt-2 text-stone-600 text-xs">
-				Stored {new Date(props.event._creationTime).toLocaleTimeString()} ·
-				emitted {new Date(props.event.emittedAt).toLocaleTimeString()}
+				Stored {new Date(event()._creationTime).toLocaleTimeString()} · emitted{" "}
+				{new Date(event().emittedAt).toLocaleTimeString()}
 			</p>
 		</li>
 	);

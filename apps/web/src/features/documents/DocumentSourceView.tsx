@@ -46,60 +46,67 @@ export function SourceView(props: {
 	onRetrySourceAccess: () => void;
 	onShowReader: (block: Doc<"blocks">) => void;
 }) {
+	const loadedSource = createMemo(() => {
+		if (!props.document || props.pages === undefined) return undefined;
+		return { document: props.document, pages: props.pages };
+	});
+
 	return (
 		<div class="h-full overflow-auto bg-stone-900 p-4 pt-14 lg:pt-4">
-			<Show
-				when={props.document && props.pages !== undefined}
-				fallback={<PaneSkeleton />}
-			>
-				<Show
-					when={props.sourceAccess}
-					fallback={
-						<Show when={!props.sourceAccessLoading} fallback={<PaneSkeleton />}>
-							<RetryMessage
-								body={errorMessage(props.sourceAccessError)}
-								onRetry={props.onRetrySourceAccess}
-								title="Could not create Source View URL"
-							/>
-						</Show>
-					}
-				>
-					{(sourceAccess) => (
-						<Show
-							when={props.document?.mimeType === "application/pdf"}
-							fallback={
-								<ImageSourceView
+			<Show when={loadedSource()} fallback={<PaneSkeleton />}>
+				{(source) => (
+					<Show
+						when={props.sourceAccess}
+						fallback={
+							<Show
+								when={!props.sourceAccessLoading}
+								fallback={<PaneSkeleton />}
+							>
+								<RetryMessage
+									body={errorMessage(props.sourceAccessError)}
+									onRetry={props.onRetrySourceAccess}
+									title="Could not create Source View URL"
+								/>
+							</Show>
+						}
+					>
+						{(sourceAccess) => (
+							<Show
+								when={source().document.mimeType === "application/pdf"}
+								fallback={
+									<ImageSourceView
+										activeDebugBlockId={props.activeDebugBlockId}
+										blocks={props.blocks}
+										debugEnabled={props.debugEnabled}
+										debugEvents={props.debugEvents}
+										document={source().document}
+										narrationAudio={props.narrationAudio}
+										mimeType={source().document.mimeType}
+										pages={source().pages}
+										tableOfContentsEntries={props.tableOfContentsEntries}
+										url={sourceAccess().url}
+										onHoverDebugBlock={props.onHoverDebugBlock}
+										onShowReader={props.onShowReader}
+									/>
+								}
+							>
+								<PdfSourceView
 									activeDebugBlockId={props.activeDebugBlockId}
 									blocks={props.blocks}
 									debugEnabled={props.debugEnabled}
 									debugEvents={props.debugEvents}
-									document={props.document}
+									document={source().document}
 									narrationAudio={props.narrationAudio}
-									mimeType={props.document?.mimeType ?? ""}
-									pages={props.pages ?? []}
+									pages={source().pages}
 									tableOfContentsEntries={props.tableOfContentsEntries}
 									url={sourceAccess().url}
 									onHoverDebugBlock={props.onHoverDebugBlock}
 									onShowReader={props.onShowReader}
 								/>
-							}
-						>
-							<PdfSourceView
-								activeDebugBlockId={props.activeDebugBlockId}
-								blocks={props.blocks}
-								debugEnabled={props.debugEnabled}
-								debugEvents={props.debugEvents}
-								document={props.document}
-								narrationAudio={props.narrationAudio}
-								pages={props.pages ?? []}
-								tableOfContentsEntries={props.tableOfContentsEntries}
-								url={sourceAccess().url}
-								onHoverDebugBlock={props.onHoverDebugBlock}
-								onShowReader={props.onShowReader}
-							/>
-						</Show>
-					)}
-				</Show>
+							</Show>
+						)}
+					</Show>
+				)}
 			</Show>
 		</div>
 	);
@@ -427,7 +434,9 @@ function ImageSourceView(props: {
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
 }) {
-	const pageNumber = createMemo(() => props.pages[0]?.physicalPageNumber ?? 1);
+	function pageNumber() {
+		return props.pages[0]?.physicalPageNumber ?? 1;
+	}
 
 	return (
 		<div class="relative mx-auto max-w-5xl overflow-hidden bg-white shadow-xl shadow-black/30">

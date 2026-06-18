@@ -5,7 +5,7 @@ import {
 	createMemo,
 	createResource,
 	createSignal,
-	For,
+	Index,
 	onCleanup,
 	Show,
 } from "solid-js";
@@ -61,10 +61,14 @@ export function ReaderView(props: {
 	let pointerDown:
 		| { blockId: string; clientX: number; clientY: number }
 		| undefined;
-	const imageFilenames = createMemo(() => {
-		if (props.blocks === undefined) return undefined;
-		return extractBlockImageFilenames(props.blocks, props.documentId);
-	});
+	const imageFilenames = createMemo(
+		() => {
+			if (props.blocks === undefined) return undefined;
+			return extractBlockImageFilenames(props.blocks, props.documentId);
+		},
+		undefined,
+		{ equals: sameStringArray },
+	);
 	const [imageAccess] = createResource(() => {
 		const filenames = imageFilenames();
 		if (filenames === undefined || filenames.length === 0) return undefined;
@@ -76,25 +80,15 @@ export function ReaderView(props: {
 		if (filenames.length === 0 || imageAccess.error) return {};
 		return imageAccess()?.urls;
 	});
-	const renderedBlocks = createMemo(() => {
+	const readyBlocks = createMemo(() => {
 		const urls = imageUrls();
 		if (props.blocks === undefined || urls === undefined) return undefined;
 
-		return props.blocks.map((block) => ({
-			...block,
-			contentHtml: rewriteBlockImageUrls(
-				block.contentHtml,
-				props.documentId,
-				urls,
-			),
-		}));
+		return props.blocks;
 	});
 	const narrationAudioByBlockId = createMemo(
 		() =>
 			new Map((props.narrationAudio ?? []).map((item) => [item.blockId, item])),
-	);
-	const narrationEnabled = createMemo(
-		() => props.document?.processingConfiguration.narration.enabled === true,
 	);
 
 	createEffect(() => {
@@ -114,6 +108,18 @@ export function ReaderView(props: {
 		element.removeAttribute("src");
 		element.load();
 	});
+
+	function narrationEnabled() {
+		return props.document?.processingConfiguration.narration.enabled === true;
+	}
+
+	function blockContentHtml(block: Doc<"blocks">) {
+		return rewriteBlockImageUrls(
+			block.contentHtml,
+			props.documentId,
+			imageUrls() ?? {},
+		);
+	}
 
 	function handlePointerDown(event: PointerEvent, block: Doc<"blocks">) {
 		if (event.button !== 0) return;
@@ -242,9 +248,7 @@ export function ReaderView(props: {
 		const state = playback();
 		if (!state) return;
 
-		const block = renderedBlocks()?.find(
-			(item) => item.blockId === state.blockId,
-		);
+		const block = readyBlocks()?.find((item) => item.blockId === state.blockId);
 		if (!block) return;
 		await playNarrationBlock(block, state.audio);
 	}
@@ -337,7 +341,7 @@ export function ReaderView(props: {
 					Some Block images could not be signed for direct storage access.
 				</p>
 			</Show>
-			<Show when={renderedBlocks()} fallback={<PaneSkeleton />}>
+			<Show when={readyBlocks()} fallback={<PaneSkeleton />}>
 				{(loadedBlocks) => (
 					<Show
 						when={loadedBlocks().length > 0}
@@ -349,40 +353,42 @@ export function ReaderView(props: {
 						}
 					>
 						<div ref={setContentContainer} class="relative mx-auto max-w-3xl">
-							<For each={loadedBlocks()}>
+							<Index each={loadedBlocks()}>
 								{(block) => {
 									const audio = () =>
-										narrationAudioByBlockId().get(block.blockId);
+										narrationAudioByBlockId().get(block().blockId);
 									const hasPlayback = () =>
 										!!audio() && narrationEnabled() && !props.debugEnabled;
 
 									return (
 										<article
-											id={readerBlockElementId(block._id)}
+											id={readerBlockElementId(block()._id)}
 											aria-label={
 												hasPlayback()
-													? `Play Narration for Block #${block.order + 1}`
+													? `Play Narration for Block #${block().order + 1}`
 													: undefined
 											}
 											class={readerArticleClass(
 												hasPlayback(),
-												playback()?.blockId === block.blockId,
+												playback()?.blockId === block().blockId,
 											)}
-											data-block-id={block.blockId}
-											data-block-type={block.blockType}
-											data-page-number={block.pageNumber}
-											innerHTML={block.contentHtml}
+											data-block-id={block().blockId}
+											data-block-type={block().blockType}
+											data-page-number={block().pageNumber}
+											innerHTML={blockContentHtml(block())}
 											role={hasPlayback() ? "button" : undefined}
 											tabIndex={hasPlayback() ? 0 : undefined}
-											onClick={(event) => void handleBlockClick(event, block)}
+											onClick={(event) => void handleBlockClick(event, block())}
 											onKeyDown={(event) =>
-												void handleBlockKeyDown(event, block)
+												void handleBlockKeyDown(event, block())
 											}
-											onPointerDown={(event) => handlePointerDown(event, block)}
+											onPointerDown={(event) =>
+												handlePointerDown(event, block())
+											}
 										/>
 									);
 								}}
-							</For>
+							</Index>
 							<ReaderDebugOverlayLayer
 								activeDebugBlockId={props.activeDebugBlockId}
 								blocks={loadedBlocks()}
@@ -515,6 +521,16 @@ async function fetchNarrationAudioAccess(input: {
 		url: string;
 		wordTimestamps: NarrationWordTimestamp[];
 	};
+}
+
+function sameStringArray(
+	previous: string[] | undefined,
+	next: string[] | undefined,
+) {
+	if (previous === next) return true;
+	if (!previous || !next) return false;
+	if (previous.length !== next.length) return false;
+	return previous.every((value, index) => value === next[index]);
 }
 
 function waitForAudioMetadata(element: HTMLAudioElement) {

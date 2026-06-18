@@ -10,14 +10,35 @@ export function TableOfContentsDrawer(props: {
 	onClose: () => void;
 	onShowReaderBlock: (block: Doc<"blocks">) => void;
 }) {
+	const loadedContent = createMemo(() => {
+		if (
+			props.entries === undefined ||
+			props.pages === undefined ||
+			props.blocks === undefined
+		) {
+			return undefined;
+		}
+
+		return {
+			entries: props.entries,
+			pages: props.pages,
+			blocks: props.blocks,
+		};
+	});
 	const blockByBlockId = createMemo(() => {
+		const loaded = loadedContent();
+		if (!loaded) return undefined;
+
 		const blocks = new Map<string, Doc<"blocks">>();
-		for (const block of props.blocks ?? []) blocks.set(block.blockId, block);
+		for (const block of loaded.blocks) blocks.set(block.blockId, block);
 		return blocks;
 	});
 	const firstBlockByPhysicalPageNumber = createMemo(() => {
+		const loaded = loadedContent();
+		if (!loaded) return undefined;
+
 		const blocks = new Map<number, Doc<"blocks">>();
-		for (const block of props.blocks ?? []) {
+		for (const block of loaded.blocks) {
 			if (block.pageNumber === undefined || blocks.has(block.pageNumber))
 				continue;
 			blocks.set(block.pageNumber, block);
@@ -25,24 +46,21 @@ export function TableOfContentsDrawer(props: {
 		return blocks;
 	});
 	const pageLabelByPhysicalPageNumber = createMemo(() => {
+		const loaded = loadedContent();
+		if (!loaded) return undefined;
+
 		const labels = new Map<number, string>();
-		for (const page of props.pages ?? []) {
+		for (const page of loaded.pages) {
 			if (page.pageLabel) labels.set(page.physicalPageNumber, page.pageLabel);
 		}
 		return labels;
 	});
-	const isLoaded = createMemo(
-		() =>
-			props.entries !== undefined &&
-			props.pages !== undefined &&
-			props.blocks !== undefined,
-	);
 
 	function navigationBlockForEntry(entry: Doc<"tableOfContentsEntries">) {
 		const target = entry.target;
 		if (!target) return undefined;
-		if (target.blockId) return blockByBlockId().get(target.blockId);
-		return firstBlockByPhysicalPageNumber().get(target.physicalPageNumber);
+		if (target.blockId) return blockByBlockId()?.get(target.blockId);
+		return firstBlockByPhysicalPageNumber()?.get(target.physicalPageNumber);
 	}
 
 	function showEntry(entry: Doc<"tableOfContentsEntries">) {
@@ -69,54 +87,57 @@ export function TableOfContentsDrawer(props: {
 				</button>
 			</div>
 			<div class="mt-4 h-[calc(100%-4rem)] overflow-y-auto">
-				<Show when={isLoaded()} fallback={<PaneSkeleton />}>
-					<Show
-						when={(props.entries?.length ?? 0) > 0}
-						fallback={
-							<EmptyPane
-								title="No Table of Contents"
-								body="This Source Document did not provide outline entries."
-							/>
-						}
-					>
-						<div class="space-y-1">
-							<For each={props.entries ?? []}>
-								{(entry) => {
-									const navigationBlock = () => navigationBlockForEntry(entry);
-									const isEnabled = () => navigationBlock() !== undefined;
-									const pageLabel = () =>
-										entry.target
-											? pageLabelByPhysicalPageNumber().get(
-													entry.target.physicalPageNumber,
-												)
-											: undefined;
+				<Show when={loadedContent()} fallback={<PaneSkeleton />}>
+					{(loaded) => (
+						<Show
+							when={loaded().entries.length > 0}
+							fallback={
+								<EmptyPane
+									title="No Table of Contents"
+									body="This Source Document did not provide outline entries."
+								/>
+							}
+						>
+							<div class="space-y-1">
+								<For each={loaded().entries}>
+									{(entry) => {
+										const navigationBlock = () =>
+											navigationBlockForEntry(entry);
+										const isEnabled = () => navigationBlock() !== undefined;
+										const pageLabel = () =>
+											entry.target
+												? pageLabelByPhysicalPageNumber()?.get(
+														entry.target.physicalPageNumber,
+													)
+												: undefined;
 
-									return (
-										<button
-											class={tableOfContentsEntryClass(isEnabled())}
-											disabled={!isEnabled()}
-											style={{
-												"padding-left": `${0.75 + entry.depth * 0.75}rem`,
-											}}
-											type="button"
-											onClick={() => showEntry(entry)}
-										>
-											<span class="block truncate text-left">
-												{entry.title}
-											</span>
-											<span class="mt-0.5 block text-left text-[11px] text-stone-500">
-												{tableOfContentsEntrySubtitle(
-													entry.target,
-													pageLabel(),
-													isEnabled(),
-												)}
-											</span>
-										</button>
-									);
-								}}
-							</For>
-						</div>
-					</Show>
+										return (
+											<button
+												class={tableOfContentsEntryClass(isEnabled())}
+												disabled={!isEnabled()}
+												style={{
+													"padding-left": `${0.75 + entry.depth * 0.75}rem`,
+												}}
+												type="button"
+												onClick={() => showEntry(entry)}
+											>
+												<span class="block truncate text-left">
+													{entry.title}
+												</span>
+												<span class="mt-0.5 block text-left text-[11px] text-stone-500">
+													{tableOfContentsEntrySubtitle(
+														entry.target,
+														pageLabel(),
+														isEnabled(),
+													)}
+												</span>
+											</button>
+										);
+									}}
+								</For>
+							</div>
+						</Show>
+					)}
 				</Show>
 			</div>
 		</aside>
