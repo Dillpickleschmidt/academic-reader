@@ -112,6 +112,8 @@ export function SourceView(props: {
 	);
 }
 
+const defaultPdfPageWidth = 612;
+const defaultPdfPageHeight = 792;
 const defaultPdfZoom = 1;
 const minPdfZoom = 0.75;
 const maxPdfZoom = 2.5;
@@ -235,25 +237,30 @@ function PdfSourceView(props: {
 							</div>
 							<div class="flex min-w-full flex-col items-center gap-5">
 								<For each={pageNumbers()}>
-									{(pageNumber) => (
-										<PdfPageCanvas
-											activeDebugBlockId={props.activeDebugBlockId}
-											blocks={props.blocks}
-											debugEnabled={props.debugEnabled}
-											debugEvents={props.debugEvents}
-											document={props.document}
-											narrationAudio={props.narrationAudio}
-											pageLabel={
-												pageByPhysicalPageNumber().get(pageNumber)?.pageLabel
-											}
-											pageNumber={pageNumber}
-											tableOfContentsEntries={props.tableOfContentsEntries}
-											pdfDocument={pdf()}
-											zoom={zoom()}
-											onHoverDebugBlock={props.onHoverDebugBlock}
-											onShowReader={props.onShowReader}
-										/>
-									)}
+									{(pageNumber) => {
+										const page = () =>
+											pageByPhysicalPageNumber().get(pageNumber);
+
+										return (
+											<PdfPageCanvas
+												activeDebugBlockId={props.activeDebugBlockId}
+												blocks={props.blocks}
+												debugEnabled={props.debugEnabled}
+												debugEvents={props.debugEvents}
+												document={props.document}
+												narrationAudio={props.narrationAudio}
+												pageHeight={page()?.height}
+												pageLabel={page()?.pageLabel}
+												pageNumber={pageNumber}
+												pageWidth={page()?.width}
+												tableOfContentsEntries={props.tableOfContentsEntries}
+												pdfDocument={pdf()}
+												zoom={zoom()}
+												onHoverDebugBlock={props.onHoverDebugBlock}
+												onShowReader={props.onShowReader}
+											/>
+										);
+									}}
 								</For>
 							</div>
 						</div>
@@ -271,9 +278,11 @@ function PdfPageCanvas(props: {
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	narrationAudio: NarrationAudioMetadata[] | undefined;
+	pageHeight: number | undefined;
 	pageLabel: string | undefined;
 	pdfDocument: PDFDocumentProxy;
 	pageNumber: number;
+	pageWidth: number | undefined;
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	zoom: number;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
@@ -284,9 +293,14 @@ function PdfPageCanvas(props: {
 	let renderTask: RenderTask | undefined;
 	const [page, setPage] = createSignal<PDFPageProxy>();
 	const [width, setWidth] = createSignal(0);
-	const [height, setHeight] = createSignal(0);
-	const [displayWidth, setDisplayWidth] = createSignal(0);
+	const [height, setHeight] = createSignal(
+		props.pageHeight ?? defaultPdfPageHeight,
+	);
+	const [displayWidth, setDisplayWidth] = createSignal(
+		props.pageWidth ?? defaultPdfPageWidth,
+	);
 	const [error, setError] = createSignal<string>();
+	const [shouldRender, setShouldRender] = createSignal(false);
 
 	onMount(() => {
 		if (!container) return;
@@ -294,11 +308,36 @@ function PdfPageCanvas(props: {
 		const resizeObserver = new ResizeObserver(([entry]) => {
 			setWidth(entry.contentRect.width);
 		});
+		const intersectionObserver = new IntersectionObserver(
+			([entry]) => {
+				if (entry?.isIntersecting) setShouldRender(true);
+			},
+			{ rootMargin: "1000px 0px" },
+		);
 		resizeObserver.observe(container);
-		onCleanup(() => resizeObserver.disconnect());
+		intersectionObserver.observe(container);
+		onCleanup(() => {
+			resizeObserver.disconnect();
+			intersectionObserver.disconnect();
+		});
 	});
 
 	createEffect(() => {
+		const fitWidth = width();
+		if (page() || fitWidth <= 0) return;
+
+		const targetWidth = fitWidth * props.zoom;
+		setDisplayWidth(targetWidth);
+		setHeight(
+			((props.pageHeight ?? defaultPdfPageHeight) /
+				(props.pageWidth ?? defaultPdfPageWidth)) *
+				targetWidth,
+		);
+	});
+
+	createEffect(() => {
+		if (!shouldRender()) return;
+
 		let cancelled = false;
 		setPage(undefined);
 		setError(undefined);
@@ -392,18 +431,20 @@ function PdfPageCanvas(props: {
 					style={{ height: `${height()}px` }}
 				>
 					<canvas ref={canvas} class="block" />
-					<SourceDebugOverlayLayer
-						activeDebugBlockId={props.activeDebugBlockId}
-						blocks={props.blocks}
-						debugEnabled={props.debugEnabled}
-						debugEvents={props.debugEvents}
-						document={props.document}
-						narrationAudio={props.narrationAudio}
-						pageNumber={props.pageNumber}
-						tableOfContentsEntries={props.tableOfContentsEntries}
-						onHoverDebugBlock={props.onHoverDebugBlock}
-						onShowReader={props.onShowReader}
-					/>
+					<Show when={props.debugEnabled}>
+						<SourceDebugOverlayLayer
+							activeDebugBlockId={props.activeDebugBlockId}
+							blocks={props.blocks}
+							debugEnabled={props.debugEnabled}
+							debugEvents={props.debugEvents}
+							document={props.document}
+							narrationAudio={props.narrationAudio}
+							pageNumber={props.pageNumber}
+							tableOfContentsEntries={props.tableOfContentsEntries}
+							onHoverDebugBlock={props.onHoverDebugBlock}
+							onShowReader={props.onShowReader}
+						/>
+					</Show>
 				</div>
 			</div>
 		</div>
@@ -448,18 +489,20 @@ function ImageSourceView(props: {
 			>
 				<TiffCanvas url={props.url} />
 			</Show>
-			<SourceDebugOverlayLayer
-				activeDebugBlockId={props.activeDebugBlockId}
-				blocks={props.blocks}
-				debugEnabled={props.debugEnabled}
-				debugEvents={props.debugEvents}
-				document={props.document}
-				narrationAudio={props.narrationAudio}
-				pageNumber={pageNumber()}
-				tableOfContentsEntries={props.tableOfContentsEntries}
-				onHoverDebugBlock={props.onHoverDebugBlock}
-				onShowReader={props.onShowReader}
-			/>
+			<Show when={props.debugEnabled}>
+				<SourceDebugOverlayLayer
+					activeDebugBlockId={props.activeDebugBlockId}
+					blocks={props.blocks}
+					debugEnabled={props.debugEnabled}
+					debugEvents={props.debugEvents}
+					document={props.document}
+					narrationAudio={props.narrationAudio}
+					pageNumber={pageNumber()}
+					tableOfContentsEntries={props.tableOfContentsEntries}
+					onHoverDebugBlock={props.onHoverDebugBlock}
+					onShowReader={props.onShowReader}
+				/>
+			</Show>
 		</div>
 	);
 }

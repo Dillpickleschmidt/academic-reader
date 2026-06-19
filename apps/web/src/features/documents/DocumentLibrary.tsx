@@ -1,8 +1,9 @@
 import type { Id } from "@academic-reader/convex/data-model";
 import { Link } from "@tanstack/solid-router";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, Index, Show } from "solid-js";
 import { UploadPrompt } from "./DocumentCreationFlow";
 import type { DocumentCreation } from "./document-creation";
+import { createStableItems } from "./document-stable-list";
 import { ProcessingEventsPanel } from "./ProcessingEventsPanel";
 
 export type DocumentListItem = {
@@ -47,6 +48,14 @@ export function SignedInDocuments(props: {
 	creation: DocumentCreation;
 }) {
 	const [isAddingDocument, setIsAddingDocument] = createSignal(false);
+	const [eventsDocumentId, setEventsDocumentId] = createSignal<
+		Id<"documents"> | undefined
+	>();
+	const documents = createStableItems(
+		() => props.documents,
+		(document) => document._id,
+		sameDocumentListItem,
+	);
 
 	return (
 		<section class="rounded-3xl border border-stone-800 bg-stone-900/50 p-8">
@@ -55,7 +64,7 @@ export function SignedInDocuments(props: {
 					<p class="text-stone-400">Welcome, {props.readerName}</p>
 					<h2 class="text-3xl font-semibold">Documents</h2>
 				</div>
-				<Show when={props.documents && props.documents.length > 0}>
+				<Show when={documents()?.length}>
 					<button
 						class="rounded-lg bg-amber-300 px-4 py-2 font-medium text-stone-950 disabled:opacity-50"
 						disabled={isAddingDocument()}
@@ -72,51 +81,69 @@ export function SignedInDocuments(props: {
 				fallback={<p class="mt-8 text-red-300">{props.error?.message}</p>}
 			>
 				<Show
-					when={props.documents !== undefined}
+					when={documents() !== undefined}
 					fallback={
 						<div class="mt-8 h-32 animate-pulse rounded-2xl bg-stone-800" />
 					}
 				>
 					<Show
-						when={props.documents && props.documents.length > 0}
+						when={documents()?.length}
 						fallback={<EmptyLibrary creation={props.creation} />}
 					>
 						<div class="contents">
 							<div class="mt-8 divide-y divide-stone-800 rounded-2xl border border-stone-800">
-								<For each={props.documents}>
-									{(document) => (
-										<div class="p-4">
-											<div class="flex items-center justify-between gap-4">
-												<div>
-													<Link
-														class="font-medium hover:text-amber-200"
-														params={{ documentId: document._id }}
-														to="/documents/$documentId"
-													>
-														{document.filename}
-													</Link>
-													<p class="text-stone-500 text-sm">
-														Updated{" "}
-														{new Date(document.updatedAt).toLocaleString()}
-													</p>
+								<Index each={documents()}>
+									{(document) => {
+										const eventsOpen = () =>
+											eventsDocumentId() === document()._id;
+
+										return (
+											<div class="p-4">
+												<div class="flex items-center justify-between gap-4">
+													<div>
+														<Link
+															class="font-medium hover:text-amber-200"
+															params={{ documentId: document()._id }}
+															to="/documents/$documentId"
+														>
+															{document().filename}
+														</Link>
+														<p class="text-stone-500 text-sm">
+															Updated{" "}
+															{new Date(document().updatedAt).toLocaleString()}
+														</p>
+													</div>
+													<div class="flex items-center gap-2">
+														<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-400 text-xs">
+															{document().processingStatus}
+														</span>
+														<button
+															class="rounded-lg border border-stone-700 px-3 py-1 text-stone-300 text-xs hover:bg-stone-800"
+															type="button"
+															onClick={() =>
+																setEventsDocumentId(
+																	eventsOpen() ? undefined : document()._id,
+																)
+															}
+														>
+															{eventsOpen() ? "Hide events" : "Events"}
+														</button>
+														<Link
+															class="rounded-lg border border-stone-700 px-3 py-1 text-stone-300 text-xs hover:bg-stone-800"
+															params={{ documentId: document()._id }}
+															to="/documents/$documentId"
+														>
+															Open
+														</Link>
+													</div>
 												</div>
-												<div class="flex items-center gap-2">
-													<span class="rounded-full border border-stone-700 px-3 py-1 text-stone-400 text-xs">
-														{document.processingStatus}
-													</span>
-													<Link
-														class="rounded-lg border border-stone-700 px-3 py-1 text-stone-300 text-xs hover:bg-stone-800"
-														params={{ documentId: document._id }}
-														to="/documents/$documentId"
-													>
-														Open
-													</Link>
-												</div>
+												<Show when={eventsOpen()}>
+													<ProcessingEventsPanel documentId={document()._id} />
+												</Show>
 											</div>
-											<ProcessingEventsPanel documentId={document._id} />
-										</div>
-									)}
-								</For>
+										);
+									}}
+								</Index>
 							</div>
 							<Show when={isAddingDocument()}>
 								<div class="mt-8 rounded-2xl border border-dashed border-stone-700 bg-stone-950 p-6">
@@ -138,6 +165,18 @@ export function SignedInDocuments(props: {
 				</Show>
 			</Show>
 		</section>
+	);
+}
+
+function sameDocumentListItem(
+	previous: DocumentListItem,
+	next: DocumentListItem,
+) {
+	return (
+		previous._id === next._id &&
+		previous.filename === next.filename &&
+		previous.processingStatus === next.processingStatus &&
+		previous.updatedAt === next.updatedAt
 	);
 }
 

@@ -1,6 +1,7 @@
 import type { Doc } from "@academic-reader/convex/data-model";
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, Index, Show } from "solid-js";
 import { EmptyPane, PaneSkeleton } from "./document-page-ui";
+import { createStableItems } from "./document-stable-list";
 
 export function TableOfContentsDrawer(props: {
 	open: boolean;
@@ -10,9 +11,15 @@ export function TableOfContentsDrawer(props: {
 	onClose: () => void;
 	onShowReaderBlock: (block: Doc<"blocks">) => void;
 }) {
+	const entries = createStableItems(
+		() => props.entries,
+		(entry) => entry._id,
+		sameTableOfContentsEntry,
+	);
 	const loadedContent = createMemo(() => {
+		const stableEntries = entries();
 		if (
-			props.entries === undefined ||
+			stableEntries === undefined ||
 			props.pages === undefined ||
 			props.blocks === undefined
 		) {
@@ -20,7 +27,7 @@ export function TableOfContentsDrawer(props: {
 		}
 
 		return {
-			entries: props.entries,
+			entries: stableEntries,
 			pages: props.pages,
 			blocks: props.blocks,
 		};
@@ -99,34 +106,36 @@ export function TableOfContentsDrawer(props: {
 							}
 						>
 							<div class="space-y-1">
-								<For each={loaded().entries}>
+								<Index each={loaded().entries}>
 									{(entry) => {
 										const navigationBlock = () =>
-											navigationBlockForEntry(entry);
+											navigationBlockForEntry(entry());
 										const isEnabled = () => navigationBlock() !== undefined;
-										const pageLabel = () =>
-											entry.target
+										const pageLabel = () => {
+											const target = entry().target;
+											return target
 												? pageLabelByPhysicalPageNumber()?.get(
-														entry.target.physicalPageNumber,
+														target.physicalPageNumber,
 													)
 												: undefined;
+										};
 
 										return (
 											<button
 												class={tableOfContentsEntryClass(isEnabled())}
 												disabled={!isEnabled()}
 												style={{
-													"padding-left": `${0.75 + entry.depth * 0.75}rem`,
+													"padding-left": `${0.75 + entry().depth * 0.75}rem`,
 												}}
 												type="button"
-												onClick={() => showEntry(entry)}
+												onClick={() => showEntry(entry())}
 											>
 												<span class="block truncate text-left">
-													{entry.title}
+													{entry().title}
 												</span>
 												<span class="mt-0.5 block text-left text-[11px] text-stone-500">
 													{tableOfContentsEntrySubtitle(
-														entry.target,
+														entry().target,
 														pageLabel(),
 														isEnabled(),
 													)}
@@ -134,13 +143,42 @@ export function TableOfContentsDrawer(props: {
 											</button>
 										);
 									}}
-								</For>
+								</Index>
 							</div>
 						</Show>
 					)}
 				</Show>
 			</div>
 		</aside>
+	);
+}
+
+function sameTableOfContentsEntry(
+	previous: Doc<"tableOfContentsEntries">,
+	next: Doc<"tableOfContentsEntries">,
+) {
+	return (
+		previous._id === next._id &&
+		previous._creationTime === next._creationTime &&
+		previous.documentId === next.documentId &&
+		previous.order === next.order &&
+		previous.depth === next.depth &&
+		previous.title === next.title &&
+		sameTableOfContentsTarget(previous.target, next.target)
+	);
+}
+
+function sameTableOfContentsTarget(
+	previous: Doc<"tableOfContentsEntries">["target"],
+	next: Doc<"tableOfContentsEntries">["target"],
+) {
+	if (previous === next) return true;
+	if (!previous || !next) return false;
+	return (
+		previous.physicalPageNumber === next.physicalPageNumber &&
+		previous.blockId === next.blockId &&
+		previous.sourcePoint?.left === next.sourcePoint?.left &&
+		previous.sourcePoint?.top === next.sourcePoint?.top
 	);
 }
 

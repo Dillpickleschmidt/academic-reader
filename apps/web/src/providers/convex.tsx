@@ -4,7 +4,6 @@ import {
 	createEffect,
 	createSignal,
 	type JSX,
-	onCleanup,
 	useContext,
 } from "solid-js";
 import { authClient } from "../lib/auth-client";
@@ -15,13 +14,13 @@ if (!convexUrl) {
 	throw new Error("VITE_CONVEX_URL is required");
 }
 
-const convexClient = setupConvex(convexUrl);
 const ConvexAuthContext = createContext<{
 	isAuthenticated: () => boolean;
 	isLoading: () => boolean;
 }>();
 
 export function AppConvexProvider(props: { children: JSX.Element }) {
+	const convexClient = setupConvex(convexUrl);
 	const session = authClient.useSession();
 	const [convexAuthenticated, setConvexAuthenticated] = createSignal(false);
 
@@ -52,8 +51,6 @@ export function AppConvexProvider(props: { children: JSX.Element }) {
 			return pendingToken;
 		}, setConvexAuthenticated);
 	});
-
-	onCleanup(() => convexClient.close());
 
 	const authState = {
 		isAuthenticated: convexAuthenticated,

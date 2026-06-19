@@ -17,6 +17,7 @@ import {
 } from "./document-html";
 import type { NarrationAudioMetadata } from "./document-narration-audio";
 import { EmptyPane, errorMessage, PaneSkeleton } from "./document-page-ui";
+import { createStableItems } from "./document-stable-list";
 import {
 	createNarrationWordHighlighter,
 	type NarrationWordHighlighter,
@@ -80,12 +81,15 @@ export function ReaderView(props: {
 		if (filenames.length === 0 || imageAccess.error) return {};
 		return imageAccess()?.urls;
 	});
-	const readyBlocks = createMemo(() => {
-		const urls = imageUrls();
-		if (props.blocks === undefined || urls === undefined) return undefined;
-
-		return props.blocks;
-	});
+	const readyBlocks = createStableItems(
+		() => {
+			const urls = imageUrls();
+			if (props.blocks === undefined || urls === undefined) return undefined;
+			return props.blocks;
+		},
+		(block) => block._id,
+		sameBlockDocument,
+	);
 	const narrationAudioByBlockId = createMemo(
 		() =>
 			new Map((props.narrationAudio ?? []).map((item) => [item.blockId, item])),
@@ -355,8 +359,11 @@ export function ReaderView(props: {
 						<div ref={setContentContainer} class="relative mx-auto max-w-3xl">
 							<Index each={loadedBlocks()}>
 								{(block) => {
-									const audio = () =>
-										narrationAudioByBlockId().get(block().blockId);
+									const audio = createMemo(
+										() => narrationAudioByBlockId().get(block().blockId),
+										undefined,
+										{ equals: sameNarrationAudioMetadata },
+									);
 									const hasPlayback = () =>
 										!!audio() && narrationEnabled() && !props.debugEnabled;
 
@@ -389,17 +396,19 @@ export function ReaderView(props: {
 									);
 								}}
 							</Index>
-							<ReaderDebugOverlayLayer
-								activeDebugBlockId={props.activeDebugBlockId}
-								blocks={loadedBlocks()}
-								contentContainer={contentContainer()}
-								debugEnabled={props.debugEnabled}
-								debugEvents={props.debugEvents}
-								document={props.document}
-								narrationAudio={props.narrationAudio}
-								onHoverDebugBlock={props.onHoverDebugBlock}
-								onShowSource={props.onShowSource}
-							/>
+							<Show when={props.debugEnabled}>
+								<ReaderDebugOverlayLayer
+									activeDebugBlockId={props.activeDebugBlockId}
+									blocks={loadedBlocks()}
+									contentContainer={contentContainer()}
+									debugEnabled={props.debugEnabled}
+									debugEvents={props.debugEvents}
+									document={props.document}
+									narrationAudio={props.narrationAudio}
+									onHoverDebugBlock={props.onHoverDebugBlock}
+									onShowSource={props.onShowSource}
+								/>
+							</Show>
 						</div>
 					</Show>
 				)}
@@ -521,6 +530,76 @@ async function fetchNarrationAudioAccess(input: {
 		url: string;
 		wordTimestamps: NarrationWordTimestamp[];
 	};
+}
+
+function sameBlockDocument(previous: Doc<"blocks">, next: Doc<"blocks">) {
+	return (
+		previous._id === next._id &&
+		previous._creationTime === next._creationTime &&
+		previous.documentId === next.documentId &&
+		previous.blockId === next.blockId &&
+		previous.blockType === next.blockType &&
+		previous.rawBlockType === next.rawBlockType &&
+		previous.order === next.order &&
+		previous.contentHtml === next.contentHtml &&
+		previous.contentMarkdown === next.contentMarkdown &&
+		previous.pageNumber === next.pageNumber &&
+		sameSourceGeometry(
+			previous.normalizedBoundingBox,
+			next.normalizedBoundingBox,
+		) &&
+		sameBlockNarration(previous.narration, next.narration)
+	);
+}
+
+function sameSourceGeometry(
+	previous: Doc<"blocks">["normalizedBoundingBox"],
+	next: Doc<"blocks">["normalizedBoundingBox"],
+) {
+	if (previous === next) return true;
+	if (!previous || !next) return false;
+	return (
+		previous.left === next.left &&
+		previous.top === next.top &&
+		previous.width === next.width &&
+		previous.height === next.height
+	);
+}
+
+function sameBlockNarration(
+	previous: Doc<"blocks">["narration"],
+	next: Doc<"blocks">["narration"],
+) {
+	if (previous === next) return true;
+	if (!previous || !next) return false;
+	if (previous.decision === "ineligible") {
+		return next.decision === "ineligible" && previous.reason === next.reason;
+	}
+	if (next.decision !== "eligible") return false;
+	return (
+		previous.text === next.text &&
+		previous.preparation.length === next.preparation.length &&
+		previous.preparation.every(
+			(value, index) => value === next.preparation[index],
+		)
+	);
+}
+
+function sameNarrationAudioMetadata(
+	previous: NarrationAudioMetadata | undefined,
+	next: NarrationAudioMetadata | undefined,
+) {
+	if (previous === next) return true;
+	if (!previous || !next) return false;
+	return (
+		previous.blockId === next.blockId &&
+		previous.voice === next.voice &&
+		previous.durationMs === next.durationMs &&
+		previous.wordTimestampCount === next.wordTimestampCount &&
+		previous.alignment.status === next.alignment.status &&
+		previous.alignment.source === next.alignment.source &&
+		previous.alignment.error === next.alignment.error
+	);
 }
 
 function sameStringArray(

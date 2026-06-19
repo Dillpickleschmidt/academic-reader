@@ -5,6 +5,7 @@ import {
 	createMemo,
 	createSignal,
 	For,
+	Index,
 	onCleanup,
 } from "solid-js";
 import { imageSources } from "./document-html";
@@ -64,41 +65,41 @@ export function SourceDebugOverlayLayer(props: {
 			data-page-number={props.pageNumber}
 			data-source-overlay-layer=""
 		>
-			<For each={tableOfContentsSourcePoints()}>
-				{(sourcePoint) => <SourceDebugCrosshair sourcePoint={sourcePoint} />}
-			</For>
-			<For each={sourceBlocks()}>
+			<Index each={tableOfContentsSourcePoints()}>
+				{(sourcePoint) => <SourceDebugCrosshair sourcePoint={sourcePoint()} />}
+			</Index>
+			<Index each={sourceBlocks()}>
 				{(block) => (
 					<button
-						id={sourceBlockElementId(block._id)}
+						id={sourceBlockElementId(block()._id)}
 						class={debugOverlayBoxClass(
-							block.blockType,
-							props.activeDebugBlockId === block.blockId,
+							block().blockType,
+							props.activeDebugBlockId === block().blockId,
 							true,
 						)}
-						style={sourceBoxStyle(block.normalizedBoundingBox)}
+						style={sourceBoxStyle(block().normalizedBoundingBox)}
 						type="button"
 						onBlur={() => props.onHoverDebugBlock(undefined)}
-						onClick={() => props.onShowReader(block)}
-						onFocus={() => props.onHoverDebugBlock(block.blockId)}
-						onMouseEnter={() => props.onHoverDebugBlock(block.blockId)}
+						onClick={() => props.onShowReader(block())}
+						onFocus={() => props.onHoverDebugBlock(block().blockId)}
+						onMouseEnter={() => props.onHoverDebugBlock(block().blockId)}
 						onMouseLeave={() => props.onHoverDebugBlock(undefined)}
 					>
 						<DebugMetadataCard
-							block={block}
+							block={block()}
 							debugEventsLoaded={props.debugEvents !== undefined}
 							document={props.document}
 							latestNarrationEvent={latestNarrationEventByBlockId()?.get(
-								block.blockId,
+								block().blockId,
 							)}
-							narrationAudio={narrationAudioByBlockId().get(block.blockId)}
+							narrationAudio={narrationAudioByBlockId().get(block().blockId)}
 							narrationAudioLoaded={props.narrationAudio !== undefined}
-							forceVisible={props.activeDebugBlockId === block.blockId}
+							forceVisible={props.activeDebugBlockId === block().blockId}
 							maxHeight="max(6rem, 100%)"
 						/>
 					</button>
 				)}
-			</For>
+			</Index>
 		</div>
 	);
 }
@@ -219,23 +220,23 @@ export function ReaderDebugOverlayLayer(props: {
 
 	return (
 		<div class="pointer-events-none absolute inset-0 z-10 overflow-visible">
-			<For each={rects()}>
+			<Index each={rects()}>
 				{(rect) => (
 					<ReaderDebugOverlayBox
-						active={props.activeDebugBlockId === rect.block.blockId}
+						active={props.activeDebugBlockId === rect().block.blockId}
 						debugEventsLoaded={props.debugEvents !== undefined}
 						document={props.document}
 						latestNarrationEvent={latestNarrationEventByBlockId()?.get(
-							rect.block.blockId,
+							rect().block.blockId,
 						)}
-						narrationAudio={narrationAudioByBlockId().get(rect.block.blockId)}
+						narrationAudio={narrationAudioByBlockId().get(rect().block.blockId)}
 						narrationAudioLoaded={props.narrationAudio !== undefined}
-						rect={rect}
+						rect={rect()}
 						onHoverDebugBlock={props.onHoverDebugBlock}
 						onShowSource={props.onShowSource}
 					/>
 				)}
-			</For>
+			</Index>
 		</div>
 	);
 }

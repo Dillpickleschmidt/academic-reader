@@ -1,19 +1,8 @@
-import { createRouter, RouterProvider } from "@tanstack/solid-router";
+import { RouterProvider } from "@tanstack/solid-router";
 import { render } from "solid-js/web";
-import { routeTree } from "./routeTree.gen";
+import { getRouter } from "./router";
 
-const router = createRouter({
-	routeTree,
-	defaultPreload: "intent",
-	defaultPreloadStaleTime: 0,
-	scrollRestoration: true,
-});
-
-declare module "@tanstack/solid-router" {
-	interface Register {
-		router: typeof router;
-	}
-}
+const router = getRouter();
 
 const rootElement = document.getElementById("app");
 

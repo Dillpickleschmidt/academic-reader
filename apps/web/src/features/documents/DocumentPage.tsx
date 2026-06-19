@@ -38,27 +38,42 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	const document = useQuery(
 		api.api.documents.get,
 		() => ({ documentId: props.documentId }),
-		() => ({ enabled: convexAuth.isAuthenticated() }),
+		() => ({
+			enabled: convexAuth.isAuthenticated(),
+			keepPreviousData: true,
+		}),
 	);
 	const pages = useQuery(
 		api.api.pages.listForDocument,
 		() => ({ documentId: props.documentId }),
-		() => ({ enabled: convexAuth.isAuthenticated() }),
+		() => ({
+			enabled: convexAuth.isAuthenticated(),
+			keepPreviousData: true,
+		}),
 	);
 	const blocks = useQuery(
 		api.api.blocks.listForDocument,
 		() => ({ documentId: props.documentId }),
-		() => ({ enabled: convexAuth.isAuthenticated() }),
+		() => ({
+			enabled: convexAuth.isAuthenticated(),
+			keepPreviousData: true,
+		}),
 	);
 	const tableOfContentsEntries = useQuery(
 		api.api.tableOfContentsEntries.listTableOfContentsEntriesForDocument,
 		() => ({ documentId: props.documentId }),
-		() => ({ enabled: convexAuth.isAuthenticated() }),
+		() => ({
+			enabled: convexAuth.isAuthenticated(),
+			keepPreviousData: true,
+		}),
 	);
 	const debugEvents = useQuery(
 		api.api.processingEvents.listForDocument,
 		() => ({ documentId: props.documentId }),
-		() => ({ enabled: convexAuth.isAuthenticated() && debugEnabled() }),
+		() => ({
+			enabled: convexAuth.isAuthenticated() && debugEnabled(),
+			keepPreviousData: true,
+		}),
 	);
 	const narrationAudioArgs = createMemo(
 		() => {
@@ -79,6 +94,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 		() => ({
 			enabled:
 				convexAuth.isAuthenticated() && narrationAudioArgs() !== undefined,
+			keepPreviousData: true,
 		}),
 	);
 	const [sourceAccess, { refetch: refetchSourceAccess }] = createResource(

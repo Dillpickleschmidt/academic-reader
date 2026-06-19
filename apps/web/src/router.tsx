@@ -1,16 +1,15 @@
-import { createRouter as createTanStackRouter } from "@tanstack/solid-router";
+import { createRouter } from "@tanstack/solid-router";
+import { AppConvexProvider } from "./providers/convex";
 import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
-	const router = createTanStackRouter({
+	return createRouter({
 		routeTree,
-
-		scrollRestoration: true,
 		defaultPreload: "intent",
 		defaultPreloadStaleTime: 0,
+		scrollRestoration: true,
+		Wrap: (props) => <AppConvexProvider>{props.children}</AppConvexProvider>,
 	});
-
-	return router;
 }
 
 declare module "@tanstack/solid-router" {

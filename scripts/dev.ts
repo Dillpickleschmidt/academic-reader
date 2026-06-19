@@ -9,83 +9,92 @@ const children: Bun.Subprocess[] = [];
 process.on("SIGINT", stopChildren);
 process.on("SIGTERM", stopChildren);
 
-await run("setup", "bun", ["scripts/setup-dev.ts", "--no-sync"], root);
-const rootEnv = parseEnvFile(rootEnvPath);
-const services = ["minio"];
-if (rootEnv.CONVERSION_BACKEND === "local") services.push("marker");
-if (rootEnv.TTS_BACKEND === "local") services.push("kokoro-tts");
-await run(
-	"storage",
-	"docker",
-	["compose", "--env-file", ".env.local", "up", "-d", ...services],
-	root,
-);
-if (rootEnv.CONVERSION_BACKEND === "local") {
-	await waitForHttp("marker", "http://localhost:8800/health", 120_000);
+try {
+	await main();
+} catch (error) {
+	stopChildren();
+	throw error;
 }
-if (rootEnv.TTS_BACKEND === "local") {
-	await waitForHttp("kokoro", "http://localhost:8801/health", 180_000);
-}
-await run(
-	"storage",
-	"docker",
-	["compose", "--env-file", ".env.local", "run", "--rm", "minio-init"],
-	root,
-);
 
-const apiEnv: Record<string, string> = {};
-if (rootEnv.CONVERSION_BACKEND === "modal") {
-	if (!rootEnv.MODAL_MARKER_URL) {
+async function main() {
+	await run("setup", "bun", ["scripts/setup-dev.ts", "--no-sync"], root);
+	const rootEnv = parseEnvFile(rootEnvPath);
+	const services = ["minio"];
+	if (rootEnv.CONVERSION_BACKEND === "local") services.push("marker");
+	if (rootEnv.TTS_BACKEND === "local") services.push("kokoro-tts");
+	await run(
+		"storage",
+		"docker",
+		["compose", "--env-file", ".env.local", "up", "-d", ...services],
+		root,
+	);
+	if (rootEnv.CONVERSION_BACKEND === "local") {
+		await waitForHttp("marker", "http://localhost:8800/health", 120_000);
+	}
+	if (rootEnv.TTS_BACKEND === "local") {
+		await waitForHttp("kokoro", "http://localhost:8801/health", 180_000);
+	}
+	await run(
+		"storage",
+		"docker",
+		["compose", "--env-file", ".env.local", "run", "--rm", "minio-init"],
+		root,
+	);
+
+	if (rootEnv.CONVERSION_BACKEND === "modal" && !rootEnv.MODAL_MARKER_URL) {
 		throw new Error(
 			"MODAL_MARKER_URL is required when CONVERSION_BACKEND=modal. Deploy workers/marker/modal_app.py and set the URL in .env.local.",
 		);
 	}
 
-	const minioTunnelUrl = await startCloudflareTunnel(
-		"s3-tun",
-		"http://localhost:9000",
+	if (rootEnv.TTS_BACKEND === "modal" && !rootEnv.MODAL_KOKORO_TTS_URL) {
+		throw new Error(
+			"MODAL_KOKORO_TTS_URL is required when TTS_BACKEND=modal. Deploy workers/kokoro-tts/modal_app.py and set the URL in .env.local.",
+		);
+	}
+
+	const convexReady = deferred<void>();
+	const convex = spawn("convex", "bun", ["run", "dev:convex"], root, (text) => {
+		if (text.includes("Convex functions ready!")) convexReady.resolve();
+	});
+
+	await Promise.race([
+		convexReady.promise,
+		convex.exited.then((code) => {
+			throw new Error(`Convex exited before becoming ready (${code})`);
+		}),
+	]);
+	await waitForConvexEnv();
+	await run("setup", "bun", ["scripts/setup-dev.ts"], root);
+
+	const apiEnv: Record<string, string> = {};
+	if (rootEnv.CONVERSION_BACKEND === "modal") {
+		const minioTunnelUrl = await startCloudflareTunnel(
+			"s3-tun",
+			"http://localhost:9000",
+		);
+		const apiTunnelUrl = await startCloudflareTunnel(
+			"api-tun",
+			"http://localhost:8787",
+		);
+		apiEnv.WORKER_APP_API_URL = apiTunnelUrl;
+		apiEnv.S3_WORKER_PRESIGNED_URL_ENDPOINT = minioTunnelUrl;
+	}
+
+	spawn(
+		"api",
+		"bun",
+		["--env-file", "../../.env.local", "--watch", "src/main.ts"],
+		resolve(root, "apps/api"),
+		undefined,
+		{ PORT: "8787", ...apiEnv },
 	);
-	const apiTunnelUrl = await startCloudflareTunnel(
-		"api-tun",
-		"http://localhost:8787",
-	);
-	apiEnv.WORKER_APP_API_URL = apiTunnelUrl;
-	apiEnv.S3_WORKER_PRESIGNED_URL_ENDPOINT = minioTunnelUrl;
+	spawn("web", "bun", ["run", "dev"], resolve(root, "apps/web"));
+
+	const exitCode = await Promise.race(children.map((child) => child.exited));
+	stopChildren();
+	process.exit(exitCode ?? 0);
 }
-
-if (rootEnv.TTS_BACKEND === "modal" && !rootEnv.MODAL_KOKORO_TTS_URL) {
-	throw new Error(
-		"MODAL_KOKORO_TTS_URL is required when TTS_BACKEND=modal. Deploy workers/kokoro-tts/modal_app.py and set the URL in .env.local.",
-	);
-}
-
-const convexReady = deferred<void>();
-const convex = spawn("convex", "bun", ["run", "dev:convex"], root, (text) => {
-	if (text.includes("Convex functions ready!")) convexReady.resolve();
-});
-
-await Promise.race([
-	convexReady.promise,
-	convex.exited.then((code) => {
-		throw new Error(`Convex exited before becoming ready (${code})`);
-	}),
-]);
-await waitForConvexEnv();
-await run("setup", "bun", ["scripts/setup-dev.ts"], root);
-
-spawn(
-	"api",
-	"bun",
-	["--env-file", "../../.env.local", "--watch", "src/main.ts"],
-	resolve(root, "apps/api"),
-	undefined,
-	{ PORT: "8787", ...apiEnv },
-);
-spawn("web", "bun", ["run", "dev"], resolve(root, "apps/web"));
-
-const exitCode = await Promise.race(children.map((child) => child.exited));
-stopChildren();
-process.exit(exitCode ?? 0);
 
 function spawn(
 	label: string,

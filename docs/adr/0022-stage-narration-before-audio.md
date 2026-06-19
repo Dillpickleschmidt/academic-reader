@@ -1,6 +1,6 @@
 # Stage Narration before audio
 
-Academic Reader stages Narration after Reader View readiness instead of generating audio directly from Blocks. When Narration is enabled in Processing Configuration, the app marks Inline Citations in Block HTML, derives Narration Candidates, persists each Block's Narration Eligibility and Narration Preparation, generates a compact unstructured Narration Guide from eligible Blocks only, creates Narration Text, and only then generates Narration audio in FIFO Block order.
+Academic Reader stages Narration after Reader View readiness instead of generating audio directly from Blocks. When Narration is enabled in Processing Configuration, the app marks Inline Citations in Block HTML, derives Narration Candidates, persists each Block's Narration Eligibility and Narration Preparation, generates a compact unstructured Narration Guide from eligible Blocks only, creates Narration Text, and then generates Narration audio as each Block's Narration Text becomes available.
 
 Reader View readiness remains independent of Narration. Once Pages and Blocks are ready, the Document may become `ready` or `readyWithWarnings`; later Narration failures do not mutate that earlier status. Narration work still belongs to the same Processing Run and remains visible in the Document's Processing Event sidebar.
 
