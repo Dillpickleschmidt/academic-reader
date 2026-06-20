@@ -1,5 +1,5 @@
+import { fileURLToPath, URL } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
-import { devtools } from "@tanstack/devtools-vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineConfig, loadEnv } from "vite";
 
@@ -15,9 +15,10 @@ export default defineConfig(({ mode }) => {
 
 	return {
 		envDir: "../../",
-		resolve: { tsconfigPaths: true },
+		resolve: {
+			alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) },
+		},
 		plugins: [
-			devtools(),
 			tailwindcss(),
 			tanstackRouter({ target: "solid", autoCodeSplitting: true }),
 			solidPlugin(),

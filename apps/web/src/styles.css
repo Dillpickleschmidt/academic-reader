@@ -1,5 +1,129 @@
 @import "tailwindcss";
 
+:root,
+[data-color-theme="default"] {
+	--background: oklch(0.145 0 0);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.205 0 0);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.269 0 0);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: #7c9a6e;
+	--primary-foreground: oklch(0.98 0.03 145);
+	--secondary: oklch(0.269 0 0);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted-foreground: oklch(0.708 0 0);
+	--destructive: oklch(0.704 0.191 22.216);
+	--destructive-foreground: oklch(0.145 0 0);
+	--border: oklch(0.275 0 0);
+	--tertiary: #5b8a5a;
+}
+
+[data-color-theme="tokyo-night"] {
+	--background: #1a1b26;
+	--foreground: #c0caf5;
+	--card: #24283b;
+	--card-foreground: #c0caf5;
+	--popover: #24283b;
+	--popover-foreground: #c0caf5;
+	--primary: #7aa2f7;
+	--primary-foreground: #16161e;
+	--secondary: #bb9af7;
+	--secondary-foreground: #16161e;
+	--muted-foreground: #9aa5ce;
+	--destructive: #f7768e;
+	--destructive-foreground: #16161e;
+	--border: #353d57;
+	--tertiary: #9ece6a;
+}
+
+[data-color-theme="catppuccin"] {
+	--background: #1e1e2e;
+	--foreground: #cdd6f4;
+	--card: #313244;
+	--card-foreground: #cdd6f4;
+	--popover: #313244;
+	--popover-foreground: #cdd6f4;
+	--primary: #cba6f7;
+	--primary-foreground: #11111b;
+	--secondary: #fab387;
+	--secondary-foreground: #11111b;
+	--muted-foreground: #a3b4eb;
+	--destructive: #f38ba8;
+	--destructive-foreground: #11111b;
+	--border: #4c4f69;
+	--tertiary: #94e2d5;
+}
+
+[data-color-theme="nord"] {
+	--background: #2e3440;
+	--foreground: #eceff4;
+	--card: #3b4252;
+	--card-foreground: #eceff4;
+	--popover: #3b4252;
+	--popover-foreground: #eceff4;
+	--primary: #8fbcbb;
+	--primary-foreground: #2e3440;
+	--secondary: #88c0d0;
+	--secondary-foreground: #2e3440;
+	--muted-foreground: #d8dee9;
+	--destructive: #bf616a;
+	--destructive-foreground: #2e3440;
+	--border: #505a70;
+	--tertiary: #5e81ac;
+}
+
+[data-color-theme="rose-pine"] {
+	--background: #191724;
+	--foreground: #e0def4;
+	--card: #26233a;
+	--card-foreground: #e0def4;
+	--popover: #26233a;
+	--popover-foreground: #e0def4;
+	--primary: #ebbcba;
+	--primary-foreground: #191724;
+	--secondary: #9ccfd8;
+	--secondary-foreground: #191724;
+	--muted-foreground: #908caa;
+	--destructive: #eb6f92;
+	--destructive-foreground: #191724;
+	--border: #403d52;
+	--tertiary: #31748f;
+}
+
+:root {
+	--muted: color-mix(in oklab, var(--card) 84%, var(--foreground) 10%);
+	--accent: color-mix(in oklab, var(--card) 84%, var(--foreground) 10%);
+	--accent-foreground: var(--foreground);
+	--input: var(--border);
+	--ring: var(--primary);
+	--dim: color-mix(in oklab, var(--muted-foreground) 55%, var(--background));
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-dim: var(--dim);
+	--color-tertiary: var(--tertiary);
+}
+
 * {
 	box-sizing: border-box;
 }
@@ -12,6 +136,8 @@ body,
 
 body {
 	margin: 0;
+	background: var(--background);
+	color: var(--foreground);
 }
 
 .reader-view article + article {
@@ -22,7 +148,7 @@ body {
 	margin: 1.5rem 0 0.75rem;
 	font-weight: 650;
 	line-height: 1.2;
-	color: rgb(245 245 244);
+	color: var(--foreground);
 }
 
 .reader-view h1 {
@@ -43,12 +169,12 @@ body {
 
 .reader-view p {
 	line-height: 1.75;
-	color: rgb(214 211 209);
+	color: var(--foreground);
 }
 
 .reader-view :is(ul, ol) {
 	padding-left: 1.5rem;
-	color: rgb(214 211 209);
+	color: var(--foreground);
 }
 
 .reader-view ul {
@@ -70,47 +196,19 @@ body {
 	max-width: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
-	color: rgb(214 211 209);
+	color: var(--muted-foreground);
 }
 
 .reader-view :is(th, td) {
-	border: 1px solid rgb(68 64 60);
+	border: 1px solid var(--border);
 	padding: 0.5rem 0.75rem;
-}
-
-.reader-view pre {
-	overflow-x: auto;
-	border-radius: 0.75rem;
-	background: rgb(28 25 23);
-	padding: 1rem;
-}
-
-.reader-view code {
-	color: rgb(253 230 138);
-}
-
-.reader-view .inline-citation {
-	background: rgb(41 37 36);
-	padding: 0.1em 0.3em;
-	border-radius: 0.25rem;
-	font-size: 0.85em;
-	color: rgb(168 162 158);
-	white-space: nowrap;
-}
-
-.reader-view .inline-citation a {
-	color: inherit;
-	text-decoration: none;
-}
-
-.reader-view .inline-citation a:hover {
-	text-decoration: underline;
 }
 
 .reader-view .narration-word {
 	border-radius: 0.25rem;
+	box-decoration-break: clone;
 }
 
 .reader-view .narration-word-active {
-	background: rgb(251 191 36 / 0.18);
+	background: color-mix(in oklab, var(--primary) 28%, transparent);
 }

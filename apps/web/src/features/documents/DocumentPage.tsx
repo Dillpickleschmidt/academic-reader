@@ -10,6 +10,7 @@ import {
 	Show,
 } from "solid-js";
 import { authClient } from "../../lib/auth-client";
+import { fetchJson } from "../../lib/fetch-json";
 import { useConvexAuth } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
 import {
@@ -19,11 +20,11 @@ import {
 	scrollElementTopIntoNearestScroller,
 	sourceBlockElementId,
 } from "./DocumentDebug";
+import { DocumentProcessing } from "./DocumentProcessing";
 import { ReaderView } from "./DocumentReaderView";
 import { type SourceAccess, SourceView } from "./DocumentSourceView";
 import { TableOfContentsDrawer } from "./DocumentTableOfContents";
 import { FullPageMessage } from "./document-page-ui";
-import { ProcessingEventsPanel } from "./ProcessingEventsPanel";
 
 export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	const session = authClient.useSession();
@@ -118,7 +119,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	}
 
 	return (
-		<main class="h-screen overflow-hidden bg-stone-950 text-stone-100">
+		<main class="h-screen overflow-hidden bg-background text-foreground">
 			<Show
 				when={!session().isPending}
 				fallback={
@@ -165,13 +166,13 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 						>
 							<div class="relative h-screen overflow-hidden">
 								<Link
-									class="fixed top-3 left-3 z-30 rounded-full border border-stone-700 bg-stone-950/80 px-3 py-1.5 text-sm text-stone-200 shadow-lg backdrop-blur hover:bg-stone-900"
+									class="fixed top-3 left-3 z-30 rounded-full border border-border bg-background/80 px-3 py-1.5 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card"
 									to="/"
 								>
 									←
 								</Link>
 
-								<div class="fixed top-3 left-1/2 z-30 grid -translate-x-1/2 grid-cols-2 rounded-full border border-stone-700 bg-stone-950/80 p-1 text-sm shadow-lg backdrop-blur lg:hidden">
+								<div class="fixed top-3 left-1/2 z-30 grid -translate-x-1/2 grid-cols-2 rounded-full border border-border bg-background/80 p-1 text-sm shadow-lg backdrop-blur lg:hidden">
 									<button
 										class={mobileViewButtonClass(
 											activeMobileView() === "source",
@@ -235,7 +236,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 
 								<div class="fixed right-4 bottom-4 z-30 flex gap-2">
 									<button
-										class="rounded-full border border-stone-700 bg-stone-950/85 px-4 py-2 text-sm text-stone-100 shadow-lg backdrop-blur hover:bg-stone-900"
+										class="rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card"
 										type="button"
 										onClick={() => setTableOfContentsOpen(true)}
 									>
@@ -249,7 +250,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 										Debug
 									</button>
 									<button
-										class="rounded-full border border-stone-700 bg-stone-950/85 px-4 py-2 text-sm text-stone-100 shadow-lg backdrop-blur hover:bg-stone-900"
+										class="rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card"
 										type="button"
 										onClick={() => setEventsOpen(true)}
 									>
@@ -268,6 +269,13 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 
 								<EventsDrawer
 									documentId={props.documentId}
+									processingStatus={
+										document.data()?.processingStatus ?? "processing"
+									}
+									narrationEnabled={
+										document.data()?.processingConfiguration.narration
+											.enabled ?? false
+									}
 									open={eventsOpen()}
 									onClose={() => setEventsOpen(false)}
 								/>
@@ -283,18 +291,20 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 function EventsDrawer(props: {
 	open: boolean;
 	documentId: Id<"documents">;
+	processingStatus: string;
+	narrationEnabled: boolean;
 	onClose: () => void;
 }) {
 	return (
 		<aside
-			class={`fixed inset-y-0 right-0 z-40 w-full max-w-md border-stone-800 border-l bg-stone-950 p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
+			class={`fixed inset-y-0 right-0 z-40 w-full max-w-md border-border border-l bg-background p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
 				props.open ? "translate-x-0" : "translate-x-full"
 			}`}
 		>
 			<div class="flex items-center justify-between gap-4">
-				<h2 class="font-semibold text-lg">Processing Events</h2>
+				<h2 class="font-semibold text-lg">Processing</h2>
 				<button
-					class="rounded-full border border-stone-700 px-3 py-1 text-stone-300 text-sm hover:bg-stone-900"
+					class="rounded-full border border-border px-3 py-1 text-foreground text-sm hover:bg-card"
 					type="button"
 					onClick={props.onClose}
 				>
@@ -303,7 +313,11 @@ function EventsDrawer(props: {
 			</div>
 			<div class="h-[calc(100%-3rem)] overflow-y-auto">
 				<Show when={props.open}>
-					<ProcessingEventsPanel documentId={props.documentId} />
+					<DocumentProcessing
+						documentId={props.documentId}
+						processingStatus={props.processingStatus}
+						narrationEnabled={props.narrationEnabled}
+					/>
 				</Show>
 			</div>
 		</aside>
@@ -317,16 +331,11 @@ async function fetchSourceAccess(documentId: Id<"documents">) {
 	const token = data?.token;
 	if (!token) throw new Error("Could not authenticate Source View access");
 
-	const response = await fetch(
+	return fetchJson<SourceAccess>(
 		`/api/documents/${encodeURIComponent(documentId)}/source-url`,
 		{ headers: { Authorization: `Bearer ${token}` } },
+		"Could not create Source View URL",
 	);
-	const payload = await response.json();
-	if (!response.ok) {
-		throw new Error(payload.error || "Could not create Source View URL");
-	}
-
-	return payload as SourceAccess;
 }
 
 function paneClass(isActiveMobileView: boolean) {
@@ -335,6 +344,6 @@ function paneClass(isActiveMobileView: boolean) {
 
 function mobileViewButtonClass(isActive: boolean) {
 	return isActive
-		? "rounded-full bg-amber-300 px-3 py-1 font-medium text-stone-950"
-		: "rounded-full px-3 py-1 text-stone-400";
+		? "rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground"
+		: "rounded-full px-3 py-1 text-muted-foreground";
 }

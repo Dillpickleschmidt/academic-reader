@@ -32,6 +32,10 @@ export const processingEventTypes = [
 
 export type ProcessingEventType = (typeof processingEventTypes)[number];
 
+export function isTerminalEventType(type: ProcessingEventType): boolean {
+	return type.endsWith(".completed") || type.endsWith(".failed");
+}
+
 export const processingEventEmitters = [
 	"app",
 	"marker",

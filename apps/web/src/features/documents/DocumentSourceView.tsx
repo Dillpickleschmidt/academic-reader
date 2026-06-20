@@ -52,7 +52,7 @@ export function SourceView(props: {
 	});
 
 	return (
-		<div class="h-full overflow-auto bg-stone-900 p-4 pt-14 lg:pt-4">
+		<div class="h-full overflow-auto bg-card p-4 pt-14 lg:pt-4">
 			<Show when={loadedSource()} fallback={<PaneSkeleton />}>
 				{(source) => (
 					<Show
@@ -198,9 +198,9 @@ function PdfSourceView(props: {
 					{(pdf) => (
 						<div class="min-w-full">
 							<div class="sticky top-2 z-20 mb-3 flex justify-end">
-								<div class="inline-flex items-center overflow-hidden rounded-full border border-stone-700 bg-stone-950/85 text-sm shadow-lg backdrop-blur">
+								<div class="inline-flex items-center overflow-hidden rounded-full border border-border bg-background/85 text-sm shadow-lg backdrop-blur">
 									<button
-										class="px-3 py-1.5 text-stone-100 hover:bg-stone-800 disabled:text-stone-600"
+										class="px-3 py-1.5 text-foreground hover:bg-muted disabled:text-dim"
 										disabled={zoom() <= minPdfZoom}
 										type="button"
 										onClick={() =>
@@ -212,17 +212,17 @@ function PdfSourceView(props: {
 										−
 									</button>
 									<button
-										class="border-stone-700 border-x px-3 py-1.5 text-stone-300 hover:bg-stone-800"
+										class="border-border border-x px-3 py-1.5 text-foreground hover:bg-muted"
 										type="button"
 										onClick={() => setZoom(1)}
 									>
 										Fit
 									</button>
-									<span class="min-w-14 px-3 py-1.5 text-center text-stone-400">
+									<span class="min-w-14 px-3 py-1.5 text-center text-muted-foreground">
 										{Math.round(zoom() * 100)}%
 									</span>
 									<button
-										class="border-stone-700 border-l px-3 py-1.5 text-stone-100 hover:bg-stone-800 disabled:text-stone-600"
+										class="border-border border-l px-3 py-1.5 text-foreground hover:bg-muted disabled:text-dim"
 										disabled={zoom() >= maxPdfZoom}
 										type="button"
 										onClick={() =>
@@ -412,7 +412,7 @@ function PdfPageCanvas(props: {
 
 	return (
 		<div ref={container} class="w-full">
-			<div class="mb-2 text-center text-stone-500 text-xs">
+			<div class="mb-2 text-center text-muted-foreground text-xs">
 				{sourcePageTitle(props.pageNumber, props.pageLabel)}
 			</div>
 			<div
@@ -421,7 +421,7 @@ function PdfPageCanvas(props: {
 			>
 				<Show when={error()}>
 					{(message) => (
-						<p class="absolute inset-x-0 top-0 z-10 bg-red-950/90 p-2 text-red-200 text-sm">
+						<p class="absolute inset-x-0 top-0 z-10 bg-destructive/25 p-2 text-destructive text-sm">
 							{message()}
 						</p>
 					)}
@@ -435,7 +435,6 @@ function PdfPageCanvas(props: {
 						<SourceDebugOverlayLayer
 							activeDebugBlockId={props.activeDebugBlockId}
 							blocks={props.blocks}
-							debugEnabled={props.debugEnabled}
 							debugEvents={props.debugEvents}
 							document={props.document}
 							narrationAudio={props.narrationAudio}
@@ -493,7 +492,6 @@ function ImageSourceView(props: {
 				<SourceDebugOverlayLayer
 					activeDebugBlockId={props.activeDebugBlockId}
 					blocks={props.blocks}
-					debugEnabled={props.debugEnabled}
 					debugEvents={props.debugEvents}
 					document={props.document}
 					narrationAudio={props.narrationAudio}

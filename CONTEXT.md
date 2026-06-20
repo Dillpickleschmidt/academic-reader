@@ -134,3 +134,7 @@ _Avoid_: job, task, pipeline
 **Processing Event**:
 A timestamped observation worth surfacing from a Processing Run, especially worker/model activity, warnings, failures, degraded behavior, and long-running progress.
 _Avoid_: status update, progress log, loading state
+
+**Processing Run View**:
+A compact rebuildable read model derived from Processing Events for Reader-facing Processing Run activity and phase progress. It is not the source of truth.
+_Avoid_: status row, progress cache, processing state

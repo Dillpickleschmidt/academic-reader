@@ -11,6 +11,17 @@ export const listForDocument = query({
 		ProcessingEvents.listProcessingEventsForDocument(ctx, args.documentId),
 });
 
+export const getProgressSummaryForDocument = query({
+	args: {
+		documentId: v.id("documents"),
+	},
+	handler: (ctx, args) =>
+		ProcessingEvents.getProcessingProgressSummaryForDocument(
+			ctx,
+			args.documentId,
+		),
+});
+
 export const getIngestMetadata = query({
 	args: {
 		serviceSecret: v.string(),

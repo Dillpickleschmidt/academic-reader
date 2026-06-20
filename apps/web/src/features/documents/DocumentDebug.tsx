@@ -30,7 +30,6 @@ interface TableOfContentsSourcePoint {
 export function SourceDebugOverlayLayer(props: {
 	activeDebugBlockId: string | undefined;
 	blocks: Doc<"blocks">[] | undefined;
-	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	narrationAudio: NarrationAudioMetadata[] | undefined;
@@ -40,17 +39,13 @@ export function SourceDebugOverlayLayer(props: {
 	onShowReader: (block: Doc<"blocks">) => void;
 }) {
 	const sourceBlocks = createMemo(() =>
-		props.debugEnabled
-			? blocksWithSourceGeometryForPage(props.blocks, props.pageNumber)
-			: [],
+		blocksWithSourceGeometryForPage(props.blocks, props.pageNumber),
 	);
 	const tableOfContentsSourcePoints = createMemo(() =>
-		props.debugEnabled
-			? tableOfContentsSourcePointsForPage(
-					props.tableOfContentsEntries,
-					props.pageNumber,
-				)
-			: [],
+		tableOfContentsSourcePointsForPage(
+			props.tableOfContentsEntries,
+			props.pageNumber,
+		),
 	);
 	const narrationAudioByBlockId = createMemo(() =>
 		narrationAudioByBlockIdMap(props.narrationAudio),
@@ -110,7 +105,7 @@ function SourceDebugCrosshair(props: {
 	return (
 		<div
 			aria-label={`Table of Contents jump target: ${props.sourcePoint.title}`}
-			class="group pointer-events-auto absolute z-40 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-red-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
+			class="group pointer-events-auto absolute z-40 h-5 w-5 -translate-x-1/2 -translate-y-1/2 text-destructive drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]"
 			role="img"
 			style={sourcePointStyle(props.sourcePoint)}
 		>
@@ -150,15 +145,17 @@ function TocSourcePointCard(props: {
 		>
 			<span class="block">
 				<span class="block font-semibold">TOC target</span>
-				<span class="mt-1 block text-stone-100">{props.sourcePoint.title}</span>
-				<span class="block text-stone-100">
+				<span class="mt-1 block text-foreground">
+					{props.sourcePoint.title}
+				</span>
+				<span class="block text-foreground">
 					page {props.sourcePoint.pageNumber}
 				</span>
-				<span class="block text-stone-100">
+				<span class="block text-foreground">
 					point x{debugPercent(props.sourcePoint.left)} y
 					{debugPercent(props.sourcePoint.top)}
 				</span>
-				<span class="block text-stone-100">
+				<span class="block text-foreground">
 					Block {props.sourcePoint.blockId ?? "page-only"}
 				</span>
 			</span>
@@ -170,7 +167,6 @@ export function ReaderDebugOverlayLayer(props: {
 	activeDebugBlockId: string | undefined;
 	blocks: Doc<"blocks">[];
 	contentContainer: HTMLDivElement | undefined;
-	debugEnabled: boolean;
 	debugEvents: Doc<"processingEvents">[] | undefined;
 	document: Doc<"documents"> | undefined;
 	narrationAudio: NarrationAudioMetadata[] | undefined;
@@ -188,7 +184,7 @@ export function ReaderDebugOverlayLayer(props: {
 	createEffect(() => {
 		const container = props.contentContainer;
 		const blocks = props.blocks;
-		if (!props.debugEnabled || !container || blocks.length === 0) {
+		if (!container || blocks.length === 0) {
 			setRects([]);
 			return;
 		}
@@ -333,27 +329,29 @@ function DebugMetadataCard(props: {
 				<span class="block font-semibold">
 					#{props.block.order + 1} {props.block.blockType}
 				</span>
-				<span class="mt-1 block text-stone-100">
+				<span class="mt-1 block text-foreground">
 					Block {props.block.blockId}
 				</span>
-				<span class="block text-stone-100">raw {props.block.rawBlockType}</span>
-				<span class="block text-stone-100">
+				<span class="block text-foreground">
+					raw {props.block.rawBlockType}
+				</span>
+				<span class="block text-foreground">
 					page {props.block.pageNumber ?? "—"}
 				</span>
-				<span class="block text-stone-100">
+				<span class="block text-foreground">
 					{bboxText(props.block.normalizedBoundingBox)}
 				</span>
-				<span class="mt-1 block text-stone-100">
+				<span class="mt-1 block text-foreground">
 					HTML {evidence().htmlLength} · text {evidence().textLength} · images{" "}
 					{evidence().imageCount} · citations {evidence().inlineCitationCount} ·
 					markdown {evidence().hasMarkdown ? "yes" : "no"}
 				</span>
-				<span class="mt-1 block text-stone-100">
+				<span class="mt-1 block text-foreground">
 					Narration State: {narration().narration}
 				</span>
-				<span class="block text-stone-100">Text: {narration().text}</span>
-				<span class="block text-stone-100">Audio: {narration().audio}</span>
-				<span class="block text-stone-100">
+				<span class="block text-foreground">Text: {narration().text}</span>
+				<span class="block text-foreground">Audio: {narration().audio}</span>
+				<span class="block text-foreground">
 					Alignment: {narration().alignment}
 				</span>
 			</span>
@@ -365,8 +363,8 @@ export function DebugStatsPanel(props: { blocks: Doc<"blocks">[] }) {
 	const stats = createMemo(() => blockDebugStats(props.blocks));
 
 	return (
-		<aside class="fixed bottom-4 left-4 z-30 max-w-sm rounded-2xl border border-amber-300/30 bg-stone-950/90 p-3 text-xs text-stone-200 shadow-xl backdrop-blur">
-			<div class="font-semibold text-amber-200">Debug Overlay</div>
+		<aside class="fixed bottom-4 left-4 z-30 max-w-sm rounded-2xl border border-primary/30 bg-background/90 p-3 text-xs text-foreground shadow-xl backdrop-blur">
+			<div class="font-semibold text-primary">Debug Overlay</div>
 			<div class="mt-2 grid grid-cols-2 gap-2">
 				<div>Blocks: {stats().total}</div>
 				<div>Geometry: {stats().withGeometry}</div>
@@ -701,8 +699,8 @@ function formatDuration(durationMs: number) {
 
 export function debugToggleButtonClass(isActive: boolean) {
 	return isActive
-		? "rounded-full border border-amber-300 bg-amber-300 px-4 py-2 font-medium text-sm text-stone-950 shadow-lg"
-		: "rounded-full border border-stone-700 bg-stone-950/85 px-4 py-2 text-sm text-stone-100 shadow-lg backdrop-blur hover:bg-stone-900";
+		? "rounded-full border border-primary bg-primary px-4 py-2 font-medium text-sm text-primary-foreground shadow-lg"
+		: "rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card";
 }
 
 function debugOverlayBoxClass(
@@ -714,7 +712,7 @@ function debugOverlayBoxClass(
 }
 
 function debugMetadataCardClass(forceVisible: boolean) {
-	return `${forceVisible ? "block" : "hidden group-focus:block group-focus-within:block group-hover:block"} absolute top-0 right-0 z-50 w-64 overflow-y-auto rounded-bl-md border border-current bg-stone-950/95 p-2 text-left text-[10px] leading-tight shadow-lg backdrop-blur`;
+	return `${forceVisible ? "block" : "hidden group-focus:block group-focus-within:block group-hover:block"} absolute top-0 right-0 z-50 w-64 overflow-y-auto rounded-bl-md border border-current bg-background/95 p-2 text-left text-[10px] leading-tight shadow-lg backdrop-blur`;
 }
 
 function debugStatsTypeClass(blockType: string) {
@@ -724,7 +722,7 @@ function debugStatsTypeClass(blockType: string) {
 function debugToneClass(blockType: string) {
 	switch (blockType) {
 		case "heading":
-			return "border-amber-300 bg-amber-300/20 text-amber-100";
+			return "border-primary bg-primary/20 text-primary";
 		case "table":
 			return "border-emerald-300 bg-emerald-300/20 text-emerald-100";
 		case "figure":
@@ -737,7 +735,7 @@ function debugToneClass(blockType: string) {
 			return "border-lime-300 bg-lime-300/20 text-lime-100";
 		case "pageHeader":
 		case "pageFooter":
-			return "border-slate-300 bg-slate-300/20 text-slate-100";
+			return "border-secondary bg-secondary/20 text-secondary";
 		case "footnote":
 			return "border-indigo-300 bg-indigo-300/20 text-indigo-100";
 		case "code":
@@ -747,6 +745,6 @@ function debugToneClass(blockType: string) {
 		case "paragraph":
 			return "border-sky-300 bg-sky-300/20 text-sky-100";
 		default:
-			return "border-stone-300 bg-stone-300/20 text-stone-100";
+			return "border-border bg-foreground/20 text-foreground";
 	}
 }

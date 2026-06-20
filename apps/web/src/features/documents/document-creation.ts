@@ -1,12 +1,12 @@
 import { defaultProcessingConfiguration } from "@academic-reader/shared/processing";
+import {
+	sourceDocumentMaxSizeBytes,
+	sourceDocumentMimeTypeForFile,
+} from "@academic-reader/shared/uploads";
 import { createSignal } from "solid-js";
+import { fetchJson } from "../../lib/fetch-json";
 
-export type UploadStatus =
-	| "idle"
-	| "requesting"
-	| "uploading"
-	| "complete"
-	| "error";
+type UploadStatus = "idle" | "requesting" | "uploading" | "complete" | "error";
 
 export type DocumentCreation = ReturnType<typeof createDocumentCreation>;
 
@@ -76,6 +76,74 @@ export function createDocumentCreation() {
 	};
 }
 
+export async function selectSourceDocument(
+	state: DocumentCreation,
+	selectedFile: File | undefined,
+) {
+	if (!selectedFile) return;
+
+	const mimeType = sourceDocumentMimeTypeForFile(
+		selectedFile.name,
+		selectedFile.type,
+	);
+	if (!mimeType) {
+		state.setError("Choose a PDF, PNG, JPEG, WebP, or TIFF file.");
+		state.setStatus("error");
+		return;
+	}
+	if (selectedFile.size > sourceDocumentMaxSizeBytes) {
+		state.setError("Source documents must be 50MB or smaller.");
+		state.setStatus("error");
+		return;
+	}
+
+	state.setFile(selectedFile);
+	state.setMimeType(mimeType);
+	state.setError(undefined);
+	state.setSuccess(undefined);
+	state.setPendingAuth(false);
+	state.setTemporaryUploadId(undefined);
+	state.setPageRange(defaultProcessingConfiguration.pageRange);
+	state.setProgress(0);
+	state.setStatus("requesting");
+
+	try {
+		const payload = await fetchJson<{
+			temporaryUploadId: string;
+			uploadUrl: string;
+			headers: Record<string, string>;
+		}>(
+			"/api/uploads/temporary",
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					filename: selectedFile.name,
+					mimeType,
+					sizeBytes: selectedFile.size,
+				}),
+			},
+			"Could not create upload URL",
+		);
+
+		state.setTemporaryUploadId(payload.temporaryUploadId);
+		state.setStatus("uploading");
+		await uploadFile(
+			selectedFile,
+			payload.uploadUrl,
+			payload.headers,
+			state.setProgress,
+		);
+		state.setProgress(100);
+		state.setStatus("complete");
+	} catch (uploadError) {
+		state.setStatus("error");
+		state.setError(
+			uploadError instanceof Error ? uploadError.message : "Upload failed",
+		);
+	}
+}
+
 export function clearDocumentDraft(state: DocumentCreation) {
 	state.setFile(undefined);
 	state.setMimeType(undefined);
@@ -87,7 +155,7 @@ export function clearDocumentDraft(state: DocumentCreation) {
 	state.setStatus("idle");
 }
 
-export function uploadFile(
+function uploadFile(
 	file: File,
 	uploadUrl: string,
 	headers: Record<string, string>,
@@ -115,11 +183,6 @@ export function uploadFile(
 		request.onerror = () => reject(new Error("Upload failed"));
 		request.send(file);
 	});
-}
-
-export function formatBytes(bytes: number) {
-	if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)}KB`;
-	return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
 export function uploadStatusLabel(status: string) {

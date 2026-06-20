@@ -79,14 +79,14 @@ export function TableOfContentsDrawer(props: {
 
 	return (
 		<aside
-			class={`fixed inset-y-0 left-0 z-40 w-full max-w-md border-stone-800 border-r bg-stone-950 p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
+			class={`fixed inset-y-0 left-0 z-40 w-full max-w-md border-border border-r bg-background p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
 				props.open ? "translate-x-0" : "-translate-x-full"
 			}`}
 		>
 			<div class="flex items-center justify-between gap-4">
 				<h2 class="font-semibold text-lg">Table of Contents</h2>
 				<button
-					class="rounded-full border border-stone-700 px-3 py-1 text-stone-300 text-sm hover:bg-stone-900"
+					class="rounded-full border border-border px-3 py-1 text-foreground text-sm hover:bg-card"
 					type="button"
 					onClick={props.onClose}
 				>
@@ -133,7 +133,7 @@ export function TableOfContentsDrawer(props: {
 												<span class="block truncate text-left">
 													{entry().title}
 												</span>
-												<span class="mt-0.5 block text-left text-[11px] text-stone-500">
+												<span class="mt-0.5 block text-left text-[11px] text-muted-foreground">
 													{tableOfContentsEntrySubtitle(
 														entry().target,
 														pageLabel(),
@@ -184,8 +184,8 @@ function sameTableOfContentsTarget(
 
 function tableOfContentsEntryClass(isEnabled: boolean) {
 	return isEnabled
-		? "block w-full rounded-xl py-2 pr-3 text-sm text-stone-200 hover:bg-stone-900"
-		: "block w-full cursor-default rounded-xl py-2 pr-3 text-sm text-stone-600";
+		? "block w-full rounded-xl py-2 pr-3 text-sm text-foreground hover:bg-card"
+		: "block w-full cursor-default rounded-xl py-2 pr-3 text-sm text-dim";
 }
 
 function tableOfContentsEntrySubtitle(

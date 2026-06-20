@@ -5,6 +5,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>academic-reader</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash of the default.
+      (() => {
+        var valid = ["default", "tokyo-night", "catppuccin", "nord", "rose-pine"];
+        var theme = "default";
+        var saved = null;
+        try {
+          saved = localStorage.getItem("color-theme");
+        } catch {}
+        if (saved && valid.indexOf(saved) > -1) theme = saved;
+        document.documentElement.setAttribute("data-color-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

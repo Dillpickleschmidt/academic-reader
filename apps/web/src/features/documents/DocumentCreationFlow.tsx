@@ -1,117 +1,86 @@
 import { api } from "@academic-reader/convex/api";
-import {
-	defaultProcessingConfiguration,
-	narrationVoices,
-} from "@academic-reader/shared/processing";
-import {
-	sourceDocumentAcceptAttribute,
-	sourceDocumentMaxSizeBytes,
-	sourceDocumentMimeTypeForFile,
-} from "@academic-reader/shared/uploads";
+import { narrationVoices } from "@academic-reader/shared/processing";
+import { sourceDocumentAcceptAttribute } from "@academic-reader/shared/uploads";
 import { useQuery } from "convex-solidjs";
 import { createEffect, For, Show } from "solid-js";
+import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
 import { authClient } from "../../lib/auth-client";
+import { fetchJson } from "../../lib/fetch-json";
 import { useConvexAuth } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
 import {
 	clearDocumentDraft,
 	type DocumentCreation,
-	formatBytes,
-	uploadFile,
+	selectSourceDocument,
 	uploadStatusLabel,
 } from "./document-creation";
 
 export function UploadPrompt(props: { state: DocumentCreation }) {
 	const state = props.state;
 
-	async function selectFile(selectedFile: File | undefined) {
-		if (!selectedFile) return;
-
-		const mimeType = sourceDocumentMimeTypeForFile(
-			selectedFile.name,
-			selectedFile.type,
-		);
-		if (!mimeType) {
-			state.setError("Choose a PDF, PNG, JPEG, WebP, or TIFF file.");
-			state.setStatus("error");
-			return;
-		}
-		if (selectedFile.size > sourceDocumentMaxSizeBytes) {
-			state.setError("Source documents must be 50MB or smaller.");
-			state.setStatus("error");
-			return;
-		}
-
-		state.setFile(selectedFile);
-		state.setMimeType(mimeType);
-		state.setError(undefined);
-		state.setSuccess(undefined);
-		state.setPendingAuth(false);
-		state.setTemporaryUploadId(undefined);
-		state.setPageRange(defaultProcessingConfiguration.pageRange);
-		state.setProgress(0);
-		state.setStatus("requesting");
-
-		try {
-			const response = await fetch("/api/uploads/temporary", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					filename: selectedFile.name,
-					mimeType,
-					sizeBytes: selectedFile.size,
-				}),
-			});
-			const payload = await response.json();
-
-			if (!response.ok) {
-				throw new Error(payload.error || "Could not create upload URL");
-			}
-
-			state.setTemporaryUploadId(payload.temporaryUploadId);
-			state.setStatus("uploading");
-			await uploadFile(
-				selectedFile,
-				payload.uploadUrl,
-				payload.headers,
-				state.setProgress,
-			);
-			state.setProgress(100);
-			state.setStatus("complete");
-		} catch (uploadError) {
-			state.setStatus("error");
-			state.setError(
-				uploadError instanceof Error ? uploadError.message : "Upload failed",
-			);
-		}
-	}
-
 	return (
 		<div>
-			<label class="flex min-h-48 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-stone-700 bg-stone-950 p-6 text-center hover:border-amber-300">
-				<span class="font-medium text-stone-100">Choose PDF or image</span>
-				<span class="mt-2 text-sm text-stone-500">
+			<label class="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border p-6 text-center transition-colors hover:border-primary">
+				<span class="font-medium text-foreground">Choose a PDF or image</span>
+				<span class="mt-2 text-muted-foreground text-sm">
 					PDF, PNG, JPEG, WebP, or TIFF up to 50MB
 				</span>
 				<input
 					accept={sourceDocumentAcceptAttribute}
 					class="sr-only"
 					type="file"
-					onChange={(event) => selectFile(event.currentTarget.files?.[0])}
+					onChange={(event) =>
+						void selectSourceDocument(state, event.currentTarget.files?.[0])
+					}
 				/>
 			</label>
 
 			<Show when={state.success()}>
-				{(message) => <p class="mt-3 text-green-300 text-sm">{message()}</p>}
+				{(message) => <p class="mt-3 text-tertiary text-sm">{message()}</p>}
 			</Show>
 			<Show when={state.error()}>
-				{(message) => <p class="mt-3 text-red-300 text-sm">{message()}</p>}
+				{(message) => <p class="mt-3 text-destructive text-sm">{message()}</p>}
 			</Show>
 		</div>
 	);
 }
 
-export function ConfigureProcessingFlow(props: {
+export function AddDocumentButton(props: { state: DocumentCreation }) {
+	return (
+		<label class="inline-flex cursor-pointer items-center rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-opacity hover:opacity-90">
+			Add document
+			<input
+				accept={sourceDocumentAcceptAttribute}
+				class="sr-only"
+				type="file"
+				onChange={(event) =>
+					void selectSourceDocument(props.state, event.currentTarget.files?.[0])
+				}
+			/>
+		</label>
+	);
+}
+
+export function ConfigureProcessingModal(props: {
+	state: DocumentCreation;
+	onClose: () => void;
+}) {
+	return (
+		<Dialog
+			open
+			onOpenChange={(isOpen) => {
+				if (!isOpen) props.onClose();
+			}}
+		>
+			<DialogContent class="max-h-[90vh] max-w-3xl overflow-y-auto">
+				<DialogTitle class="sr-only">Configure processing run</DialogTitle>
+				<ConfigureProcessingFlow state={props.state} onBack={props.onClose} />
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function ConfigureProcessingFlow(props: {
 	state: DocumentCreation;
 	onBack: () => void;
 }) {
@@ -180,36 +149,35 @@ export function ConfigureProcessingFlow(props: {
 			const token = data?.token;
 			if (!token) throw new Error("Could not authenticate Document creation");
 
-			const response = await fetch("/api/documents", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${token}`,
-				},
-				body: JSON.stringify({
-					temporaryUploadId,
-					filename: selectedFile.name,
-					mimeType,
-					sizeBytes: selectedFile.size,
-					processingConfiguration: {
-						conversionModel: state.conversionModel(),
-						pageRange: state.pageRange(),
-						markerOptions: {
-							forceOcr: state.forceOcr(),
-							useLlm: state.useLlm(),
-						},
-						narration: {
-							enabled: state.narrationEnabled(),
-							voice: state.narrationVoice(),
-						},
+			const payload = await fetchJson<{ processingStarted: boolean }>(
+				"/api/documents",
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${token}`,
 					},
-				}),
-			});
-			const payload = await response.json();
-
-			if (!response.ok) {
-				throw new Error(payload.error || "Could not start processing");
-			}
+					body: JSON.stringify({
+						temporaryUploadId,
+						filename: selectedFile.name,
+						mimeType,
+						sizeBytes: selectedFile.size,
+						processingConfiguration: {
+							conversionModel: state.conversionModel(),
+							pageRange: state.pageRange(),
+							markerOptions: {
+								forceOcr: state.forceOcr(),
+								useLlm: state.useLlm(),
+							},
+							narration: {
+								enabled: state.narrationEnabled(),
+								voice: state.narrationVoice(),
+							},
+						},
+					}),
+				},
+				"Could not start processing",
+			);
 
 			clearDocumentDraft(state);
 			state.setSuccess(
@@ -236,228 +204,255 @@ export function ConfigureProcessingFlow(props: {
 	return (
 		<Show when={state.file()}>
 			{(selectedFile) => (
-				<section class="grid gap-6 md:grid-cols-[minmax(0,1fr)_360px]">
-					<div class="rounded-3xl border border-stone-800 bg-stone-900/50 p-8">
-						<button
-							class="mb-6 rounded-lg border border-stone-700 px-3 py-1 text-stone-300 text-sm hover:bg-stone-800"
-							type="button"
-							onClick={props.onBack}
-						>
-							Back
-						</button>
-
-						<p class="font-medium text-amber-300 text-sm tracking-[0.2em] uppercase">
-							Processing Configuration
+				<div class="flex flex-col gap-6">
+					<header>
+						<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+							Configure run
 						</p>
-						<h2 class="mt-3 text-3xl font-semibold tracking-tight">
+						<h2 class="mt-2 truncate font-semibold text-xl tracking-tight">
 							{selectedFile().name}
 						</h2>
-						<p class="mt-2 text-sm text-stone-500">
-							{formatBytes(selectedFile().size)} · Marker conversion
-						</p>
+					</header>
 
-						<div class="mt-6 space-y-2">
-							<div class="flex justify-between text-sm text-stone-400">
-								<span>{uploadStatusLabel(state.status())}</span>
-								<span>{Math.round(state.progress())}%</span>
-							</div>
-							<progress class="h-2 w-full" max="100" value={state.progress()} />
-						</div>
-
-						<div class="mt-8 space-y-5">
-							<label class="flex flex-col gap-1 text-sm text-stone-300">
-								Conversion Model
-								<select
-									class="rounded-lg border border-stone-700 bg-stone-950 px-3 py-2 text-stone-100 outline-none focus:border-amber-400"
-									value={state.conversionModel()}
-									onChange={(event) =>
-										updatePreference(() =>
-											state.setConversionModel(event.currentTarget.value),
-										)
-									}
-								>
-									<option value="marker">Marker</option>
-								</select>
-							</label>
-
-							<label class="flex flex-col gap-1 text-sm text-stone-300">
-								Page Range <span class="text-stone-500">optional</span>
-								<input
-									class="rounded-lg border border-stone-700 bg-stone-950 px-3 py-2 text-stone-100 outline-none focus:border-amber-400"
-									placeholder="All pages — or 1-5, 10, 15-20"
-									value={state.pageRange()}
-									onInput={(event) =>
-										state.setPageRange(event.currentTarget.value)
-									}
-								/>
-							</label>
-
-							<div class="rounded-xl border border-stone-800 p-4">
-								<p class="font-medium text-sm text-stone-200">Marker Options</p>
-								<label class="mt-3 flex items-start gap-3 text-sm text-stone-300">
-									<input
-										checked={state.forceOcr()}
-										class="mt-1"
-										type="checkbox"
-										onChange={(event) =>
-											updatePreference(() =>
-												state.setForceOcr(event.currentTarget.checked),
-											)
-										}
-									/>
-									<span>
-										Force OCR
-										<span class="block text-stone-500 text-xs">
-											Re-OCR pages even when extractable text exists.
-										</span>
-									</span>
-								</label>
-								<label class="mt-3 flex items-start gap-3 text-sm text-stone-300">
-									<input
-										checked={state.useLlm()}
-										class="mt-1"
-										type="checkbox"
-										onChange={(event) =>
-											updatePreference(() =>
-												state.setUseLlm(event.currentTarget.checked),
-											)
-										}
-									/>
-									<span>
-										Enhanced detection
-										<span class="block text-stone-500 text-xs">
-											Use Marker LLM-assisted detection when available.
-										</span>
-									</span>
-								</label>
-							</div>
-
-							<div class="rounded-xl border border-stone-800 p-4">
-								<label class="flex items-center justify-between gap-3 text-sm text-stone-300">
-									<span class="font-medium text-stone-200">Narration</span>
-									<input
-										checked={state.narrationEnabled()}
-										type="checkbox"
-										onChange={(event) =>
-											updatePreference(() =>
-												state.setNarrationEnabled(event.currentTarget.checked),
-											)
-										}
-									/>
-								</label>
-								<label class="mt-3 flex flex-col gap-1 text-sm text-stone-300">
-									Narration voice
-									<select
-										class="rounded-lg border border-stone-700 bg-stone-950 px-3 py-2 text-stone-100 outline-none focus:border-amber-400 disabled:opacity-50"
-										disabled={!state.narrationEnabled()}
-										value={state.narrationVoice()}
-										onChange={(event) =>
-											updatePreference(() =>
-												state.setNarrationVoice(event.currentTarget.value),
-											)
-										}
-									>
-										<For each={narrationVoices}>
-											{(voice) => (
-												<option value={voice.id}>{voice.label}</option>
-											)}
-										</For>
-									</select>
-								</label>
-							</div>
-						</div>
-					</div>
-
-					<aside class="rounded-3xl border border-stone-800 bg-stone-900/50 p-6">
-						<h3 class="font-semibold text-xl">Create Document</h3>
-						<p class="mt-2 text-sm text-stone-400">
-							Processing starts only after the API creates the Document and
-							hands it to Marker.
-						</p>
-
-						<div class="mt-6 rounded-xl border border-stone-800 bg-stone-950 p-4 text-sm">
-							<div class="flex justify-between gap-4 text-stone-400">
-								<span>Upload</span>
-								<span>{uploadStatusLabel(state.status())}</span>
-							</div>
-							<div class="mt-3 flex justify-between gap-4 text-stone-400">
-								<span>Authentication</span>
-								<span>{session().data?.user ? "Signed in" : "Required"}</span>
-							</div>
-						</div>
-
-						<Show when={state.error()}>
-							{(message) => (
-								<p class="mt-4 rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-red-300 text-sm">
-									{message()}
+					<div class="grid gap-8 border-border border-t pt-6 md:grid-cols-[minmax(0,1fr)_240px]">
+						<div class="flex flex-col gap-6">
+							<section>
+								<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+									Conversion
 								</p>
-							)}
-						</Show>
+								<div class="mt-4 flex flex-col gap-4">
+									<div class="flex items-center justify-between gap-4">
+										<span class="text-foreground text-sm">Model</span>
+										<select
+											class="rounded-lg border border-border bg-background px-3 py-1.5 text-foreground text-sm outline-none focus:border-primary"
+											value={state.conversionModel()}
+											onChange={(event) =>
+												updatePreference(() =>
+													state.setConversionModel(event.currentTarget.value),
+												)
+											}
+										>
+											<option value="marker">Marker</option>
+										</select>
+									</div>
 
-						<Show
-							when={session().data?.user}
-							fallback={
-								<Show
-									when={state.pendingAuth()}
-									fallback={
-										<div class="mt-6 space-y-4">
-											<p class="text-sm text-stone-400">
-												You can finish configuration before signing in. When you
-												start processing, sign in here and this Document will be
-												created automatically.
+									<div class="flex items-center justify-between gap-4">
+										<span class="text-foreground text-sm">
+											Page range <span class="text-dim">optional</span>
+										</span>
+										<input
+											class="w-48 rounded-lg border border-border bg-background px-3 py-1.5 text-foreground text-sm outline-none focus:border-primary"
+											placeholder="e.g. 1-5, 10, 15-20"
+											value={state.pageRange()}
+											onInput={(event) =>
+												state.setPageRange(event.currentTarget.value)
+											}
+										/>
+									</div>
+
+									<label class="flex cursor-pointer items-start justify-between gap-4">
+										<span class="text-sm">
+											<span class="text-foreground">Force OCR</span>
+											<span class="mt-0.5 block text-dim text-xs">
+												Re-OCR pages even when extractable text exists.
+											</span>
+										</span>
+										<input
+											checked={state.forceOcr()}
+											class="mt-0.5 size-4 accent-primary"
+											type="checkbox"
+											onChange={(event) =>
+												updatePreference(() =>
+													state.setForceOcr(event.currentTarget.checked),
+												)
+											}
+										/>
+									</label>
+
+									<label class="flex cursor-pointer items-start justify-between gap-4">
+										<span class="text-sm">
+											<span class="text-foreground">Enhanced detection</span>
+											<span class="mt-0.5 block text-dim text-xs">
+												Use Marker LLM-assisted detection when available.
+											</span>
+										</span>
+										<input
+											checked={state.useLlm()}
+											class="mt-0.5 size-4 accent-primary"
+											type="checkbox"
+											onChange={(event) =>
+												updatePreference(() =>
+													state.setUseLlm(event.currentTarget.checked),
+												)
+											}
+										/>
+									</label>
+								</div>
+							</section>
+
+							<section class="border-border border-t pt-6">
+								<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+									Narration
+								</p>
+								<div class="mt-4 flex flex-col gap-4">
+									<label class="flex cursor-pointer items-start justify-between gap-4">
+										<span class="text-sm">
+											<span class="text-foreground">Generate narration</span>
+											<span class="mt-0.5 block text-dim text-xs">
+												Create spoken audio once the Reader View is ready.
+											</span>
+										</span>
+										<input
+											checked={state.narrationEnabled()}
+											class="mt-0.5 size-4 accent-primary"
+											type="checkbox"
+											onChange={(event) =>
+												updatePreference(() =>
+													state.setNarrationEnabled(
+														event.currentTarget.checked,
+													),
+												)
+											}
+										/>
+									</label>
+
+									<div class="flex items-center justify-between gap-4">
+										<span
+											class="text-sm"
+											classList={{
+												"text-foreground": state.narrationEnabled(),
+												"text-dim": !state.narrationEnabled(),
+											}}
+										>
+											Voice
+										</span>
+										<select
+											class="rounded-lg border border-border bg-background px-3 py-1.5 text-foreground text-sm outline-none focus:border-primary disabled:opacity-50"
+											disabled={!state.narrationEnabled()}
+											value={state.narrationVoice()}
+											onChange={(event) =>
+												updatePreference(() =>
+													state.setNarrationVoice(event.currentTarget.value),
+												)
+											}
+										>
+											<For each={narrationVoices}>
+												{(voice) => (
+													<option value={voice.id}>{voice.label}</option>
+												)}
+											</For>
+										</select>
+									</div>
+								</div>
+							</section>
+						</div>
+
+						<aside class="flex flex-col gap-4 border-border border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8">
+							<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+								Create
+							</p>
+
+							<Show
+								when={
+									state.status() !== "idle" && state.status() !== "complete"
+								}
+							>
+								<div>
+									<div class="flex justify-between font-mono text-dim text-xs">
+										<span>{uploadStatusLabel(state.status())}</span>
+										<span>{Math.round(state.progress())}%</span>
+									</div>
+									<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+										<div
+											class="h-full rounded-full bg-primary transition-[width] duration-300"
+											style={{ width: `${state.progress()}%` }}
+										/>
+									</div>
+								</div>
+							</Show>
+
+							<Show when={state.error()}>
+								{(message) => (
+									<p class="text-destructive text-sm">{message()}</p>
+								)}
+							</Show>
+
+							<Show
+								when={session().data?.user}
+								fallback={
+									<div class="flex flex-col gap-3">
+										<p class="text-muted-foreground text-xs">
+											Sign in when you start — your settings are kept.
+										</p>
+										<button
+											class="w-full rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm disabled:opacity-50"
+											disabled={state.status() !== "complete"}
+											type="button"
+											onClick={startProcessing}
+										>
+											{state.status() === "complete"
+												? "Sign in to start"
+												: "Uploading…"}
+										</button>
+										<button
+											class="w-full rounded-lg border border-border px-4 py-2 text-foreground text-sm hover:bg-muted"
+											type="button"
+											onClick={props.onBack}
+										>
+											Cancel
+										</button>
+									</div>
+								}
+							>
+								{(reader) => (
+									<div class="flex flex-col gap-4">
+										<div>
+											<p class="font-mono text-dim text-xs">Signed in as</p>
+											<p class="truncate text-foreground text-sm">
+												{reader().email}
 											</p>
+										</div>
+										<div class="flex flex-col gap-2">
 											<button
-												class="w-full rounded-lg bg-amber-300 px-4 py-2 font-medium text-stone-950 disabled:opacity-50"
+												class="w-full rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm disabled:opacity-50"
 												disabled={
-													state.status() !== "complete" || state.isStarting()
+													state.status() !== "complete" ||
+													state.isStarting() ||
+													!convexAuth.isAuthenticated()
 												}
 												type="button"
 												onClick={startProcessing}
 											>
-												{state.status() === "complete"
-													? "Sign in to start processing"
-													: "Uploading…"}
+												{state.isStarting()
+													? "Starting…"
+													: convexAuth.isAuthenticated()
+														? "Start processing"
+														: "Finishing sign-in…"}
+											</button>
+											<button
+												class="w-full rounded-lg border border-border px-4 py-2 text-foreground text-sm hover:bg-muted"
+												type="button"
+												onClick={props.onBack}
+											>
+												Cancel
 											</button>
 										</div>
-									}
-								>
-									<div class="mt-6 space-y-4">
-										<p class="text-sm text-stone-400">
-											Sign in or create an account. Processing will start once
-											sign-in finishes.
-										</p>
-										<AuthPanel />
 									</div>
-								</Show>
-							}
-						>
-							{(reader) => (
-								<div class="mt-6 space-y-4">
-									<div class="rounded-xl border border-stone-800 bg-stone-950 p-4">
-										<p class="text-stone-400 text-sm">Signed in as</p>
-										<p class="font-medium">{reader().email}</p>
-									</div>
-									<button
-										class="w-full rounded-lg bg-amber-300 px-4 py-2 font-medium text-stone-950 disabled:opacity-50"
-										disabled={
-											state.status() !== "complete" ||
-											state.isStarting() ||
-											!convexAuth.isAuthenticated()
-										}
-										type="button"
-										onClick={startProcessing}
-									>
-										{state.isStarting()
-											? "Starting processing…"
-											: convexAuth.isAuthenticated()
-												? "Start processing"
-												: "Finishing sign-in…"}
-									</button>
-								</div>
-							)}
-						</Show>
-					</aside>
-				</section>
+								)}
+							</Show>
+						</aside>
+					</div>
+
+					<Show when={state.pendingAuth() && !session().data?.user}>
+						<div class="border-border border-t pt-6">
+							<p class="mb-4 text-muted-foreground text-sm">
+								Sign in or create an account. Processing starts once sign-in
+								finishes.
+							</p>
+							<AuthPanel />
+						</div>
+					</Show>
+				</div>
 			)}
 		</Show>
 	);

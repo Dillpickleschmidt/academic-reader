@@ -1,6 +1,6 @@
 import { createRootRoute, Outlet } from "@tanstack/solid-router";
-import { TanStackRouterDevtools } from "@tanstack/solid-router-devtools";
 
+import { ThemeSettings } from "../features/theme/ThemeSettings";
 import "../styles.css";
 
 export const Route = createRootRoute({
@@ -10,8 +10,8 @@ export const Route = createRootRoute({
 function RootComponent() {
 	return (
 		<>
+			<ThemeSettings />
 			<Outlet />
-			<TanStackRouterDevtools position="bottom-right" />
 		</>
 	);
 }

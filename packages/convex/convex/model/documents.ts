@@ -1,22 +1,43 @@
-import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
-import type { Id } from "../_generated/dataModel";
+import {
+	isTerminalEventType,
+	type ProcessingEventInput,
+} from "@academic-reader/shared/processing-events";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requiredEnv } from "../env";
 import { requireReader } from "./auth";
 import { saveConfigurationPreferences } from "./configurationPreferences";
 import {
 	appendInitialProcessingStartedEvent,
+	deleteProcessingRunViewForDocument,
 	insertProcessingEvent,
 } from "./processingEvents";
 
 export async function listDocuments(ctx: QueryCtx) {
 	const reader = await requireReader(ctx);
 
-	return ctx.db
+	const documents = await ctx.db
 		.query("documents")
 		.withIndex("by_reader", (q) => q.eq("readerId", reader._id))
 		.order("desc")
 		.collect();
+
+	const runViews = await ctx.db
+		.query("processingRunViews")
+		.withIndex("by_reader", (q) => q.eq("readerId", reader._id))
+		.collect();
+	const activeByDocumentId = new Map(
+		runViews.map((view) => [view.documentId, view.active]),
+	);
+
+	return Promise.all(
+		documents.map(async (document) => ({
+			...document,
+			active:
+				activeByDocumentId.get(document._id) ??
+				(await processingRunActiveWithoutView(ctx, document)),
+		})),
+	);
 }
 
 export async function getDocument(ctx: QueryCtx, documentId: Id<"documents">) {
@@ -44,27 +65,21 @@ export async function hardDeleteDocumentFromApi(
 
 	for (const entry of await ctx.db
 		.query("tableOfContentsEntries")
-		.withIndex("by_document_order", (q) =>
-			q.eq("documentId", input.documentId),
-		)
+		.withIndex("by_document_order", (q) => q.eq("documentId", input.documentId))
 		.collect()) {
 		await ctx.db.delete(entry._id);
 	}
 
 	for (const block of await ctx.db
 		.query("blocks")
-		.withIndex("by_document_order", (q) =>
-			q.eq("documentId", input.documentId),
-		)
+		.withIndex("by_document_order", (q) => q.eq("documentId", input.documentId))
 		.collect()) {
 		await ctx.db.delete(block._id);
 	}
 
 	for (const audio of await ctx.db
 		.query("narrationAudio")
-		.withIndex("by_document_voice", (q) =>
-			q.eq("documentId", input.documentId),
-		)
+		.withIndex("by_document_voice", (q) => q.eq("documentId", input.documentId))
 		.collect()) {
 		await ctx.db.delete(audio._id);
 	}
@@ -76,6 +91,7 @@ export async function hardDeleteDocumentFromApi(
 		await ctx.db.delete(event._id);
 	}
 
+	await deleteProcessingRunViewForDocument(ctx, input.documentId);
 	await ctx.db.delete(input.documentId);
 
 	return { deleted: true };
@@ -228,6 +244,30 @@ export async function failProcessingFromApi(
 	return { ignored: false };
 }
 
+export function requireServiceSecret(serviceSecret: string) {
+	if (serviceSecret !== requiredEnv("API_TO_CONVEX_SERVICE_SECRET")) {
+		throw new Error("Unauthenticated");
+	}
+}
+
+async function processingRunActiveWithoutView(
+	ctx: QueryCtx,
+	document: Doc<"documents">,
+): Promise<boolean> {
+	const status = document.processingStatus;
+	if (status === "created" || status === "processing" || status === "failed") {
+		return true;
+	}
+	if (!document.processingConfiguration.narration.enabled) return false;
+
+	const latestEvent = await ctx.db
+		.query("processingEvents")
+		.withIndex("by_document", (q) => q.eq("documentId", document._id))
+		.order("desc")
+		.first();
+	return latestEvent ? !isTerminalEventType(latestEvent.type) : false;
+}
+
 async function requireOwnedDocument(
 	ctx: QueryCtx | MutationCtx,
 	documentId: Id<"documents">,
@@ -240,12 +280,6 @@ async function requireOwnedDocument(
 	}
 
 	return document;
-}
-
-export function requireServiceSecret(serviceSecret: string) {
-	if (serviceSecret !== requiredEnv("API_TO_CONVEX_SERVICE_SECRET")) {
-		throw new Error("Unauthenticated");
-	}
 }
 
 function conversionFailedEvent(

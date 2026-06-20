@@ -14,6 +14,7 @@ import {
 	processingEventProgressValidator,
 	processingEventSeverityValidator,
 	processingEventTypeValidator,
+	processingPhaseSummaryValidator,
 } from "./processingEventValidators";
 
 export default defineSchema({
@@ -120,6 +121,17 @@ export default defineSchema({
 		progress: v.optional(processingEventProgressValidator),
 		data: v.optional(v.record(v.string(), v.any())),
 	}).index("by_document", ["documentId"]),
+
+	processingRunViews: defineTable({
+		readerId: v.string(),
+		documentId: v.id("documents"),
+		active: v.boolean(),
+		eventCount: v.number(),
+		phases: v.array(processingPhaseSummaryValidator),
+		updatedAt: v.number(),
+	})
+		.index("by_reader", ["readerId"])
+		.index("by_document", ["documentId"]),
 
 	configurationPreferences: defineTable({
 		readerId: v.string(),

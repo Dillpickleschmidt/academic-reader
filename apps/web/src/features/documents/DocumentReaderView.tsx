@@ -10,6 +10,7 @@ import {
 	Show,
 } from "solid-js";
 import { authClient } from "../../lib/auth-client";
+import { fetchJson } from "../../lib/fetch-json";
 import { ReaderDebugOverlayLayer, readerBlockElementId } from "./DocumentDebug";
 import {
 	extractBlockImageFilenames,
@@ -339,9 +340,9 @@ export function ReaderView(props: {
 	}
 
 	return (
-		<div class="reader-view h-full overflow-y-auto bg-stone-950 p-6 pt-16 lg:p-10">
+		<div class="reader-view h-full overflow-y-auto bg-background p-6 pt-16 lg:p-10">
 			<Show when={imageAccess.error}>
-				<p class="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-100 text-sm">
+				<p class="mb-4 rounded-xl border border-primary/30 bg-primary/10 p-3 text-primary text-sm">
 					Some Block images could not be signed for direct storage access.
 				</p>
 			</Show>
@@ -401,7 +402,6 @@ export function ReaderView(props: {
 									activeDebugBlockId={props.activeDebugBlockId}
 									blocks={loadedBlocks()}
 									contentContainer={contentContainer()}
-									debugEnabled={props.debugEnabled}
 									debugEvents={props.debugEvents}
 									document={props.document}
 									narrationAudio={props.narrationAudio}
@@ -416,7 +416,7 @@ export function ReaderView(props: {
 			<div
 				class={
 					playback()
-						? "fixed inset-x-4 bottom-20 z-40 mx-auto max-w-3xl rounded-2xl border border-stone-700 bg-stone-950/95 p-3 shadow-2xl shadow-black/60 backdrop-blur"
+						? "fixed inset-x-4 bottom-20 z-40 mx-auto max-w-3xl rounded-2xl border border-border bg-background/95 p-3 shadow-2xl shadow-black/60 backdrop-blur"
 						: "hidden"
 				}
 			>
@@ -424,17 +424,17 @@ export function ReaderView(props: {
 					{(state) => (
 						<div class="mb-2 flex items-start justify-between gap-3">
 							<div>
-								<div class="font-medium text-sm text-stone-100">
+								<div class="font-medium text-sm text-foreground">
 									Narration · {state().blockLabel}
 								</div>
-								<div class="text-stone-400 text-xs">
+								<div class="text-muted-foreground text-xs">
 									{playbackStatusText(state())}
 								</div>
 							</div>
 							<div class="flex gap-2">
 								<Show when={state().status === "error"}>
 									<button
-										class="rounded-full border border-amber-300/50 px-3 py-1 text-amber-100 text-xs hover:bg-amber-300/10"
+										class="rounded-full border border-primary/50 px-3 py-1 text-primary text-xs hover:bg-primary/10"
 										type="button"
 										onClick={() => void retryPlayback()}
 									>
@@ -442,7 +442,7 @@ export function ReaderView(props: {
 									</button>
 								</Show>
 								<button
-									class="rounded-full border border-stone-700 px-3 py-1 text-stone-300 text-xs hover:bg-stone-900"
+									class="rounded-full border border-border px-3 py-1 text-foreground text-xs hover:bg-card"
 									type="button"
 									onClick={stopPlayback}
 								>
@@ -483,7 +483,7 @@ async function fetchImageAccess(input: {
 	const token = data?.token;
 	if (!token) throw new Error("Could not authenticate Block image access");
 
-	const response = await fetch(
+	return fetchJson<ImageAccess>(
 		`/api/documents/${encodeURIComponent(input.documentId)}/image-urls`,
 		{
 			method: "POST",
@@ -493,13 +493,8 @@ async function fetchImageAccess(input: {
 			},
 			body: JSON.stringify({ filenames: input.filenames }),
 		},
+		"Could not create Block image URLs",
 	);
-	const payload = await response.json();
-	if (!response.ok) {
-		throw new Error(payload.error || "Could not create Block image URLs");
-	}
-
-	return payload as ImageAccess;
 }
 
 async function fetchNarrationAudioAccess(input: {
@@ -517,19 +512,14 @@ async function fetchNarrationAudioAccess(input: {
 		blockId: input.blockId,
 		voice: input.voice,
 	});
-	const response = await fetch(
-		`/api/documents/${encodeURIComponent(input.documentId)}/narration-audio-url?${params}`,
-		{ headers: { Authorization: `Bearer ${token}` } },
-	);
-	const payload = await response.json();
-	if (!response.ok) {
-		throw new Error(payload.error || "Could not create Narration audio URL");
-	}
-
-	return payload as {
+	return fetchJson<{
 		url: string;
 		wordTimestamps: NarrationWordTimestamp[];
-	};
+	}>(
+		`/api/documents/${encodeURIComponent(input.documentId)}/narration-audio-url?${params}`,
+		{ headers: { Authorization: `Bearer ${token}` } },
+		"Could not create Narration audio URL",
+	);
 }
 
 function sameBlockDocument(previous: Doc<"blocks">, next: Doc<"blocks">) {
@@ -683,9 +673,9 @@ function vttTimestamp(durationMs: number) {
 function readerArticleClass(playable: boolean, active: boolean) {
 	const base = "-mx-3 rounded-xl px-3 py-1 transition-colors";
 	if (active) {
-		return `${base} bg-amber-300/10 ring-1 ring-amber-300/40`;
+		return `${base} bg-primary/10 ring-1 ring-primary/40`;
 	}
-	if (playable) return `${base} cursor-pointer hover:bg-stone-900/70`;
+	if (playable) return `${base} cursor-pointer hover:bg-card/70`;
 	return base;
 }
 

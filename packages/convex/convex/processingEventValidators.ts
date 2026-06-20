@@ -3,6 +3,10 @@ import {
 	processingEventSeverities,
 	processingEventTypes,
 } from "@academic-reader/shared/processing-events";
+import {
+	processingPhaseIds,
+	processingPhaseStatuses,
+} from "@academic-reader/shared/processing-phases";
 import { v } from "convex/values";
 
 export const processingEventTypeValidator = v.union(
@@ -34,4 +38,34 @@ export const processingEventInputValidator = v.object({
 	blockId: v.optional(v.string()),
 	progress: v.optional(processingEventProgressValidator),
 	data: v.optional(v.record(v.string(), v.any())),
+});
+
+export const processingPhaseIdValidator = v.union(
+	...processingPhaseIds.map((phaseId) => v.literal(phaseId)),
+);
+
+export const processingPhaseStatusValidator = v.union(
+	...processingPhaseStatuses.map((status) => v.literal(status)),
+);
+
+export const processingEventSnapshotValidator = v.object({
+	type: processingEventTypeValidator,
+	emitter: processingEventEmitterValidator,
+	severity: processingEventSeverityValidator,
+	message: v.string(),
+	emittedAt: v.number(),
+	progress: v.optional(processingEventProgressValidator),
+});
+
+export const processingPhaseSummaryValidator = v.object({
+	id: processingPhaseIdValidator,
+	name: v.string(),
+	narration: v.boolean(),
+	status: processingPhaseStatusValidator,
+	progress: v.optional(processingEventProgressValidator),
+	indeterminate: v.boolean(),
+	warningCount: v.number(),
+	errorCount: v.number(),
+	eventCount: v.number(),
+	latestEvent: v.optional(processingEventSnapshotValidator),
 });

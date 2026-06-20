@@ -10,6 +10,7 @@
 		"./narration": "./src/narration.ts",
 		"./processing": "./src/processing.ts",
 		"./processing-events": "./src/processing-events.ts",
+		"./processing-phases": "./src/processing-phases.ts",
 		"./uploads": "./src/uploads.ts"
 	},
 	"devDependencies": {

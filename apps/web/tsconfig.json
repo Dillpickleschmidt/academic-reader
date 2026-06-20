@@ -7,6 +7,7 @@
 		"module": "ESNext",
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"types": ["vite/client"],
+		"paths": { "~/*": ["./src/*"] },
 
 		/* Bundler mode */
 		"moduleResolution": "bundler",

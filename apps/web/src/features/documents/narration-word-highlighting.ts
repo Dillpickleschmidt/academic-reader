@@ -1,6 +1,6 @@
 import type { NarrationWordTimestamp } from "@academic-reader/shared/narration";
 
-export interface NarrationHighlightRange {
+interface NarrationHighlightRange {
 	start: number;
 	end: number;
 }

@@ -12,7 +12,10 @@ export type SourceDocumentMimeType = (typeof sourceDocumentMimeTypes)[number];
 
 export const sourceDocumentAcceptAttribute = `${sourceDocumentMimeTypes.join(",")},.tif,.tiff`;
 
-const sourceDocumentMimeTypesByExtension: Record<string, SourceDocumentMimeType> = {
+const sourceDocumentMimeTypesByExtension: Record<
+	string,
+	SourceDocumentMimeType
+> = {
 	pdf: "application/pdf",
 	png: "image/png",
 	jpg: "image/jpeg",
