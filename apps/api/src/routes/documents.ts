@@ -12,6 +12,7 @@ import {
 	createDocumentImageAccess,
 	createDocumentNarrationAudioAccess,
 	createDocumentSourceAccess,
+	deleteDocument,
 } from "../documents";
 
 const processingConfigurationSchema = v.object({
@@ -88,6 +89,29 @@ documentsRoute.post("/:documentId/marker-result", async (c) => {
 		);
 	} catch (error) {
 		return c.json({ error: errorMessage(error) }, 400);
+	}
+});
+
+documentsRoute.delete("/:documentId", async (c) => {
+	const authToken = bearerToken(c.req.header("Authorization"));
+	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
+
+	try {
+		return c.json(
+			await deleteDocument({
+				authToken,
+				documentId: c.req.param("documentId") as Id<"documents">,
+			}),
+		);
+	} catch (error) {
+		const message = errorMessage(error);
+		if (message.includes("Document not found")) {
+			return c.json({ error: "Document not found" }, 404);
+		}
+		if (message.includes("Unauthenticated")) {
+			return c.json({ error: "Unauthenticated" }, 401);
+		}
+		return c.json({ error: message }, 500);
 	}
 });
 

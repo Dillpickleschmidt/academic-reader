@@ -23,6 +23,64 @@ export async function getDocument(ctx: QueryCtx, documentId: Id<"documents">) {
 	return requireOwnedDocument(ctx, documentId);
 }
 
+export async function hardDeleteDocumentFromApi(
+	ctx: MutationCtx,
+	input: {
+		serviceSecret: string;
+		documentId: Id<"documents">;
+	},
+): Promise<{ deleted: true }> {
+	requireServiceSecret(input.serviceSecret);
+	await requireOwnedDocument(ctx, input.documentId);
+
+	for (const page of await ctx.db
+		.query("pages")
+		.withIndex("by_document_physical_page", (q) =>
+			q.eq("documentId", input.documentId),
+		)
+		.collect()) {
+		await ctx.db.delete(page._id);
+	}
+
+	for (const entry of await ctx.db
+		.query("tableOfContentsEntries")
+		.withIndex("by_document_order", (q) =>
+			q.eq("documentId", input.documentId),
+		)
+		.collect()) {
+		await ctx.db.delete(entry._id);
+	}
+
+	for (const block of await ctx.db
+		.query("blocks")
+		.withIndex("by_document_order", (q) =>
+			q.eq("documentId", input.documentId),
+		)
+		.collect()) {
+		await ctx.db.delete(block._id);
+	}
+
+	for (const audio of await ctx.db
+		.query("narrationAudio")
+		.withIndex("by_document_voice", (q) =>
+			q.eq("documentId", input.documentId),
+		)
+		.collect()) {
+		await ctx.db.delete(audio._id);
+	}
+
+	for (const event of await ctx.db
+		.query("processingEvents")
+		.withIndex("by_document", (q) => q.eq("documentId", input.documentId))
+		.collect()) {
+		await ctx.db.delete(event._id);
+	}
+
+	await ctx.db.delete(input.documentId);
+
+	return { deleted: true };
+}
+
 export async function createDocumentFromPromotedSourceDocument(
 	ctx: MutationCtx,
 	input: {

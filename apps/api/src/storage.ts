@@ -116,6 +116,16 @@ export async function saveObject(
 	}
 }
 
+export async function deleteDocumentObjects(input: {
+	documentId: string;
+	sourceDocumentObjectKey: string;
+}) {
+	const config = readStorageConfig();
+
+	await deleteObject(config, input.sourceDocumentObjectKey);
+	await deleteObjectsByPrefix(config, `documents/${input.documentId}/`);
+}
+
 export function documentImageObjectKey(documentId: string, filename: string) {
 	return `documents/${documentId}/images/${safeFilename(filename)}`;
 }
@@ -232,8 +242,56 @@ async function deleteObject(
 	);
 
 	if (!response.ok && response.status !== 404) {
-		throw new Error(`Could not delete temporary upload (${response.status})`);
+		throw new Error(`Could not delete object (${response.status})`);
 	}
+}
+
+async function deleteObjectsByPrefix(
+	config: ReturnType<typeof readStorageConfig>,
+	prefix: string,
+) {
+	let continuationToken: string | undefined;
+
+	do {
+		const page = await listObjectKeys(config, prefix, continuationToken);
+		for (const key of page.keys) {
+			await deleteObject(config, key);
+		}
+		continuationToken = page.nextContinuationToken;
+	} while (continuationToken);
+}
+
+async function listObjectKeys(
+	config: ReturnType<typeof readStorageConfig>,
+	prefix: string,
+	continuationToken: string | undefined,
+) {
+	const url = objectUrl(config.endpoint, config.bucket, "");
+	url.searchParams.set("list-type", "2");
+	url.searchParams.set("prefix", prefix);
+	if (continuationToken) {
+		url.searchParams.set("continuation-token", continuationToken);
+	}
+
+	const response = await storageClient(config).fetch(url, { method: "GET" });
+	if (!response.ok) {
+		throw new Error(`Could not list objects (${response.status})`);
+	}
+
+	const xml = await response.text();
+	const continuationTokenMatch = xml.match(
+		/<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/,
+	);
+
+	return {
+		keys: [...xml.matchAll(/<Key>([\s\S]*?)<\/Key>/g)].map((match) =>
+			decodeXmlText(match[1] ?? ""),
+		),
+		nextContinuationToken:
+			continuationTokenMatch?.[1] === undefined
+				? undefined
+				: decodeXmlText(continuationTokenMatch[1]),
+	};
 }
 
 function storageClient(config: ReturnType<typeof readStorageConfig>) {
@@ -259,6 +317,21 @@ function copySource(bucket: string, key: string) {
 		.split("/")
 		.map(encodeURIComponent)
 		.join("/")}`;
+}
+
+function decodeXmlText(value: string) {
+	return value
+		.replace(/&#x([0-9a-fA-F]+);/g, (_, codePoint: string) =>
+			String.fromCodePoint(Number.parseInt(codePoint, 16)),
+		)
+		.replace(/&#([0-9]+);/g, (_, codePoint: string) =>
+			String.fromCodePoint(Number.parseInt(codePoint, 10)),
+		)
+		.replace(/&quot;/g, '"')
+		.replace(/&apos;/g, "'")
+		.replace(/&lt;/g, "<")
+		.replace(/&gt;/g, ">")
+		.replace(/&amp;/g, "&");
 }
 
 function temporaryUploadObjectKey(temporaryUploadId: string, filename: string) {

@@ -1,6 +1,7 @@
 import type { Id } from "@academic-reader/convex/data-model";
 import { Link } from "@tanstack/solid-router";
 import { createSignal, Index, Show } from "solid-js";
+import { authClient } from "../../lib/auth-client";
 import { UploadPrompt } from "./DocumentCreationFlow";
 import type { DocumentCreation } from "./document-creation";
 import { createStableItems } from "./document-stable-list";
@@ -51,11 +52,57 @@ export function SignedInDocuments(props: {
 	const [eventsDocumentId, setEventsDocumentId] = createSignal<
 		Id<"documents"> | undefined
 	>();
+	const [deletingDocumentId, setDeletingDocumentId] = createSignal<
+		Id<"documents"> | undefined
+	>();
+	const [deleteError, setDeleteError] = createSignal<string>();
 	const documents = createStableItems(
 		() => props.documents,
 		(document) => document._id,
 		sameDocumentListItem,
 	);
+
+	async function deleteDocument(document: DocumentListItem) {
+		const confirmed = window.confirm(
+			`Permanently delete "${document.filename}"? This removes the Source Document, Reader View, Processing Events, images, and Narration audio.`,
+		);
+		if (!confirmed) return;
+
+		setDeleteError(undefined);
+		setDeletingDocumentId(document._id);
+
+		try {
+			const { data } = await authClient.convex.token({
+				fetchOptions: { throw: false },
+			});
+			const token = data?.token;
+			if (!token) throw new Error("Could not authenticate Document deletion");
+
+			const response = await fetch(
+				`/api/documents/${encodeURIComponent(document._id)}`,
+				{
+					method: "DELETE",
+					headers: { Authorization: `Bearer ${token}` },
+				},
+			);
+			const payload = (await response.json().catch(() => ({}))) as {
+				error?: string;
+			};
+
+			if (!response.ok) {
+				throw new Error(payload.error || "Could not delete Document");
+			}
+			if (eventsDocumentId() === document._id) {
+				setEventsDocumentId(undefined);
+			}
+		} catch (error) {
+			setDeleteError(
+				error instanceof Error ? error.message : "Could not delete Document",
+			);
+		} finally {
+			setDeletingDocumentId(undefined);
+		}
+	}
 
 	return (
 		<section class="rounded-3xl border border-stone-800 bg-stone-900/50 p-8">
@@ -75,6 +122,14 @@ export function SignedInDocuments(props: {
 					</button>
 				</Show>
 			</div>
+
+			<Show when={deleteError()}>
+				{(message) => (
+					<p class="mt-6 rounded-xl border border-red-900/60 bg-red-950/30 p-3 text-red-300 text-sm">
+						{message()}
+					</p>
+				)}
+			</Show>
 
 			<Show
 				when={!props.error}
@@ -135,6 +190,16 @@ export function SignedInDocuments(props: {
 														>
 															Open
 														</Link>
+														<button
+															class="rounded-lg border border-red-900/70 px-3 py-1 text-red-300 text-xs hover:bg-red-950/40 disabled:opacity-50"
+															disabled={deletingDocumentId() !== undefined}
+															type="button"
+															onClick={() => void deleteDocument(document())}
+														>
+															{deletingDocumentId() === document()._id
+																? "Deleting…"
+																: "Delete"}
+														</button>
 													</div>
 												</div>
 												<Show when={eventsOpen()}>

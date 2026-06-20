@@ -14,6 +14,15 @@ export const get = query({
 	handler: (ctx, args) => Documents.getDocument(ctx, args.documentId),
 });
 
+export const hardDeleteFromApi = mutation({
+	args: {
+		serviceSecret: v.string(),
+		documentId: v.id("documents"),
+	},
+	returns: v.object({ deleted: v.literal(true) }),
+	handler: (ctx, args) => Documents.hardDeleteDocumentFromApi(ctx, args),
+});
+
 export const createFromPromotedSourceDocument = mutation({
 	args: {
 		filename: v.string(),

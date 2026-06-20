@@ -23,6 +23,7 @@ import {
 	isMatchingProcessingEventIngestToken,
 } from "./processing-event-ingest-token";
 import {
+	deleteDocumentObjects,
 	documentImageObjectKey,
 	documentImageUrl,
 	getBrowserPresignedReadUrl,
@@ -235,6 +236,28 @@ export async function createDocumentNarrationAudioAccess(input: {
 	const access = await getBrowserPresignedReadUrl(audio.storageObjectKey);
 
 	return { ...access, wordTimestamps: audio.wordTimestamps };
+}
+
+export async function deleteDocument(input: {
+	authToken: string;
+	documentId: Id<"documents">;
+}) {
+	const client = createConvexHttpClient(input.authToken);
+	const serviceSecret = readApiToConvexServiceSecret();
+	const document = await client.query(api.api.documents.get, {
+		documentId: input.documentId,
+	});
+
+	await deleteDocumentObjects({
+		documentId: input.documentId,
+		sourceDocumentObjectKey: document.storageObjectKey,
+	});
+	await client.mutation(api.api.documents.hardDeleteFromApi, {
+		serviceSecret,
+		documentId: input.documentId,
+	});
+
+	return { deleted: true };
 }
 
 async function documentPdfMetadata(input: {
