@@ -1,0 +1,1 @@
+git+https://github.com/vllm-project/vllm-omni.git@v0.22.0

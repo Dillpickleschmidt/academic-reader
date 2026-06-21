@@ -1,3 +1,7 @@
+import {
+	defaultProcessingConfiguration,
+	narrationVoiceById,
+} from "@academic-reader/shared/processing";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requireReader } from "./auth";
 
@@ -8,15 +12,18 @@ export async function getConfigurationPreferences(ctx: QueryCtx) {
 		.withIndex("by_reader", (q) => q.eq("readerId", reader._id))
 		.first();
 
-	return (
-		preferences ?? {
-			conversionModel: "marker",
-			markerForceOcr: false,
-			markerUseLlm: true,
-			narrationEnabled: true,
-			narrationVoice: "af_heart",
-		}
-	);
+	const defaults = {
+		conversionModel: defaultProcessingConfiguration.conversionModel,
+		markerForceOcr: defaultProcessingConfiguration.markerOptions.forceOcr,
+		markerUseLlm: defaultProcessingConfiguration.markerOptions.useLlm,
+		narrationEnabled: defaultProcessingConfiguration.narration.enabled,
+		narrationVoice: defaultProcessingConfiguration.narration.voice,
+	};
+	if (!preferences) return defaults;
+	if (!narrationVoiceById(preferences.narrationVoice)) {
+		return { ...preferences, narrationVoice: defaults.narrationVoice };
+	}
+	return preferences;
 }
 
 export async function saveConfigurationPreferences(
@@ -29,6 +36,7 @@ export async function saveConfigurationPreferences(
 		narrationVoice: string;
 	},
 ) {
+	assertValidNarrationVoice(input.narrationVoice);
 	const reader = await requireReader(ctx);
 	const existing = await ctx.db
 		.query("configurationPreferences")
@@ -49,4 +57,10 @@ export async function saveConfigurationPreferences(
 		...input,
 		updatedAt: now,
 	});
+}
+
+function assertValidNarrationVoice(voice: string) {
+	if (!narrationVoiceById(voice)) {
+		throw new Error(`Unknown Narration voice: ${voice}`);
+	}
 }

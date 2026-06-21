@@ -5,7 +5,10 @@ import {
 	createNarrationAudioQueue,
 	NarrationAudioFatalError,
 } from "./narration-audio";
-import { parseNarrationTtsResponse } from "./narration-tts";
+import {
+	narrationTtsEventData,
+	parseNarrationTtsResponse,
+} from "./narration-tts";
 import { pcmToWav } from "./pcm-wav";
 
 const documentId = "doc" as Id<"documents">;
@@ -120,6 +123,29 @@ describe("createNarrationAudioQueue", () => {
 		expect(fatalEvents.map((event) => event.type)).toContain(
 			"narration.audio.failed",
 		);
+	});
+});
+
+describe("narrationTtsEventData", () => {
+	test("reports Qwen3 local worker runtime", () => {
+		const previousBackend = process.env.TTS_BACKEND;
+		const previousUrl = process.env.QWEN3_TTS_WORKER_URL;
+		process.env.TTS_BACKEND = "local";
+		process.env.QWEN3_TTS_WORKER_URL = "http://localhost:8802";
+
+		try {
+			expect(narrationTtsEventData("male_1")).toEqual({
+				voice: "male_1",
+				backend: "local",
+				engine: "qwen3",
+				workerHost: "localhost:8802",
+			});
+		} finally {
+			if (previousBackend === undefined) delete process.env.TTS_BACKEND;
+			else process.env.TTS_BACKEND = previousBackend;
+			if (previousUrl === undefined) delete process.env.QWEN3_TTS_WORKER_URL;
+			else process.env.QWEN3_TTS_WORKER_URL = previousUrl;
+		}
 	});
 });
 

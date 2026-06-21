@@ -2,6 +2,7 @@ import type {
 	NarrationAudioAlignment,
 	NarrationWordTimestamp,
 } from "@academic-reader/shared/narration";
+import { narrationVoiceById } from "@academic-reader/shared/processing";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { requireReader } from "./auth";
@@ -11,6 +12,7 @@ export async function listNarrationAudioForDocument(
 	ctx: QueryCtx,
 	input: { documentId: Id<"documents">; voice: string },
 ) {
+	assertValidNarrationVoice(input.voice);
 	await requireOwnedDocument(ctx, input.documentId);
 
 	const audio = await ctx.db
@@ -39,6 +41,7 @@ export async function getNarrationAudioForPlaybackFromApi(
 	},
 ) {
 	requireServiceSecret(input.serviceSecret);
+	assertValidNarrationVoice(input.voice);
 	await requireOwnedDocument(ctx, input.documentId);
 
 	const audio = await ctx.db
@@ -73,6 +76,7 @@ export async function upsertNarrationAudioFromApi(
 	},
 ) {
 	requireServiceSecret(input.serviceSecret);
+	assertValidNarrationVoice(input.voice);
 	await requireExistingDocument(ctx, input.documentId);
 
 	const block = await ctx.db
@@ -110,6 +114,12 @@ export async function upsertNarrationAudioFromApi(
 	});
 
 	return { narrationAudioId };
+}
+
+function assertValidNarrationVoice(voice: string) {
+	if (!narrationVoiceById(voice)) {
+		throw new Error(`Unknown Narration voice: ${voice}`);
+	}
 }
 
 async function requireOwnedDocument(

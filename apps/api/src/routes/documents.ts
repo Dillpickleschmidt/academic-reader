@@ -1,5 +1,8 @@
 import type { Id } from "@academic-reader/convex/data-model";
-import { conversionModels } from "@academic-reader/shared/processing";
+import {
+	conversionModels,
+	narrationVoiceIds,
+} from "@academic-reader/shared/processing";
 import {
 	sourceDocumentMaxSizeBytes,
 	sourceDocumentMimeTypes,
@@ -24,7 +27,7 @@ const processingConfigurationSchema = v.object({
 	}),
 	narration: v.object({
 		enabled: v.boolean(),
-		voice: v.string(),
+		voice: v.picklist(narrationVoiceIds),
 	}),
 });
 

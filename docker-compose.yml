@@ -45,6 +45,20 @@ services:
               count: 1
               capabilities: [gpu]
 
+  qwen3-tts:
+    build:
+      context: .
+      dockerfile: workers/qwen3-tts/Dockerfile
+    network_mode: host
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
   minio-init:
     image: quay.io/minio/mc:latest
     depends_on:

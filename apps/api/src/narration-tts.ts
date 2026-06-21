@@ -114,12 +114,6 @@ function narrationTtsRuntime(voiceId: string) {
 			`Unknown Narration voice: ${voiceId}`,
 		);
 	}
-	if (voice.engine !== "kokoro") {
-		throw new NarrationTtsConfigurationError(
-			`Narration voice ${voiceId} uses unsupported engine: ${voice.engine}`,
-		);
-	}
-
 	const backend = optionalEnv("TTS_BACKEND") ?? "local";
 	if (backend === "none") {
 		throw new NarrationTtsConfigurationError(
@@ -130,21 +124,40 @@ function narrationTtsRuntime(voiceId: string) {
 		return {
 			backend,
 			engine: voice.engine,
-			workerUrl: (
-				optionalEnv("KOKORO_TTS_WORKER_URL") ?? "http://localhost:8801"
-			).replace(/\/$/, ""),
+			workerUrl: ttsWorkerUrl({ backend, engine: voice.engine }),
 		};
 	}
 	if (backend === "modal") {
 		return {
 			backend,
 			engine: voice.engine,
-			workerUrl: requireEnv("MODAL_KOKORO_TTS_URL").replace(/\/$/, ""),
+			workerUrl: ttsWorkerUrl({ backend, engine: voice.engine }),
 		};
 	}
 
 	throw new NarrationTtsConfigurationError(
 		"TTS_BACKEND must be local, modal, or none",
+	);
+}
+
+function ttsWorkerUrl(input: { backend: "local" | "modal"; engine: string }) {
+	if (input.engine === "kokoro") {
+		return (
+			input.backend === "local"
+				? (optionalEnv("KOKORO_TTS_WORKER_URL") ?? "http://localhost:8801")
+				: requireEnv("MODAL_KOKORO_TTS_URL")
+		).replace(/\/$/, "");
+	}
+	if (input.engine === "qwen3") {
+		return (
+			input.backend === "local"
+				? (optionalEnv("QWEN3_TTS_WORKER_URL") ?? "http://localhost:8802")
+				: requireEnv("MODAL_QWEN3_TTS_URL")
+		).replace(/\/$/, "");
+	}
+
+	throw new NarrationTtsConfigurationError(
+		`Unsupported Narration TTS engine: ${input.engine}`,
 	);
 }
 

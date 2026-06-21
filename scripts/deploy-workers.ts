@@ -50,6 +50,18 @@ const workers: ModalWorker[] = [
 			"workers/kokoro-tts/requirements.txt",
 		],
 	},
+	{
+		appName: "qwen3-tts",
+		envKey: "MODAL_QWEN3_TTS_URL",
+		file: "workers/qwen3-tts/modal_app.py",
+		hashPaths: [
+			"workers/qwen3-tts/modal_app.py",
+			"workers/qwen3-tts/app",
+			"workers/qwen3-tts/custom_voices",
+			"workers/qwen3-tts/qwen3_tts.yaml",
+			"workers/qwen3-tts/requirements.txt",
+		],
+	},
 ];
 
 if (!existsSync(envPath)) {

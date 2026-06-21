@@ -21,7 +21,9 @@ async function main() {
 	const rootEnv = parseEnvFile(rootEnvPath);
 	const services = ["minio"];
 	if (rootEnv.CONVERSION_BACKEND === "local") services.push("marker");
-	if (rootEnv.TTS_BACKEND === "local") services.push("kokoro-tts");
+	if (rootEnv.TTS_BACKEND === "local") {
+		services.push("kokoro-tts", "qwen3-tts");
+	}
 	await run(
 		"storage",
 		"docker",
@@ -33,6 +35,7 @@ async function main() {
 	}
 	if (rootEnv.TTS_BACKEND === "local") {
 		await waitForHttp("kokoro", "http://localhost:8801/health", 180_000);
+		await waitForHttp("qwen3", "http://localhost:8802/health", 600_000);
 	}
 	await run(
 		"storage",
@@ -47,10 +50,17 @@ async function main() {
 		);
 	}
 
-	if (rootEnv.TTS_BACKEND === "modal" && !rootEnv.MODAL_KOKORO_TTS_URL) {
-		throw new Error(
-			"MODAL_KOKORO_TTS_URL is required when TTS_BACKEND=modal. Deploy workers/kokoro-tts/modal_app.py and set the URL in .env.local.",
-		);
+	if (rootEnv.TTS_BACKEND === "modal") {
+		if (!rootEnv.MODAL_KOKORO_TTS_URL) {
+			throw new Error(
+				"MODAL_KOKORO_TTS_URL is required when TTS_BACKEND=modal. Deploy workers/kokoro-tts/modal_app.py and set the URL in .env.local.",
+			);
+		}
+		if (!rootEnv.MODAL_QWEN3_TTS_URL) {
+			throw new Error(
+				"MODAL_QWEN3_TTS_URL is required when TTS_BACKEND=modal. Deploy workers/qwen3-tts/modal_app.py and set the URL in .env.local.",
+			);
+		}
 	}
 
 	const convexReady = deferred<void>();
@@ -221,6 +231,7 @@ function prefix(label: string) {
 		"api-tun": "\x1b[36m",
 		"s3-tun": "\x1b[36m",
 		kokoro: "\x1b[36m",
+		qwen3: "\x1b[36m",
 	};
 	const reset = "\x1b[0m";
 	return `${colors[label] ?? ""}${label.padEnd(7)}${reset}`;

@@ -1,3 +1,4 @@
+import { narrationVoiceById } from "@academic-reader/shared/processing";
 import {
 	isTerminalEventType,
 	type ProcessingEventInput,
@@ -120,6 +121,7 @@ export async function createDocumentFromPromotedSourceDocument(
 ) {
 	const reader = await requireReader(ctx);
 	const now = Date.now();
+	assertValidNarrationVoice(input.processingConfiguration.narration.voice);
 	const processingConfiguration = {
 		...input.processingConfiguration,
 		pageRange: input.processingConfiguration.pageRange.trim(),
@@ -247,6 +249,12 @@ export async function failProcessingFromApi(
 export function requireServiceSecret(serviceSecret: string) {
 	if (serviceSecret !== requiredEnv("API_TO_CONVEX_SERVICE_SECRET")) {
 		throw new Error("Unauthenticated");
+	}
+}
+
+function assertValidNarrationVoice(voice: string) {
+	if (!narrationVoiceById(voice)) {
+		throw new Error(`Unknown Narration voice: ${voice}`);
 	}
 }
 
