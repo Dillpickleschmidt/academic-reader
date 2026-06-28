@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { markInlineCitationsInHtml } from "./block-content";
+import {
+	markInlineCitationsInHtml,
+	prepareBlockContentHtml,
+	renderMathInHtml,
+} from "./block-content";
 
 describe("markInlineCitationsInHtml", () => {
 	test("wraps bracketed numeric citations", () => {
@@ -72,5 +76,51 @@ describe("markInlineCitationsInHtml", () => {
 			'<p><span class="inline-citation">[1]</span> Smith. A title.</p>',
 		);
 		expect(output).not.toContain("[1] Smith. A title.</span>");
+	});
+});
+
+describe("renderMathInHtml", () => {
+	test("renders inline math to KaTeX HTML with MathML", () => {
+		const output = renderMathInHtml("<p>Mass <math>E=mc^2</math>.</p>");
+
+		expect(output).toContain('class="katex"');
+		expect(output).toContain(
+			'<annotation encoding="application/x-tex">E=mc^2</annotation>',
+		);
+		expect(output).not.toContain("<math>E=mc^2</math>");
+	});
+
+	test("renders display math as KaTeX display HTML", () => {
+		const output = renderMathInHtml(
+			'<p><math display="block">\\int_0^1 x^2 dx</math></p>',
+		);
+
+		expect(output).toContain('class="katex-display"');
+		expect(output).toContain(
+			'<annotation encoding="application/x-tex">\\int_0^1 x^2 dx</annotation>',
+		);
+	});
+
+	test("does not rerender existing KaTeX HTML", () => {
+		const output = renderMathInHtml("<p>Mass <math>E=mc^2</math>.</p>");
+
+		expect(renderMathInHtml(output)).toBe(output);
+	});
+});
+
+describe("prepareBlockContentHtml", () => {
+	test("marks Inline Citations and renders math in one Block HTML pass", () => {
+		const output = prepareBlockContentHtml(
+			"<p>See [1] and <math>x_{[1]}</math>.</p>",
+		);
+
+		const inlineCitationMatches =
+			output.match(/class="inline-citation"/g) ?? [];
+
+		expect(inlineCitationMatches).toHaveLength(1);
+		expect(output).toContain('class="katex"');
+		expect(output).toContain(
+			'<annotation encoding="application/x-tex">x_{[1]}</annotation>',
+		);
 	});
 });

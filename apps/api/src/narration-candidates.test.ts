@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BlockType } from "@academic-reader/shared/blocks";
+import { prepareBlockContentHtml } from "./block-content";
 import { deriveNarrationCandidate } from "./narration-candidates";
 
 function block(input: { blockType?: BlockType; contentHtml: string }) {
@@ -193,5 +194,23 @@ describe("deriveNarrationCandidate", () => {
 		if (result.kind !== "candidate") return;
 		expect(result.candidateText).toContain('class="inline-citation"');
 		expect(result.features.hasInlineCitation).toBe(true);
+	});
+
+	test("collapses rendered KaTeX to compact math for Narration", () => {
+		const result = deriveNarrationCandidate(
+			block({
+				contentHtml: prepareBlockContentHtml(
+					"<p>Mass-energy equivalence is <math>E=mc^2</math>.</p>",
+				),
+			}),
+		);
+
+		expect(result).toMatchObject({ kind: "candidate" });
+		if (result.kind !== "candidate") return;
+		expect(result.candidateText).toBe(
+			"<p>Mass-energy equivalence is <math>E=mc^2</math>.</p>",
+		);
+		expect(result.features.hasInlineMath).toBe(true);
+		expect(result.candidateText).not.toContain("katex-html");
 	});
 });

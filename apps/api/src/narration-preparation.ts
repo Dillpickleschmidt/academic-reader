@@ -12,7 +12,7 @@ import {
 } from "./ai";
 import { parseJsonObject } from "./ai-output";
 import type { HtmlNode } from "./html-fragment";
-import { parseHtmlFragment } from "./html-fragment";
+import { decodeHtmlEntities, parseHtmlFragment } from "./html-fragment";
 import { deriveNarrationCandidate } from "./narration-candidates";
 import {
 	appendNarrationEvent,
@@ -801,28 +801,6 @@ function normalizeNarrationText(text: string) {
 		.replace(/\s+/g, " ")
 		.replace(/\s+([,.;:!?])/g, "$1")
 		.trim();
-}
-
-function decodeHtmlEntities(text: string) {
-	return text.replace(
-		/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
-		(match, entity) => {
-			const normalized = String(entity).toLowerCase();
-			if (normalized === "amp") return "&";
-			if (normalized === "lt") return "<";
-			if (normalized === "gt") return ">";
-			if (normalized === "quot") return '"';
-			if (normalized === "apos") return "'";
-			if (normalized === "nbsp") return " ";
-			if (normalized.startsWith("#x")) {
-				return String.fromCodePoint(Number.parseInt(normalized.slice(2), 16));
-			}
-			if (normalized.startsWith("#")) {
-				return String.fromCodePoint(Number.parseInt(normalized.slice(1), 10));
-			}
-			return match;
-		},
-	);
 }
 
 function chunk<T>(values: T[], size: number) {

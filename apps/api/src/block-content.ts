@@ -1,5 +1,8 @@
+import katex from "katex";
 import {
+	decodeHtmlEntities,
 	type ElementNode,
+	elementAttributeValue,
 	elementHasClass,
 	type HtmlNode,
 	nodeTextContent,
@@ -59,12 +62,27 @@ const blockElementNames = new Set([
 ]);
 
 const excludedElementNames = new Set([
+	"annotation",
 	"code",
+	"math",
 	"pre",
 	"script",
+	"semantics",
 	"style",
 	"textarea",
 ]);
+
+export function prepareBlockContentHtml(html: string) {
+	return renderMathInHtml(markInlineCitationsInHtml(html));
+}
+
+export function renderMathInHtml(html: string) {
+	if (!html.includes("<math")) return html;
+
+	const root = parseHtmlFragment(html);
+	renderMathInChildren(root.children);
+	return serializeNode(root);
+}
 
 export function markInlineCitationsInHtml(html: string) {
 	if (!html.includes("[") || !html.includes("]")) return html;
@@ -72,6 +90,92 @@ export function markInlineCitationsInHtml(html: string) {
 	const root = parseHtmlFragment(html);
 	markInlineCitationsInChildren(root.children);
 	return serializeNode(root);
+}
+
+export function compactRenderedMathForNarrationHtml(html: string) {
+	if (!html.includes("katex")) return html;
+
+	const root = parseHtmlFragment(html);
+	compactRenderedMathInChildren(root.children);
+	return serializeNode(root);
+}
+
+function renderMathInChildren(children: HtmlNode[]) {
+	for (const [index, child] of children.entries()) {
+		if (child.kind !== "element" || isRenderedMathElement(child)) continue;
+		if (child.name === "math") {
+			children[index] = renderMathElement(child);
+			continue;
+		}
+		renderMathInChildren(child.children);
+	}
+}
+
+function renderMathElement(node: ElementNode): HtmlNode {
+	const latex = decodeHtmlEntities(nodeTextContent(node)).trim();
+	if (!latex) return node;
+
+	try {
+		return {
+			kind: "raw",
+			raw: katex.renderToString(latex, {
+				throwOnError: false,
+				displayMode: elementAttributeValue(node, "display") === "block",
+				output: "htmlAndMathml",
+			}),
+		};
+	} catch {
+		return node;
+	}
+}
+
+function compactRenderedMathInChildren(children: HtmlNode[]) {
+	for (const [index, child] of children.entries()) {
+		if (child.kind !== "element") continue;
+		if (isRenderedMathElement(child)) {
+			children[index] = renderedMathNarrationNode(child);
+			continue;
+		}
+		compactRenderedMathInChildren(child.children);
+	}
+}
+
+function renderedMathNarrationNode(node: ElementNode): HtmlNode {
+	const latex = decodeHtmlEntities(
+		findMathAnnotationText(node) ?? nodeTextContent(node),
+	).trim();
+	if (!latex) return node;
+
+	return {
+		kind: "raw",
+		raw: `<math${elementHasClass(node, "katex-display") ? ' display="block"' : ""}>${escapeHtml(latex)}</math>`,
+	};
+}
+
+function findMathAnnotationText(node: HtmlNode): string | undefined {
+	if (node.kind !== "element" && node.kind !== "root") return undefined;
+	if (
+		node.kind === "element" &&
+		node.name === "annotation" &&
+		elementAttributeValue(node, "encoding")?.toLowerCase() ===
+			"application/x-tex"
+	) {
+		return nodeTextContent(node);
+	}
+
+	for (const child of node.children) {
+		const text = findMathAnnotationText(child);
+		if (text !== undefined) return text;
+	}
+	return undefined;
+}
+
+function escapeHtml(text: string) {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
 }
 
 function markInlineCitationsInChildren(children: HtmlNode[]) {
@@ -82,6 +186,7 @@ function markInlineCitationsInChildren(children: HtmlNode[]) {
 		if (
 			child.name === "a" ||
 			isInlineCitationElement(child) ||
+			isRenderedMathElement(child) ||
 			isExcludedElement(child)
 		) {
 			continue;
@@ -268,6 +373,7 @@ function isRunBoundary(node: HtmlNode) {
 	if (node.kind === "root") return false;
 	if (
 		isInlineCitationElement(node) ||
+		isRenderedMathElement(node) ||
 		isExcludedElement(node) ||
 		containsInlineCitationElement(node)
 	) {
@@ -279,6 +385,13 @@ function isRunBoundary(node: HtmlNode) {
 
 function isInlineCitationElement(node: ElementNode) {
 	return node.name === "span" && elementHasClass(node, "inline-citation");
+}
+
+function isRenderedMathElement(node: ElementNode) {
+	return (
+		node.name === "span" &&
+		(elementHasClass(node, "katex") || elementHasClass(node, "katex-display"))
+	);
 }
 
 function containsInlineCitationElement(node: ElementNode): boolean {

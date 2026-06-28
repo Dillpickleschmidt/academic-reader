@@ -1,6 +1,6 @@
 import type { Id } from "@academic-reader/convex/data-model";
 import type { SourceDocumentMimeType } from "@academic-reader/shared/uploads";
-import { markInlineCitationsInHtml } from "./block-content";
+import { prepareBlockContentHtml } from "./block-content";
 import {
 	api,
 	createConvexHttpClient,
@@ -134,7 +134,7 @@ export async function acceptMarkerResult(input: {
 		const adapted = adaptMarkerConversionResult({ result, imageUrls });
 		const blocks = adapted.blocks.map((block) => ({
 			...block,
-			contentHtml: markInlineCitationsInHtml(block.contentHtml),
+			contentHtml: prepareBlockContentHtml(block.contentHtml),
 		}));
 		const pdfMetadata = await documentPdfMetadata({
 			blocks,

@@ -3,6 +3,7 @@ import type {
 	BlockNarration,
 	HardIneligibleNarrationReason,
 } from "@academic-reader/shared/narration";
+import { compactRenderedMathForNarrationHtml } from "./block-content";
 import {
 	elementHasClass,
 	hasElement,
@@ -44,7 +45,9 @@ export function deriveNarrationCandidate(
 	const hardReason = hardReasonFromBlockType(block.blockType);
 	if (hardReason) return hardExcluded(block.blockId, hardReason);
 
-	const root = parseHtmlFragment(block.contentHtml);
+	const root = parseHtmlFragment(
+		compactRenderedMathForNarrationHtml(block.contentHtml),
+	);
 	removeElements(
 		root.children,
 		(node) => node.name === "script" || node.name === "style",

@@ -85,8 +85,12 @@ export function nodeTextContent(node: HtmlNode): string {
 }
 
 export function elementHasClass(node: ElementNode, className: string) {
-	const value = attributeValue(node.rawOpen, "class");
+	const value = elementAttributeValue(node, "class");
 	return value?.split(/\s+/).includes(className) ?? false;
+}
+
+export function elementAttributeValue(node: ElementNode, name: string) {
+	return attributeValue(node.rawOpen, name);
 }
 
 export function hasElement(
@@ -115,6 +119,28 @@ export function removeElements(
 
 export function normalizeText(text: string) {
 	return text.replace(/\s+/g, " ").trim();
+}
+
+export function decodeHtmlEntities(text: string) {
+	return text.replace(
+		/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
+		(match, entity) => {
+			const normalized = String(entity).toLowerCase();
+			if (normalized === "amp") return "&";
+			if (normalized === "lt") return "<";
+			if (normalized === "gt") return ">";
+			if (normalized === "quot") return '"';
+			if (normalized === "apos") return "'";
+			if (normalized === "nbsp") return " ";
+			if (normalized.startsWith("#x")) {
+				return String.fromCodePoint(Number.parseInt(normalized.slice(2), 16));
+			}
+			if (normalized.startsWith("#")) {
+				return String.fromCodePoint(Number.parseInt(normalized.slice(1), 10));
+			}
+			return match;
+		},
+	);
 }
 
 function appendHtmlTagToken(stack: Array<RootNode | ElementNode>, raw: string) {
