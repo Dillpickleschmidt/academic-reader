@@ -9,6 +9,7 @@ import {
 } from "@academic-reader/shared/uploads";
 import { Hono } from "hono";
 import * as v from "valibot";
+import { createDocumentDownload } from "../document-download";
 import {
 	acceptMarkerResult,
 	createDocumentAndStartProcessing,
@@ -56,6 +57,10 @@ const imageUrlsSchema = v.object({
 const narrationAudioUrlSchema = v.object({
 	blockId: v.pipe(v.string(), v.minLength(1)),
 	voice: v.pipe(v.string(), v.minLength(1)),
+});
+
+const documentDownloadSchema = v.object({
+	format: v.picklist(["html", "markdown"]),
 });
 
 export const documentsRoute = new Hono();
@@ -134,6 +139,41 @@ documentsRoute.get("/:documentId/source-url", async (c) => {
 	}
 });
 
+documentsRoute.get("/:documentId/download", async (c) => {
+	const authToken = bearerToken(c.req.header("Authorization"));
+	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
+
+	let input: v.InferOutput<typeof documentDownloadSchema>;
+	try {
+		input = v.parse(documentDownloadSchema, {
+			format: c.req.query("format"),
+		});
+	} catch (error) {
+		return c.json({ error: errorMessage(error) }, 400);
+	}
+
+	try {
+		const download = await createDocumentDownload({
+			authToken,
+			documentId: c.req.param("documentId") as Id<"documents">,
+			format: input.format,
+		});
+		c.header("Cache-Control", "no-store");
+		c.header("Content-Disposition", contentDisposition(download.filename));
+		c.header("Content-Type", download.contentType);
+		return c.body(download.content);
+	} catch (error) {
+		const message = errorMessage(error);
+		if (message.includes("Unauthenticated")) {
+			return c.json({ error: "Unauthenticated" }, 401);
+		}
+		if (message.includes("Document not found")) {
+			return c.json({ error: "Document not found" }, 404);
+		}
+		return c.json({ error: "Could not create Document download" }, 500);
+	}
+});
+
 documentsRoute.post("/:documentId/image-urls", async (c) => {
 	const authToken = bearerToken(c.req.header("Authorization"));
 	if (!authToken) return c.json({ error: "Unauthenticated" }, 401);
@@ -193,6 +233,34 @@ function bearerToken(authorizationHeader: string | undefined) {
 	}
 
 	return authorizationHeader.slice(prefix.length).trim() || null;
+}
+
+function contentDisposition(filename: string) {
+	return `attachment; filename="${quotedAsciiFilename(filename)}"; filename*=UTF-8''${encodeRfc5987Value(filename)}`;
+}
+
+function quotedAsciiFilename(filename: string) {
+	const fallback = stripControlCharacters(filename)
+		.replace(/[^\x20-\x7e]/g, "_")
+		.replace(/[\\/]/g, "_")
+		.replace(/"/g, '\\"');
+	return fallback || "download";
+}
+
+function stripControlCharacters(value: string) {
+	return Array.from(value)
+		.filter((char) => {
+			const code = char.charCodeAt(0);
+			return code >= 0x20 && code !== 0x7f;
+		})
+		.join("");
+}
+
+function encodeRfc5987Value(value: string) {
+	return encodeURIComponent(value).replace(
+		/['()*]/g,
+		(char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+	);
 }
 
 function errorMessage(error: unknown) {

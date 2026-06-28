@@ -6,6 +6,7 @@ import {
 	createConvexHttpClient,
 	readApiToConvexServiceSecret,
 } from "./convex";
+import { saveDocumentExports } from "./document-exports";
 import { submitMarkerProcessing } from "./marker";
 import {
 	adaptMarkerConversionResult,
@@ -29,6 +30,7 @@ import {
 	getBrowserPresignedReadUrl,
 	getObjectBytes,
 	getWorkerPresignedReadUrl,
+	imageContentType,
 	promoteTemporaryUpload,
 	saveObject,
 } from "./storage";
@@ -127,15 +129,19 @@ export async function acceptMarkerResult(input: {
 		}
 
 		const result = normalizeMarkerConversionResult(input.result);
-		const imageUrls = await saveMarkerImages(
-			input.documentId,
-			collectMarkerImages(result),
-		);
+		const markerImages = collectMarkerImages(result);
+		const imageUrls = await saveMarkerImages(input.documentId, markerImages);
 		const adapted = adaptMarkerConversionResult({ result, imageUrls });
 		const blocks = adapted.blocks.map((block) => ({
 			...block,
 			contentHtml: prepareBlockContentHtml(block.contentHtml),
 		}));
+		await saveDocumentExports({
+			documentId: input.documentId,
+			html: result.formats.html,
+			markdown: result.formats.markdown,
+			images: markerImages,
+		});
 		const pdfMetadata = await documentPdfMetadata({
 			blocks,
 			mimeType: metadata.mimeType,
@@ -372,15 +378,6 @@ async function saveMarkerImages(
 	}
 
 	return imageUrls;
-}
-
-function imageContentType(filename: string) {
-	const ext = filename.split(".").pop()?.toLowerCase();
-	if (ext === "png") return "image/png";
-	if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-	if (ext === "webp") return "image/webp";
-	if (ext === "gif") return "image/gif";
-	return "image/png";
 }
 
 function errorMessage(error: unknown) {

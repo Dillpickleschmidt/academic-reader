@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
 import type { SourceDocumentMimeType } from "@academic-reader/shared/uploads";
 import { AwsClient } from "aws4fetch";
 
@@ -134,12 +134,29 @@ export function documentImageUrl(documentId: string, filename: string) {
 	return `/api/documents/${encodeURIComponent(documentId)}/images/${encodeURIComponent(safeFilename(filename))}`;
 }
 
+export function documentMarkdownExportObjectKey(documentId: string) {
+	return `documents/${documentId}/exports/content.md`;
+}
+
+export function documentHtmlExportObjectKey(documentId: string) {
+	return `documents/${documentId}/exports/content.html`;
+}
+
 export function documentNarrationAudioObjectKey(
 	documentId: string,
 	voice: string,
 	blockId: string,
 ) {
 	return `documents/${documentId}/narration-audio/${safeFilename(voice)}/${Buffer.from(blockId).toString("base64url")}.wav`;
+}
+
+export function imageContentType(filename: string) {
+	const ext = filename.split(".").pop()?.toLowerCase();
+	if (ext === "png") return "image/png";
+	if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+	if (ext === "webp") return "image/webp";
+	if (ext === "gif") return "image/gif";
+	return "image/png";
 }
 
 function readStorageConfig() {

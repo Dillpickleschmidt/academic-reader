@@ -363,7 +363,7 @@ export function DebugStatsPanel(props: { blocks: Doc<"blocks">[] }) {
 	const stats = createMemo(() => blockDebugStats(props.blocks));
 
 	return (
-		<aside class="fixed bottom-4 left-4 z-30 max-w-sm rounded-2xl border border-primary/30 bg-background/90 p-3 text-xs text-foreground shadow-xl backdrop-blur">
+		<aside class="fixed bottom-4 left-4 z-30 max-w-sm rounded-2xl border border-primary/30 bg-background/90 p-3 text-xs text-foreground shadow-xl backdrop-blur lg:left-[19rem]">
 			<div class="font-semibold text-primary">Debug Overlay</div>
 			<div class="mt-2 grid grid-cols-2 gap-2">
 				<div>Blocks: {stats().total}</div>
@@ -695,12 +695,6 @@ function latestNarrationEventByBlockIdMap(
 
 function formatDuration(durationMs: number) {
 	return `${Math.round(durationMs / 100) / 10}s`;
-}
-
-export function debugToggleButtonClass(isActive: boolean) {
-	return isActive
-		? "rounded-full border border-primary bg-primary px-4 py-2 font-medium text-sm text-primary-foreground shadow-lg"
-		: "rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card";
 }
 
 function debugOverlayBoxClass(

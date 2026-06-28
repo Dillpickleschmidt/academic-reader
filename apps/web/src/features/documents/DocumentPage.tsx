@@ -1,6 +1,5 @@
 import { api } from "@academic-reader/convex/api";
 import type { Doc, Id } from "@academic-reader/convex/data-model";
-import { Link } from "@tanstack/solid-router";
 import { useQuery } from "convex-solidjs";
 import {
 	createEffect,
@@ -15,16 +14,19 @@ import { useConvexAuth } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
 import {
 	DebugStatsPanel,
-	debugToggleButtonClass,
 	readerBlockElementId,
 	scrollElementTopIntoNearestScroller,
 	sourceBlockElementId,
 } from "./DocumentDebug";
 import { DocumentProcessing } from "./DocumentProcessing";
 import { ReaderView } from "./DocumentReaderView";
+import { DocumentSidebar } from "./DocumentSidebar";
 import { type SourceAccess, SourceView } from "./DocumentSourceView";
-import { TableOfContentsDrawer } from "./DocumentTableOfContents";
-import { FullPageMessage } from "./document-page-ui";
+import {
+	type DocumentDownloadFormat,
+	downloadDocumentExport,
+} from "./document-download";
+import { errorMessage, FullPageMessage } from "./document-page-ui";
 
 export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	const session = authClient.useSession();
@@ -32,9 +34,12 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	const [activeMobileView, setActiveMobileView] = createSignal<
 		"source" | "reader"
 	>("source");
-	const [tableOfContentsOpen, setTableOfContentsOpen] = createSignal(false);
+	const [sidebarOpen, setSidebarOpen] = createSignal(false);
 	const [eventsOpen, setEventsOpen] = createSignal(false);
 	const [debugEnabled, setDebugEnabled] = createSignal(false);
+	const [downloadingFormat, setDownloadingFormat] =
+		createSignal<DocumentDownloadFormat>();
+	const [downloadError, setDownloadError] = createSignal<string>();
 	const [hoveredDebugBlockId, setHoveredDebugBlockId] = createSignal<string>();
 	const document = useQuery(
 		api.api.documents.get,
@@ -102,6 +107,10 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 		() => (convexAuth.isAuthenticated() ? props.documentId : undefined),
 		fetchSourceAccess,
 	);
+	const canDownload = createMemo(() => {
+		const status = document.data()?.processingStatus;
+		return status === "ready" || status === "readyWithWarnings";
+	});
 
 	createEffect(() => {
 		if (debugEnabled()) return;
@@ -116,6 +125,25 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 	function showBlockInReader(block: Doc<"blocks">) {
 		setActiveMobileView("reader");
 		scrollElementTopIntoNearestScroller(readerBlockElementId(block._id));
+	}
+
+	async function handleDownload(format: DocumentDownloadFormat) {
+		const loadedDocument = document.data();
+		if (!loadedDocument || downloadingFormat()) return;
+
+		setDownloadError(undefined);
+		setDownloadingFormat(format);
+		try {
+			await downloadDocumentExport({
+				documentId: props.documentId,
+				filename: loadedDocument.filename,
+				format,
+			});
+		} catch (downloadError) {
+			setDownloadError(errorMessage(downloadError));
+		} finally {
+			setDownloadingFormat(undefined);
+		}
 	}
 
 	return (
@@ -165,12 +193,13 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 							}
 						>
 							<div class="relative h-screen overflow-hidden">
-								<Link
-									class="fixed top-3 left-3 z-30 rounded-full border border-border bg-background/80 px-3 py-1.5 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card"
-									to="/"
+								<button
+									class="fixed top-3 left-3 z-30 rounded-full border border-border bg-background/80 px-3 py-1.5 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card lg:hidden"
+									type="button"
+									onClick={() => setSidebarOpen(true)}
 								>
-									←
-								</Link>
+									Menu
+								</button>
 
 								<div class="fixed top-3 left-1/2 z-30 grid -translate-x-1/2 grid-cols-2 rounded-full border border-border bg-background/80 p-1 text-sm shadow-lg backdrop-blur lg:hidden">
 									<button
@@ -193,7 +222,58 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 									</button>
 								</div>
 
-								<div class="grid h-full lg:grid-cols-2">
+								<Show when={sidebarOpen()}>
+									<div class="fixed inset-0 z-50 lg:hidden">
+										<button
+											aria-label="Close Sidebar"
+											class="absolute inset-0 bg-black/50"
+											type="button"
+											onClick={() => setSidebarOpen(false)}
+										/>
+										<DocumentSidebar
+											blocks={blocks.data()}
+											canDownload={canDownload()}
+											class="relative z-10 shadow-2xl shadow-black/50"
+											debugEnabled={debugEnabled()}
+											document={document.data()}
+											downloadError={downloadError()}
+											downloadingFormat={downloadingFormat()}
+											entries={tableOfContentsEntries.data()}
+											pages={pages.data()}
+											onClose={() => setSidebarOpen(false)}
+											onDownload={(format) => {
+												void handleDownload(format);
+												setSidebarOpen(false);
+											}}
+											onOpenEvents={() => {
+												setEventsOpen(true);
+												setSidebarOpen(false);
+											}}
+											onShowReaderBlock={showBlockInReader}
+											onToggleDebug={() => {
+												setDebugEnabled((enabled) => !enabled);
+												setSidebarOpen(false);
+											}}
+										/>
+									</div>
+								</Show>
+
+								<div class="grid h-full lg:grid-cols-[18rem_minmax(0,1fr)_minmax(0,1fr)]">
+									<DocumentSidebar
+										blocks={blocks.data()}
+										canDownload={canDownload()}
+										class="hidden lg:flex"
+										debugEnabled={debugEnabled()}
+										document={document.data()}
+										downloadError={downloadError()}
+										downloadingFormat={downloadingFormat()}
+										entries={tableOfContentsEntries.data()}
+										pages={pages.data()}
+										onDownload={(format) => void handleDownload(format)}
+										onOpenEvents={() => setEventsOpen(true)}
+										onShowReaderBlock={showBlockInReader}
+										onToggleDebug={() => setDebugEnabled((enabled) => !enabled)}
+									/>
 									<section class={paneClass(activeMobileView() === "source")}>
 										<SourceView
 											activeDebugBlockId={hoveredDebugBlockId()}
@@ -233,39 +313,6 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 										<DebugStatsPanel blocks={loadedBlocks()} />
 									)}
 								</Show>
-
-								<div class="fixed right-4 bottom-4 z-30 flex gap-2">
-									<button
-										class="rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card"
-										type="button"
-										onClick={() => setTableOfContentsOpen(true)}
-									>
-										TOC
-									</button>
-									<button
-										class={debugToggleButtonClass(debugEnabled())}
-										type="button"
-										onClick={() => setDebugEnabled((enabled) => !enabled)}
-									>
-										Debug
-									</button>
-									<button
-										class="rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card"
-										type="button"
-										onClick={() => setEventsOpen(true)}
-									>
-										Events
-									</button>
-								</div>
-
-								<TableOfContentsDrawer
-									blocks={blocks.data()}
-									entries={tableOfContentsEntries.data()}
-									open={tableOfContentsOpen()}
-									pages={pages.data()}
-									onClose={() => setTableOfContentsOpen(false)}
-									onShowReaderBlock={showBlockInReader}
-								/>
 
 								<EventsDrawer
 									documentId={props.documentId}
@@ -339,7 +386,7 @@ async function fetchSourceAccess(documentId: Id<"documents">) {
 }
 
 function paneClass(isActiveMobileView: boolean) {
-	return `${isActiveMobileView ? "block" : "hidden"} h-full min-h-0 lg:block`;
+	return `${isActiveMobileView ? "block" : "hidden"} h-full min-w-0 min-h-0 lg:block`;
 }
 
 function mobileViewButtonClass(isActive: boolean) {

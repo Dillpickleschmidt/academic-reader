@@ -1,14 +1,12 @@
 import type { Doc } from "@academic-reader/convex/data-model";
 import { createMemo, Index, Show } from "solid-js";
-import { EmptyPane, PaneSkeleton } from "./document-page-ui";
 import { createStableItems } from "./document-stable-list";
 
-export function TableOfContentsDrawer(props: {
-	open: boolean;
+export function TableOfContentsList(props: {
 	entries: Doc<"tableOfContentsEntries">[] | undefined;
 	pages: Doc<"pages">[] | undefined;
 	blocks: Doc<"blocks">[] | undefined;
-	onClose: () => void;
+	onNavigate?: () => void;
 	onShowReaderBlock: (block: Doc<"blocks">) => void;
 }) {
 	const entries = createStableItems(
@@ -74,82 +72,79 @@ export function TableOfContentsDrawer(props: {
 		const block = navigationBlockForEntry(entry);
 		if (!block) return;
 		props.onShowReaderBlock(block);
-		props.onClose();
+		props.onNavigate?.();
 	}
 
 	return (
-		<aside
-			class={`fixed inset-y-0 left-0 z-40 w-full max-w-md border-border border-r bg-background p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
-				props.open ? "translate-x-0" : "-translate-x-full"
-			}`}
-		>
-			<div class="flex items-center justify-between gap-4">
-				<h2 class="font-semibold text-lg">Table of Contents</h2>
-				<button
-					class="rounded-full border border-border px-3 py-1 text-foreground text-sm hover:bg-card"
-					type="button"
-					onClick={props.onClose}
+		<Show when={loadedContent()} fallback={<TableOfContentsLoading />}>
+			{(loaded) => (
+				<Show
+					when={loaded().entries.length > 0}
+					fallback={<TableOfContentsEmpty />}
 				>
-					Close
-				</button>
-			</div>
-			<div class="mt-4 h-[calc(100%-4rem)] overflow-y-auto">
-				<Show when={loadedContent()} fallback={<PaneSkeleton />}>
-					{(loaded) => (
-						<Show
-							when={loaded().entries.length > 0}
-							fallback={
-								<EmptyPane
-									title="No Table of Contents"
-									body="This Source Document did not provide outline entries."
-								/>
-							}
-						>
-							<div class="space-y-1">
-								<Index each={loaded().entries}>
-									{(entry) => {
-										const navigationBlock = () =>
-											navigationBlockForEntry(entry());
-										const isEnabled = () => navigationBlock() !== undefined;
-										const pageLabel = () => {
-											const target = entry().target;
-											return target
-												? pageLabelByPhysicalPageNumber()?.get(
-														target.physicalPageNumber,
-													)
-												: undefined;
-										};
+					<div class="space-y-1">
+						<Index each={loaded().entries}>
+							{(entry) => {
+								const navigationBlock = () => navigationBlockForEntry(entry());
+								const isEnabled = () => navigationBlock() !== undefined;
+								const pageLabel = () => {
+									const target = entry().target;
+									return target
+										? pageLabelByPhysicalPageNumber()?.get(
+												target.physicalPageNumber,
+											)
+										: undefined;
+								};
 
-										return (
-											<button
-												class={tableOfContentsEntryClass(isEnabled())}
-												disabled={!isEnabled()}
-												style={{
-													"padding-left": `${0.75 + entry().depth * 0.75}rem`,
-												}}
-												type="button"
-												onClick={() => showEntry(entry())}
-											>
-												<span class="block truncate text-left">
-													{entry().title}
-												</span>
-												<span class="mt-0.5 block text-left text-[11px] text-muted-foreground">
-													{tableOfContentsEntrySubtitle(
-														entry().target,
-														pageLabel(),
-														isEnabled(),
-													)}
-												</span>
-											</button>
-										);
-									}}
-								</Index>
-							</div>
-						</Show>
-					)}
+								return (
+									<button
+										class={tableOfContentsEntryClass(isEnabled())}
+										disabled={!isEnabled()}
+										style={{
+											"padding-left": `${0.75 + entry().depth * 0.75}rem`,
+										}}
+										type="button"
+										onClick={() => showEntry(entry())}
+									>
+										<span class="block truncate text-left">
+											{entry().title}
+										</span>
+										<span class="mt-0.5 block text-left text-[11px] text-muted-foreground">
+											{tableOfContentsEntrySubtitle(
+												entry().target,
+												pageLabel(),
+												isEnabled(),
+											)}
+										</span>
+									</button>
+								);
+							}}
+						</Index>
+					</div>
 				</Show>
-			</div>
-		</aside>
+			)}
+		</Show>
+	);
+}
+
+function TableOfContentsLoading() {
+	return (
+		<div class="space-y-2 p-2">
+			<div class="h-12 animate-pulse rounded-xl bg-muted" />
+			<div class="h-12 animate-pulse rounded-xl bg-muted/70" />
+			<div class="h-12 animate-pulse rounded-xl bg-muted/50" />
+		</div>
+	);
+}
+
+function TableOfContentsEmpty() {
+	return (
+		<div class="rounded-xl border border-border bg-card/50 p-4 text-sm">
+			<div class="font-medium text-foreground">No Table of Contents</div>
+			<p class="mt-1 text-muted-foreground">
+				This Source Document did not provide outline entries.
+			</p>
+		</div>
 	);
 }
 

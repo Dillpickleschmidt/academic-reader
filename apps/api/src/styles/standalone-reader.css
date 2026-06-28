@@ -1,0 +1,127 @@
+body {
+	margin: 0;
+	background: #faf9f6;
+	color: #24211f;
+}
+
+.reader-output {
+	min-height: 100vh;
+	background: #faf9f6;
+	color: #24211f;
+}
+
+.reader-view {
+	box-sizing: border-box;
+	max-width: 850px;
+	margin: 0 auto;
+	padding: 3rem 1.5rem;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 20px;
+	line-height: 1.65;
+}
+
+.reader-view * {
+	box-sizing: border-box;
+}
+
+.reader-view article + article {
+	margin-top: 1.25rem;
+}
+
+.reader-view :is(h1, h2, h3, h4, h5, h6) {
+	margin: 1.5rem 0 0.75rem;
+	font-family: "Source Sans 3", "Source Sans Pro", Arial, sans-serif;
+	font-weight: 650;
+	line-height: 1.2;
+	color: #1f1d1b;
+}
+
+.reader-view h1 {
+	font-size: 1.875rem;
+}
+
+.reader-view h2 {
+	font-size: 1.5rem;
+	color: #5b8a5a;
+}
+
+.reader-view h3 {
+	font-size: 1.25rem;
+}
+
+.reader-view :is(p, ul, ol, blockquote, figure, table, pre) {
+	margin: 0.85rem 0;
+}
+
+.reader-view p {
+	line-height: 1.75;
+}
+
+.reader-view :is(ul, ol) {
+	padding-left: 1.5rem;
+}
+
+.reader-view img {
+	display: block;
+	max-width: 100%;
+	height: auto;
+	margin: 1.5rem auto;
+	border-radius: 0.75rem;
+}
+
+.reader-view table {
+	display: block;
+	max-width: 100%;
+	overflow-x: auto;
+	border-collapse: collapse;
+	color: #4f4a45;
+}
+
+.reader-view :is(th, td) {
+	border: 1px solid #ddd7ce;
+	padding: 0.5rem 0.75rem;
+}
+
+.reader-view blockquote {
+	border-left: 4px solid #d8d0c4;
+	margin-left: 0;
+	padding-left: 1rem;
+	color: #5d5750;
+}
+
+.reader-view code {
+	border-radius: 0.25rem;
+	background: #eee8dd;
+	padding: 0.15rem 0.3rem;
+	font-family: "SF Mono", "Fira Code", Consolas, monospace;
+	font-size: 0.9em;
+}
+
+.reader-view pre {
+	overflow-x: auto;
+	border-radius: 0.75rem;
+	background: #eee8dd;
+	padding: 1rem;
+}
+
+.reader-view a {
+	color: #4f7f52;
+	text-decoration: none;
+}
+
+.reader-view a:hover {
+	text-decoration: underline;
+}
+
+.reader-view .inline-citation {
+	border-radius: 0.25rem;
+	background: #eee8dd;
+	padding: 0.05rem 0.25rem;
+	color: #5d5750;
+	font-size: 0.85em;
+}
+
+.katex-display {
+	overflow-x: auto;
+	overflow-y: hidden;
+}
