@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -8,29 +8,32 @@ const rootEnvExamplePath = resolve(root, ".env.local.example");
 const convexEnvPath = resolve(root, "packages/convex/.env.local");
 const shouldSyncConvex = !process.argv.includes("--no-sync");
 
+removeStaleAnonymousConvexConfig();
+
 const rootEnv = parseEnvFile(rootEnvPath);
-const convexEnv = parseEnvFile(convexEnvPath);
 const nextEnv = {
 	...rootEnv,
 	SITE_URL: rootEnv.SITE_URL ?? "http://localhost:5173",
-	CONVEX_URL: firstValidUrl(
-		rootEnv.CONVEX_URL,
-		convexEnv.CONVEX_URL,
-		convexEnv.VITE_CONVEX_URL,
-		"http://localhost:3210",
-	),
+	CONVEX_URL: firstValidUrl(rootEnv.CONVEX_URL, "http://localhost:3210"),
 	VITE_CONVEX_URL: firstValidUrl(
 		rootEnv.VITE_CONVEX_URL,
-		convexEnv.VITE_CONVEX_URL,
-		convexEnv.CONVEX_URL,
+		rootEnv.CONVEX_URL,
 		"http://localhost:3210",
 	),
 	VITE_CONVEX_SITE_URL: firstValidUrl(
 		rootEnv.VITE_CONVEX_SITE_URL,
-		convexEnv.VITE_CONVEX_SITE_URL,
-		convexEnv.CONVEX_SITE_URL,
 		"http://localhost:3211",
 	),
+	CONVEX_INSTANCE_NAME: rootEnv.CONVEX_INSTANCE_NAME ?? "academic-reader",
+	CONVEX_INSTANCE_SECRET:
+		rootEnv.CONVEX_INSTANCE_SECRET ?? randomBytes(32).toString("hex"),
+	CONVEX_SELF_HOSTED_URL: firstValidUrl(
+		rootEnv.CONVEX_SELF_HOSTED_URL,
+		rootEnv.CONVEX_URL,
+		"http://localhost:3210",
+	),
+	CONVEX_SELF_HOSTED_ADMIN_KEY:
+		rootEnv.CONVEX_SELF_HOSTED_ADMIN_KEY ?? (await readConvexAdminKey()),
 	STORAGE_BACKEND: rootEnv.STORAGE_BACKEND ?? "minio",
 	S3_API_ENDPOINT: rootEnv.S3_API_ENDPOINT ?? "http://localhost:9000",
 	S3_PRESIGNED_URL_ENDPOINT:
@@ -61,7 +64,6 @@ const nextEnv = {
 		rootEnv.BETTER_AUTH_SECRET ?? randomBytes(32).toString("hex"),
 	API_TO_CONVEX_SERVICE_SECRET:
 		rootEnv.API_TO_CONVEX_SERVICE_SECRET ?? randomBytes(32).toString("hex"),
-	CONVEX_DEPLOYMENT: convexEnv.CONVEX_DEPLOYMENT,
 	GOOGLE_CLIENT_ID: rootEnv.GOOGLE_CLIENT_ID,
 	GOOGLE_CLIENT_SECRET: rootEnv.GOOGLE_CLIENT_SECRET,
 };
@@ -71,6 +73,49 @@ console.log("[setup-dev] Wrote .env.local");
 
 if (shouldSyncConvex) {
 	await syncConvexEnv(nextEnv);
+}
+
+/* The Convex CLI reads packages/convex/.env.local; a leftover anonymous-mode
+   CONVEX_DEPLOYMENT there conflicts with CONVEX_SELF_HOSTED_URL. */
+function removeStaleAnonymousConvexConfig() {
+	if (!existsSync(convexEnvPath)) return;
+	if (!parseEnvFile(convexEnvPath).CONVEX_DEPLOYMENT?.startsWith("anonymous")) {
+		return;
+	}
+	rmSync(convexEnvPath);
+	console.log(
+		"[setup-dev] Removed stale anonymous Convex config (packages/convex/.env.local)",
+	);
+}
+
+/* The admin key is derived from the instance name and secret by the backend
+   container; this only works once the compose service is up, so the --no-sync
+   pre-docker run leaves it unset and the post-up run fills it in. */
+async function readConvexAdminKey() {
+	const proc = Bun.spawn(
+		[
+			"docker",
+			"compose",
+			"--env-file",
+			".env.local",
+			"exec",
+			"-T",
+			"convex",
+			"./generate_admin_key.sh",
+		],
+		{ cwd: root, stdout: "pipe", stderr: "pipe" },
+	);
+	const output = await new Response(proc.stdout).text();
+	await proc.exited;
+	if (proc.exitCode !== 0) return undefined;
+
+	const key = output
+		.split("\n")
+		.map((line) => line.trim())
+		.filter((line) => line.includes("|"))
+		.pop();
+	if (key) console.log("[setup-dev] Generated Convex admin key");
+	return key;
 }
 
 function parseEnvFile(path: string) {
@@ -116,6 +161,13 @@ function renderEnv(env: Record<string, string | undefined>) {
 }
 
 async function syncConvexEnv(env: Record<string, string | undefined>) {
+	if (!env.CONVEX_SELF_HOSTED_ADMIN_KEY) {
+		console.log(
+			"[setup-dev] Convex env sync skipped (backend not running, no admin key)",
+		);
+		return;
+	}
+
 	const keys = [
 		"SITE_URL",
 		"BETTER_AUTH_SECRET",
@@ -128,9 +180,16 @@ async function syncConvexEnv(env: Record<string, string | undefined>) {
 		const value = env[key];
 		if (!value) continue;
 
+		const cliEnv: Record<string, string | undefined> = {
+			...process.env,
+			CONVEX_SELF_HOSTED_URL: env.CONVEX_SELF_HOSTED_URL,
+			CONVEX_SELF_HOSTED_ADMIN_KEY: env.CONVEX_SELF_HOSTED_ADMIN_KEY,
+		};
+		delete cliEnv.CONVEX_DEPLOYMENT;
+
 		const proc = Bun.spawn(["bunx", "convex", "env", "set", key, value], {
 			cwd: convexCwd,
-			env: { ...process.env, ...env, CONVEX_AGENT_MODE: "anonymous" },
+			env: cliEnv,
 			stdout: "pipe",
 			stderr: "pipe",
 		});

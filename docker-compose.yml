@@ -1,4 +1,22 @@
 services:
+  convex:
+    image: ghcr.io/get-convex/convex-backend:latest
+    network_mode: host
+    environment:
+      INSTANCE_NAME: ${CONVEX_INSTANCE_NAME}
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET}
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_URL}
+      CONVEX_SITE_ORIGIN: ${VITE_CONVEX_SITE_URL}
+      DO_NOT_REQUIRE_SSL: "true"
+      DISABLE_BEACON: "true"
+    volumes:
+      - ./convex-data:/convex/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3210/version"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"

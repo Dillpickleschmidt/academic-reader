@@ -3,23 +3,26 @@ import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const rootEnvPath = resolve(root, ".env.local");
-const convexEnvPath = resolve(root, "packages/convex/.env.local");
 const children: Bun.Subprocess[] = [];
 
-process.on("SIGINT", stopChildren);
-process.on("SIGTERM", stopChildren);
+// A CONVEX_DEPLOYMENT inherited from the shell (or a pre-self-hosted
+// .env.local auto-loaded by bun) makes the Convex CLI refuse to start.
+delete process.env.CONVEX_DEPLOYMENT;
+
+process.on("SIGINT", () => void stopChildren(130));
+process.on("SIGTERM", () => void stopChildren(143));
 
 try {
 	await main();
 } catch (error) {
-	stopChildren();
+	await stopChildren();
 	throw error;
 }
 
 async function main() {
 	await run("setup", "bun", ["scripts/setup-dev.ts", "--no-sync"], root);
 	const rootEnv = parseEnvFile(rootEnvPath);
-	const services = ["minio"];
+	const services = ["minio", "convex"];
 	if (rootEnv.CONVERSION_BACKEND === "local") services.push("marker");
 	if (rootEnv.TTS_BACKEND === "local") {
 		services.push("kokoro-tts", "qwen3-tts");
@@ -30,6 +33,7 @@ async function main() {
 		["compose", "--env-file", ".env.local", "up", "-d", ...services],
 		root,
 	);
+	await waitForHttp("convex", "http://localhost:3210/version", 60_000);
 	if (rootEnv.CONVERSION_BACKEND === "local") {
 		await waitForHttp("marker", "http://localhost:8800/health", 120_000);
 	}
@@ -63,6 +67,10 @@ async function main() {
 		}
 	}
 
+	// Now that the backend is up, the full setup run can generate the Convex
+	// admin key and sync deployment env vars before the function watcher starts.
+	await run("setup", "bun", ["scripts/setup-dev.ts"], root);
+
 	const convexReady = deferred<void>();
 	const convex = spawn("convex", "bun", ["run", "dev:convex"], root, (text) => {
 		if (text.includes("Convex functions ready!")) convexReady.resolve();
@@ -74,8 +82,6 @@ async function main() {
 			throw new Error(`Convex exited before becoming ready (${code})`);
 		}),
 	]);
-	await waitForConvexEnv();
-	await run("setup", "bun", ["scripts/setup-dev.ts"], root);
 
 	const apiEnv: Record<string, string> = {};
 	if (rootEnv.CONVERSION_BACKEND === "modal") {
@@ -102,7 +108,7 @@ async function main() {
 	spawn("web", "bun", ["run", "dev"], resolve(root, "apps/web"));
 
 	const exitCode = await Promise.race(children.map((child) => child.exited));
-	stopChildren();
+	await stopChildren();
 	process.exit(exitCode ?? 0);
 }
 
@@ -237,16 +243,6 @@ function prefix(label: string) {
 	return `${colors[label] ?? ""}${label.padEnd(7)}${reset}`;
 }
 
-async function waitForConvexEnv() {
-	while (true) {
-		const env = parseEnvFile(convexEnvPath);
-		if (env.CONVEX_DEPLOYMENT && (env.CONVEX_URL || env.VITE_CONVEX_URL)) {
-			return;
-		}
-		await sleep(250);
-	}
-}
-
 function parseEnvFile(path: string) {
 	if (!existsSync(path)) return {} as Record<string, string>;
 
@@ -282,10 +278,15 @@ function sleep(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function stopChildren() {
+async function stopChildren(exitCode?: number) {
 	for (const child of children) {
 		child.kill();
 	}
+	await Promise.race([
+		Promise.allSettled(children.map((child) => child.exited)),
+		sleep(5_000),
+	]);
+	if (exitCode !== undefined) process.exit(exitCode);
 }
 
 function deferred<T>() {
