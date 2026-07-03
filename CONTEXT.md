@@ -44,6 +44,10 @@ _Avoid_: chunk, node, segment
 The visible role of a Block in the Source Document, such as paragraph, heading, table, figure, equation, caption, list item, or unknown.
 _Avoid_: raw label, provider type
 
+**Equation Explanation**:
+A reader-facing explanation attached to an equation Block that teaches how the equation works in the context of the Document and serves as the narratable form of standalone equations.
+_Avoid_: math step, equation narration, inline math explanation
+
 **Source Geometry**:
 The location and shape of a Block on a Page.
 _Avoid_: bbox, coordinates
@@ -111,6 +115,10 @@ _Avoid_: segment seek, TTS seek, timestamp jump
 **Chat**:
 A conversation with an AI model from inside the Document page.
 
+**Codex Connection**:
+A Reader's authorization for Academic Reader to use Codex subscription-backed model calls from that Reader's Codex subscription.
+_Avoid_: OpenAI API key, ChatGPT login, model settings
+
 **Cross-view Link**:
 A direct relationship between the same Block in the Source View and Reader View.
 _Avoid_: inferred match, fuzzy match
@@ -120,7 +128,7 @@ The document-understanding model chosen to turn a Source Document into Blocks an
 _Avoid_: processing mode, backend
 
 **Processing Configuration**:
-The reader's choices for a Processing Run, such as Conversion Model, page range, OCR behavior, and narration voice.
+The reader's choices for a Processing Run, such as Conversion Model, page range, OCR behavior, narration voice, and whether to generate Equation Explanations.
 _Avoid_: settings, options, preferences
 
 **Configuration Preference**:

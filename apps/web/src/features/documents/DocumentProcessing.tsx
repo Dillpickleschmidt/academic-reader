@@ -7,8 +7,15 @@ import {
 	type ProcessingPhaseSummary,
 	readerViewReady,
 } from "@academic-reader/shared/processing-phases";
-import { useQuery } from "convex-solidjs";
+import Check from "lucide-solid/icons/check";
+import CircleAlert from "lucide-solid/icons/circle-alert";
+import Dot from "lucide-solid/icons/dot";
+import X from "lucide-solid/icons/x";
 import { createMemo, createSignal, For, Show } from "solid-js";
+import { Dynamic } from "solid-js/web";
+import { Progress } from "~/components/ui/progress";
+import { Skeleton } from "~/components/ui/skeleton";
+import { useQuery } from "../../lib/convex-query";
 import { useConvexAuth } from "../../providers/convex";
 import { ProcessingEventsList } from "./ProcessingEventsList";
 
@@ -45,6 +52,18 @@ export function DocumentProcessing(props: {
 		return phases;
 	});
 
+	const readingDefinitions = createMemo(() =>
+		visiblePhaseDefinitions().filter((definition) => !definition.narration),
+	);
+	const narrationDefinitions = createMemo(() =>
+		visiblePhaseDefinitions().filter((definition) => definition.narration),
+	);
+	const narrationReady = createMemo(() => {
+		const last = narrationDefinitions().at(-1);
+		const status = last ? phaseMap().get(last.id)?.status : undefined;
+		return status === "done" || status === "warning";
+	});
+
 	const [picked, setPicked] = createSignal<ProcessingPhaseId>();
 	const selected = createMemo<ProcessingPhaseSummary | undefined>(() => {
 		const list = visiblePhases();
@@ -65,7 +84,7 @@ export function DocumentProcessing(props: {
 			class={
 				props.bare
 					? "mt-3"
-					: "mt-4 rounded-xl border border-border bg-background p-4"
+					: "mt-4 rounded-md border border-border bg-background p-4"
 			}
 		>
 			<Show when={summary.error()}>
@@ -74,37 +93,35 @@ export function DocumentProcessing(props: {
 
 			<Show
 				when={summary.data()}
-				fallback={<div class="h-10 animate-pulse rounded-lg bg-muted" />}
+				fallback={
+					<ProcessingSkeleton narrationEnabled={props.narrationEnabled} />
+				}
 			>
 				{(progressSummary) => (
 					<>
-						<div class="flex flex-wrap items-center gap-x-1 gap-y-2">
-							<For each={visiblePhaseDefinitions()}>
-								{(definition, index) => {
-									const phase = () => phaseMap().get(definition.id);
-									return (
-										<Show when={phase()}>
-											{(phase) => (
-												<>
-													<Show when={phase().narration && index() > 0}>
-														<span class="px-0.5 text-dim text-xs">→</span>
-													</Show>
-													<PhaseButton
-														phase={phase()}
-														selected={selected()?.id === phase().id}
-														onSelect={() => setPicked(phase().id)}
-													/>
-													<Show when={phase().id === "conversion"}>
-														<ReadableMarker
-															ready={readerViewReady(props.processingStatus)}
-														/>
-													</Show>
-												</>
-											)}
-										</Show>
-									);
-								}}
-							</For>
+						<div class="flex flex-col gap-y-2">
+							<PhaseTrack
+								definitions={readingDefinitions()}
+								label={props.narrationEnabled ? "Reading" : undefined}
+								milestoneLabel="Reader View ready"
+								milestoneReady={readerViewReady(props.processingStatus)}
+								milestoneTitle="The Reader View opens as soon as conversion finishes."
+								phaseMap={phaseMap()}
+								selectedId={selected()?.id}
+								onSelect={setPicked}
+							/>
+							<Show when={props.narrationEnabled}>
+								<PhaseTrack
+									definitions={narrationDefinitions()}
+									label="Narration"
+									milestoneLabel="Narration ready"
+									milestoneReady={narrationReady()}
+									milestoneTitle="Narration plays in the Reader View once audio finishes; reading works before then."
+									phaseMap={phaseMap()}
+									selectedId={selected()?.id}
+									onSelect={setPicked}
+								/>
+							</Show>
 						</div>
 
 						<Show when={selected()}>
@@ -118,6 +135,53 @@ export function DocumentProcessing(props: {
 					</>
 				)}
 			</Show>
+		</div>
+	);
+}
+
+function ProcessingSkeleton(props: { narrationEnabled: boolean }) {
+	return (
+		<>
+			<div class="flex flex-col gap-y-2">
+				<ProcessingTrackSkeleton labeled={props.narrationEnabled} />
+				<Show when={props.narrationEnabled}>
+					<ProcessingTrackSkeleton labeled />
+				</Show>
+			</div>
+			<div class="mt-4 border-border border-t pt-3">
+				<div class="flex items-baseline justify-between gap-3">
+					<div class="flex h-5 items-center">
+						<Skeleton class="h-3 w-28" />
+					</div>
+					<div class="flex h-4 items-center">
+						<Skeleton class="h-2.5 w-16" />
+					</div>
+				</div>
+				<div class="mt-3 flex h-5 items-center">
+					<Skeleton class="h-3 w-3/5" />
+				</div>
+			</div>
+			<div class="mt-4 flex h-4 items-center">
+				<Skeleton class="h-2.5 w-40" />
+			</div>
+		</>
+	);
+}
+
+function ProcessingTrackSkeleton(props: { labeled: boolean }) {
+	return (
+		<div class="flex items-start gap-1">
+			<Show when={props.labeled}>
+				<div class="flex h-6 w-20 shrink-0 items-center">
+					<Skeleton class="h-2.5 w-12" />
+				</div>
+			</Show>
+			<div class="flex h-6 min-w-0 flex-1 items-center gap-2">
+				<Skeleton class="h-3.5 w-16" />
+				<Skeleton class="h-3.5 w-20" />
+				<Skeleton class="h-3.5 w-14" />
+				<Skeleton class="h-3.5 w-28" />
+			</div>
 		</div>
 	);
 }
@@ -167,6 +231,7 @@ function ProcessingEventsQuery(props: { documentId: Id<"documents"> }) {
 }
 
 function PhaseButton(props: {
+	name: string;
 	phase: ProcessingPhaseSummary;
 	selected: boolean;
 	onSelect: () => void;
@@ -175,39 +240,99 @@ function PhaseButton(props: {
 		<button
 			type="button"
 			onClick={props.onSelect}
-			class="rounded px-1.5 py-0.5 text-sm"
+			class="inline-flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-sm transition-colors"
 			classList={{
-				"font-semibold": props.selected,
-				"text-foreground underline decoration-foreground/40 underline-offset-4":
-					props.phase.status === "active",
+				"bg-muted": props.selected,
+				"font-medium text-foreground": props.phase.status === "active",
 				"text-muted-foreground": props.phase.status === "done",
 				"text-dim": props.phase.status === "pending",
-				"text-primary": props.phase.status === "warning",
+				"text-warning": props.phase.status === "warning",
 				"text-destructive": props.phase.status === "failed",
 			}}
 		>
-			<span class="mr-1 font-mono text-xs">
-				{statusGlyph(props.phase.status)}
-			</span>
-			{props.phase.name}
+			<Show
+				when={props.phase.status === "active"}
+				fallback={
+					<Dynamic
+						class="size-3.5 shrink-0"
+						component={statusIcon(props.phase.status)}
+					/>
+				}
+			>
+				<span class="size-1.5 shrink-0 animate-pulse rounded-full bg-primary" />
+			</Show>
+			{props.name}
 		</button>
 	);
 }
 
-function ReadableMarker(props: { ready: boolean }) {
+function PhaseTrack(props: {
+	definitions: readonly (typeof PROCESSING_PHASES)[number][];
+	label: string | undefined;
+	milestoneLabel: string;
+	milestoneReady: boolean;
+	milestoneTitle: string;
+	phaseMap: Map<ProcessingPhaseId, ProcessingPhaseSummary>;
+	selectedId: ProcessingPhaseId | undefined;
+	onSelect: (id: ProcessingPhaseId) => void;
+}) {
 	return (
-		<span
-			class="ml-1 inline-flex items-center gap-1.5 px-1.5 text-xs"
-			classList={{ "text-primary": props.ready, "text-dim": !props.ready }}
-			title="The Reader View becomes available here; narration continues in the background."
-		>
-			<span
-				class="size-1.5 rounded-full"
-				classList={{ "bg-primary": props.ready, "bg-dim": !props.ready }}
-			/>
-			Reader View ready
-		</span>
+		<div class="flex items-start gap-1">
+			<Show when={props.label}>
+				<span class="w-20 shrink-0 pt-1 text-dim text-xs">{props.label}</span>
+			</Show>
+			<div class="flex min-w-0 flex-wrap items-center gap-x-1 gap-y-1">
+				<For each={props.definitions}>
+					{(definition, index) => (
+						<Show when={props.phaseMap.get(definition.id)}>
+							{(phase) => (
+								<>
+									<Show when={index() > 0}>
+										<TrackArrow />
+									</Show>
+									<PhaseButton
+										name={trackPhaseName(phase().name, props.label)}
+										phase={phase()}
+										selected={props.selectedId === phase().id}
+										onSelect={() => props.onSelect(phase().id)}
+									/>
+								</>
+							)}
+						</Show>
+					)}
+				</For>
+				<TrackArrow />
+				<span
+					class="inline-flex items-center gap-1.5 px-1.5 text-xs"
+					classList={{
+						"text-primary": props.milestoneReady,
+						"text-dim": !props.milestoneReady,
+					}}
+					title={props.milestoneTitle}
+				>
+					<span
+						class="size-1.5 rounded-full"
+						classList={{
+							"bg-primary": props.milestoneReady,
+							"bg-dim": !props.milestoneReady,
+						}}
+					/>
+					{props.milestoneLabel}
+				</span>
+			</div>
+		</div>
 	);
+}
+
+/* Inside a labeled track the phase-name prefix is redundant: the "Narration"
+   row shows "Candidates", not "Narration Candidates". Details keep full names. */
+function trackPhaseName(name: string, trackLabel: string | undefined) {
+	if (!trackLabel || !name.startsWith(`${trackLabel} `)) return name;
+	return name.slice(trackLabel.length + 1);
+}
+
+function TrackArrow() {
+	return <span class="px-0.5 text-dim text-xs">→</span>;
 }
 
 function PhaseDetail(props: { phase: ProcessingPhaseSummary }) {
@@ -235,7 +360,7 @@ function PhaseDetail(props: { phase: ProcessingPhaseSummary }) {
 						class="mt-3 text-sm"
 						classList={{
 							"text-destructive": event().severity === "error",
-							"text-primary": event().severity === "warning",
+							"text-warning": event().severity === "warning",
 							"text-muted-foreground": event().severity === "info",
 						}}
 					>
@@ -248,36 +373,25 @@ function PhaseDetail(props: { phase: ProcessingPhaseSummary }) {
 }
 
 function ProgressBar(props: { phase: ProcessingPhaseSummary }) {
-	const percent = () => progressPercent(props.phase);
 	return (
-		<div class="mt-3">
-			<div class="flex items-center justify-between text-dim text-xs">
-				<span>{props.phase.progress?.label ?? ""}</span>
-				<span class="font-mono">{progressLabel(props.phase)}</span>
-			</div>
-			<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-				<Show
-					when={!props.phase.indeterminate}
-					fallback={
-						<div class="h-full w-1/3 animate-pulse rounded-full bg-muted-foreground" />
-					}
-				>
-					<div
-						class="h-full rounded-full bg-primary transition-[width] duration-500"
-						style={{ width: `${percent()}%` }}
-					/>
-				</Show>
-			</div>
-		</div>
+		<Progress
+			aria-label={`${props.phase.name} progress`}
+			class="mt-3"
+			getValueLabel={() => progressLabel(props.phase)}
+			indeterminate={props.phase.indeterminate}
+			label={props.phase.progress?.label}
+			maxValue={100}
+			showValue
+			value={progressPercent(props.phase)}
+		/>
 	);
 }
 
-function statusGlyph(status: PhaseStatus): string {
-	if (status === "done") return "✓";
-	if (status === "failed") return "✕";
-	if (status === "warning") return "!";
-	if (status === "active") return "▸";
-	return "·";
+function statusIcon(status: PhaseStatus) {
+	if (status === "done") return Check;
+	if (status === "failed") return X;
+	if (status === "warning") return CircleAlert;
+	return Dot;
 }
 
 function statusLabel(status: PhaseStatus): string {

@@ -1,5 +1,6 @@
 import type { Doc } from "@academic-reader/convex/data-model";
 import { createMemo, Index, Show } from "solid-js";
+import { Skeleton } from "~/components/ui/skeleton";
 import { createStableItems } from "./document-stable-list";
 
 export function TableOfContentsList(props: {
@@ -129,17 +130,28 @@ export function TableOfContentsList(props: {
 
 function TableOfContentsLoading() {
 	return (
-		<div class="space-y-2 p-2">
-			<div class="h-12 animate-pulse rounded-xl bg-muted" />
-			<div class="h-12 animate-pulse rounded-xl bg-muted/70" />
-			<div class="h-12 animate-pulse rounded-xl bg-muted/50" />
+		<div class="space-y-1">
+			{[
+				{ class: "pl-3", titleWidth: "w-3/4" },
+				{ class: "pl-6 opacity-75", titleWidth: "w-1/2" },
+				{ class: "pl-6 opacity-50", titleWidth: "w-3/5" },
+			].map((row) => (
+				<div class={`py-2 pr-3 ${row.class}`}>
+					<div class="flex h-5 items-center">
+						<Skeleton class={`h-3 ${row.titleWidth}`} />
+					</div>
+					<div class="mt-0.5 flex h-5 items-center">
+						<Skeleton class="h-2.5 w-14" />
+					</div>
+				</div>
+			))}
 		</div>
 	);
 }
 
 function TableOfContentsEmpty() {
 	return (
-		<div class="rounded-xl border border-border bg-card/50 p-4 text-sm">
+		<div class="rounded-sm border border-border bg-card p-4 text-sm">
 			<div class="font-medium text-foreground">No Table of Contents</div>
 			<p class="mt-1 text-muted-foreground">
 				This Source Document did not provide outline entries.
@@ -179,8 +191,8 @@ function sameTableOfContentsTarget(
 
 function tableOfContentsEntryClass(isEnabled: boolean) {
 	return isEnabled
-		? "block w-full rounded-xl py-2 pr-3 text-sm text-foreground hover:bg-card"
-		: "block w-full cursor-default rounded-xl py-2 pr-3 text-sm text-dim";
+		? "block w-full rounded-sm py-2 pr-3 text-foreground text-sm transition-colors hover:bg-muted"
+		: "block w-full cursor-default rounded-sm py-2 pr-3 text-dim text-sm";
 }
 
 function tableOfContentsEntrySubtitle(

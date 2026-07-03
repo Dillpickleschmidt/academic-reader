@@ -24,13 +24,27 @@ export const COLOR_THEMES = [
 	},
 ] as const;
 
-type ColorTheme = (typeof COLOR_THEMES)[number]["id"];
+export const COLOR_MODES = [
+	{ id: "auto", name: "Auto" },
+	{ id: "light", name: "Light" },
+	{ id: "dark", name: "Dark" },
+] as const;
 
-const STORAGE_KEY = "color-theme";
+type ColorTheme = (typeof COLOR_THEMES)[number]["id"];
+export type ColorMode = (typeof COLOR_MODES)[number]["id"];
+export type ResolvedColorMode = "light" | "dark";
+
+const THEME_STORAGE_KEY = "color-theme";
+const MODE_STORAGE_KEY = "color-mode";
 const DEFAULT_THEME: ColorTheme = "default";
+const DEFAULT_MODE: ColorMode = "auto";
 
 export function useColorTheme() {
 	return [theme, setTheme] as const;
+}
+
+export function useColorMode() {
+	return { mode, setMode, resolvedMode } as const;
 }
 
 const validThemes = new Set<string>(COLOR_THEMES.map((t) => t.id));
@@ -38,22 +52,59 @@ const validThemes = new Set<string>(COLOR_THEMES.map((t) => t.id));
 function readStoredTheme(): ColorTheme {
 	if (typeof window === "undefined") return DEFAULT_THEME;
 	try {
-		const saved = localStorage.getItem(STORAGE_KEY);
+		const saved = localStorage.getItem(THEME_STORAGE_KEY);
 		if (saved && validThemes.has(saved)) return saved as ColorTheme;
 	} catch {}
 	return DEFAULT_THEME;
 }
 
-const { theme, setTheme } = createRoot(() => {
-	const [value, setValue] = createSignal<ColorTheme>(readStoredTheme());
+function readStoredMode(): ColorMode {
+	if (typeof window === "undefined") return DEFAULT_MODE;
+	try {
+		const saved = localStorage.getItem(MODE_STORAGE_KEY);
+		if (saved === "light" || saved === "dark") return saved;
+	} catch {}
+	return DEFAULT_MODE;
+}
+
+const { theme, setTheme, mode, setMode, resolvedMode } = createRoot(() => {
+	const [theme, setTheme] = createSignal<ColorTheme>(readStoredTheme());
+	const [mode, setMode] = createSignal<ColorMode>(readStoredMode());
+	const [prefersLight, setPrefersLight] = createSignal(
+		typeof window !== "undefined" &&
+			window.matchMedia("(prefers-color-scheme: light)").matches,
+	);
+
+	if (typeof window !== "undefined") {
+		window
+			.matchMedia("(prefers-color-scheme: light)")
+			.addEventListener("change", (event) => setPrefersLight(event.matches));
+	}
+
+	const resolvedMode = (): ResolvedColorMode => {
+		const current = mode();
+		if (current !== "auto") return current;
+		return prefersLight() ? "light" : "dark";
+	};
+
 	createEffect(() => {
-		const next = value();
+		const next = theme();
 		if (typeof document !== "undefined") {
 			document.documentElement.setAttribute("data-color-theme", next);
 		}
 		try {
-			localStorage.setItem(STORAGE_KEY, next);
+			localStorage.setItem(THEME_STORAGE_KEY, next);
 		} catch {}
 	});
-	return { theme: value, setTheme: setValue };
+
+	createEffect(() => {
+		if (typeof document !== "undefined") {
+			document.documentElement.setAttribute("data-mode", resolvedMode());
+		}
+		try {
+			localStorage.setItem(MODE_STORAGE_KEY, mode());
+		} catch {}
+	});
+
+	return { theme, setTheme, mode, setMode, resolvedMode };
 });

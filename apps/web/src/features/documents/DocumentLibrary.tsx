@@ -1,7 +1,9 @@
 import type { Id } from "@academic-reader/convex/data-model";
 import { readerViewReady } from "@academic-reader/shared/processing-phases";
 import { Link } from "@tanstack/solid-router";
+import ArrowUpRight from "lucide-solid/icons/arrow-up-right";
 import { createSignal, For, type JSX, Show } from "solid-js";
+import { Skeleton } from "~/components/ui/skeleton";
 import { authClient } from "../../lib/auth-client";
 import { fetchJson } from "../../lib/fetch-json";
 import { AuthPanel } from "../auth/AuthPanel";
@@ -24,7 +26,7 @@ export function SignedOutDocuments(props: { creation: DocumentCreation }) {
 	return (
 		<div>
 			<Wordmark />
-			<h1 class="mt-4 max-w-2xl font-semibold text-4xl tracking-tight sm:text-5xl">
+			<h1 class="mt-4 max-w-2xl font-semibold font-serif text-4xl sm:text-5xl">
 				Read papers, and hear them.
 			</h1>
 			<p class="mt-5 max-w-xl text-muted-foreground">
@@ -109,9 +111,9 @@ export function SignedInDocuments(props: {
 					<Wordmark />
 					<h1 class="mt-2 font-semibold text-3xl tracking-tight">Library</h1>
 				</div>
-				<div class="flex shrink-0 items-center gap-5">
+				<div class="flex shrink-0 items-center gap-3">
 					<button
-						class="font-mono text-dim text-xs uppercase tracking-[0.18em] hover:text-foreground"
+						class="text-muted-foreground text-sm transition-colors hover:text-foreground"
 						type="button"
 						onClick={signOut}
 					>
@@ -132,10 +134,7 @@ export function SignedInDocuments(props: {
 				when={!props.error}
 				fallback={<p class="mt-12 text-destructive">{props.error?.message}</p>}
 			>
-				<Show
-					when={documents() !== undefined}
-					fallback={<div class="mt-12 h-40 animate-pulse rounded-xl bg-card" />}
-				>
+				<Show when={documents() !== undefined} fallback={<LibrarySkeleton />}>
 					<Show
 						when={documents()?.length}
 						fallback={<EmptyLibrary creation={props.creation} />}
@@ -192,6 +191,28 @@ export function SignedInDocuments(props: {
 	);
 }
 
+function LibrarySkeleton() {
+	return (
+		<section class="mt-12">
+			<div class="mb-2 flex h-4 items-center">
+				<Skeleton class="h-2.5 w-16" />
+			</div>
+			<div class="border-border border-t">
+				{["w-2/5", "w-1/2", "w-1/3"].map((titleWidth) => (
+					<div class="flex items-center justify-between gap-4 border-border border-b py-3.5">
+						<div class="flex h-6 flex-1 items-center">
+							<Skeleton class={`h-3.5 ${titleWidth}`} />
+						</div>
+						<div class="flex h-4 shrink-0 items-center">
+							<Skeleton class="h-2.5 w-24" />
+						</div>
+					</div>
+				))}
+			</div>
+		</section>
+	);
+}
+
 function ActiveEntry(props: {
 	document: DocumentListItem;
 	busy: boolean;
@@ -202,21 +223,21 @@ function ActiveEntry(props: {
 		<article class="border-border border-b py-5">
 			<div class="flex items-baseline justify-between gap-4">
 				<TitleLink document={props.document} />
-				<div class="flex shrink-0 items-center gap-4 font-mono text-xs">
+				<div class="flex shrink-0 items-center gap-4 text-xs">
 					<Show
 						when={readerViewReady(props.document.processingStatus)}
-						fallback={<span class="text-dim">Open ↗</span>}
+						fallback={<OpenLabel class="text-dim" />}
 					>
 						<Link
-							class="text-primary hover:opacity-80"
+							class="text-primary transition-opacity hover:opacity-80"
 							params={{ documentId: props.document._id }}
 							to="/documents/$documentId"
 						>
-							Open ↗
+							<OpenLabel />
 						</Link>
 					</Show>
 					<button
-						class="text-dim hover:text-destructive disabled:opacity-40"
+						class="text-dim transition-colors hover:text-destructive disabled:opacity-40"
 						disabled={props.busy}
 						type="button"
 						onClick={props.onDelete}
@@ -249,9 +270,9 @@ function ShelfEntry(props: {
 		<div class="border-border border-b">
 			<div class="group flex items-center justify-between gap-4 py-3.5">
 				<TitleLink document={props.document} />
-				<div class="flex shrink-0 items-center gap-4 font-mono text-dim text-xs">
+				<div class="flex shrink-0 items-center gap-4 text-dim text-xs">
 					<Show when={shelfMeta(props.document)}>
-						{(meta) => <span>{meta()}</span>}
+						{(meta) => <span class="tabular-nums">{meta()}</span>}
 					</Show>
 					<button
 						class="opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
@@ -269,11 +290,11 @@ function ShelfEntry(props: {
 						{props.deleting ? "Deleting…" : "Delete"}
 					</button>
 					<Link
-						class="hover:text-primary"
+						class="transition-colors hover:text-primary"
 						params={{ documentId: props.document._id }}
 						to="/documents/$documentId"
 					>
-						Open ↗
+						<OpenLabel />
 					</Link>
 				</div>
 			</div>
@@ -293,10 +314,19 @@ function ShelfEntry(props: {
 	);
 }
 
+function OpenLabel(props: { class?: string }) {
+	return (
+		<span class={`inline-flex items-center gap-0.5 ${props.class ?? ""}`}>
+			Open
+			<ArrowUpRight class="size-3" />
+		</span>
+	);
+}
+
 function TitleLink(props: { document: DocumentListItem }) {
 	return (
 		<Link
-			class="truncate font-medium hover:text-primary"
+			class="truncate font-medium transition-colors hover:text-primary"
 			params={{ documentId: props.document._id }}
 			to="/documents/$documentId"
 		>
@@ -323,15 +353,13 @@ function EmptyLibrary(props: { creation: DocumentCreation }) {
 
 function Wordmark() {
 	return (
-		<p class="font-mono text-dim text-xs uppercase tracking-[0.3em]">
-			Academic Reader
-		</p>
+		<p class="font-medium text-muted-foreground text-sm">Academic Reader</p>
 	);
 }
 
 function SectionLabel(props: { children: JSX.Element }) {
 	return (
-		<h2 class="mb-2 font-mono text-dim text-xs uppercase tracking-[0.25em]">
+		<h2 class="mb-2 font-medium text-muted-foreground text-xs">
 			{props.children}
 		</h2>
 	);

@@ -4,18 +4,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>academic-reader</title>
+    <title>Academic Reader</title>
     <script>
-      // Apply the saved theme before first paint to avoid a flash of the default.
+      // Apply the saved theme and mode before first paint to avoid a flash.
+      // Values are applied raw; color-theme.ts validates and corrects them on
+      // hydration, and an unknown theme attribute just falls back to :root.
       (() => {
-        var valid = ["default", "tokyo-night", "catppuccin", "nord", "rose-pine"];
-        var theme = "default";
-        var saved = null;
+        var theme = null;
+        var mode = null;
         try {
-          saved = localStorage.getItem("color-theme");
+          theme = localStorage.getItem("color-theme");
+          mode = localStorage.getItem("color-mode");
         } catch {}
-        if (saved && valid.indexOf(saved) > -1) theme = saved;
-        document.documentElement.setAttribute("data-color-theme", theme);
+        var resolved =
+          mode === "light" || mode === "dark"
+            ? mode
+            : matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+        document.documentElement.setAttribute("data-color-theme", theme || "default");
+        document.documentElement.setAttribute("data-mode", resolved);
       })();
     </script>
   </head>

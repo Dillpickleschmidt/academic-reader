@@ -1,5 +1,6 @@
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
 import { type Accessor, Index, Show } from "solid-js";
+import { Skeleton } from "~/components/ui/skeleton";
 import { createStableItems } from "./document-stable-list";
 
 export interface ProcessingEvent extends ProcessingEventInput {
@@ -18,20 +19,17 @@ export function ProcessingEventsList(props: {
 	);
 
 	return (
-		<Show
-			when={events()}
-			fallback={<div class="mt-4 h-16 animate-pulse rounded-lg bg-muted" />}
-		>
+		<Show when={events()} fallback={<ProcessingEventsLoading />}>
 			{(events) => (
 				<Show
 					when={events().length > 0}
 					fallback={
-						<p class="mt-3 text-sm text-muted-foreground">
+						<p class="mt-3 text-muted-foreground text-sm">
 							No events recorded yet.
 						</p>
 					}
 				>
-					<ol class="mt-4 space-y-3">
+					<ol class="mt-2 divide-y divide-border">
 						<Index each={events()}>
 							{(event) => <ProcessingEventItem event={event} />}
 						</Index>
@@ -42,30 +40,57 @@ export function ProcessingEventsList(props: {
 	);
 }
 
+function ProcessingEventsLoading() {
+	return (
+		<div class="mt-2 divide-y divide-border">
+			{["w-3/4", "w-1/2"].map((messageWidth) => (
+				<div class="flex gap-3 py-3">
+					<Skeleton class="mt-1.5 size-1.5 shrink-0 rounded-full" />
+					<div class="min-w-0 flex-1">
+						<div class="flex h-5 items-center">
+							<Skeleton class={`h-3 ${messageWidth}`} />
+						</div>
+						<div class="mt-1 flex h-4 items-center">
+							<Skeleton class="h-2.5 w-44" />
+						</div>
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
+
 function ProcessingEventItem(props: { event: Accessor<ProcessingEvent> }) {
 	const event = () => props.event();
 
 	return (
-		<li class="rounded-lg border border-border bg-card/60 p-3 text-sm">
-			<div class="flex flex-wrap items-center gap-2">
-				<span class={severityClass(event().severity)}>{event().severity}</span>
-				<span class="text-muted-foreground">{event().emitter}</span>
-				<span class="text-dim">·</span>
-				<span class="text-muted-foreground">{event().type}</span>
+		<li class="flex gap-3 py-3 text-sm">
+			<span
+				class="mt-1.5 size-1.5 shrink-0 rounded-full"
+				classList={{
+					"bg-destructive": event().severity === "error",
+					"bg-warning": event().severity === "warning",
+					"bg-dim": event().severity === "info",
+				}}
+				title={event().severity}
+			/>
+			<div class="min-w-0 flex-1">
+				<p class="text-foreground">{event().message}</p>
+				<Show when={event().progress}>
+					{(progress) => (
+						<p class="mt-1 text-muted-foreground text-xs">
+							{progress().label ? `${progress().label} · ` : ""}
+							{progressText(progress())}
+						</p>
+					)}
+				</Show>
+				<p class="mt-1 text-dim text-xs">
+					{event().emitter} · {event().type} ·{" "}
+					<span class="tabular-nums">
+						{new Date(event().emittedAt).toLocaleTimeString()}
+					</span>
+				</p>
 			</div>
-			<p class="mt-2 text-foreground">{event().message}</p>
-			<Show when={event().progress}>
-				{(progress) => (
-					<p class="mt-2 text-muted-foreground text-xs">
-						{progress().label ? `${progress().label} · ` : ""}
-						{progressText(progress())}
-					</p>
-				)}
-			</Show>
-			<p class="mt-2 text-dim text-xs">
-				Stored {new Date(event()._creationTime).toLocaleTimeString()} · emitted{" "}
-				{new Date(event().emittedAt).toLocaleTimeString()}
-			</p>
 		</li>
 	);
 }
@@ -78,14 +103,4 @@ function progressText(progress: NonNullable<ProcessingEvent["progress"]>) {
 		return `${progress.current}/${progress.total}`;
 	}
 	return "Progress recorded";
-}
-
-function severityClass(severity: string) {
-	if (severity === "error") {
-		return "rounded-full border border-destructive/30 px-2 py-0.5 text-destructive text-xs";
-	}
-	if (severity === "warning") {
-		return "rounded-full border border-primary/40 px-2 py-0.5 text-primary text-xs";
-	}
-	return "rounded-full border border-border px-2 py-0.5 text-foreground text-xs";
 }

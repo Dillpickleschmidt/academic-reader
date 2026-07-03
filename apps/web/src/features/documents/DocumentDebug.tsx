@@ -143,21 +143,17 @@ function TocSourcePointCard(props: {
 			class={debugMetadataCardClass(false)}
 			style={{ "max-height": "10rem" }}
 		>
-			<span class="block">
-				<span class="block font-semibold">TOC target</span>
-				<span class="mt-1 block text-foreground">
-					{props.sourcePoint.title}
-				</span>
-				<span class="block text-foreground">
-					page {props.sourcePoint.pageNumber}
-				</span>
-				<span class="block text-foreground">
-					point x{debugPercent(props.sourcePoint.left)} y
-					{debugPercent(props.sourcePoint.top)}
-				</span>
-				<span class="block text-foreground">
-					Block {props.sourcePoint.blockId ?? "page-only"}
-				</span>
+			<span class="block font-semibold">TOC target</span>
+			<span class="mt-1 block text-foreground">{props.sourcePoint.title}</span>
+			<span class="block text-foreground">
+				page {props.sourcePoint.pageNumber}
+			</span>
+			<span class="block text-foreground">
+				point x{debugPercent(props.sourcePoint.left)} y
+				{debugPercent(props.sourcePoint.top)}
+			</span>
+			<span class="block text-foreground">
+				Block {props.sourcePoint.blockId ?? "page-only"}
 			</span>
 		</span>
 	);
@@ -325,35 +321,31 @@ function DebugMetadataCard(props: {
 			class={debugMetadataCardClass(props.forceVisible)}
 			style={{ "max-height": props.maxHeight }}
 		>
-			<span class="block">
-				<span class="block font-semibold">
-					#{props.block.order + 1} {props.block.blockType}
-				</span>
-				<span class="mt-1 block text-foreground">
-					Block {props.block.blockId}
-				</span>
-				<span class="block text-foreground">
-					raw {props.block.rawBlockType}
-				</span>
-				<span class="block text-foreground">
-					page {props.block.pageNumber ?? "—"}
-				</span>
-				<span class="block text-foreground">
-					{bboxText(props.block.normalizedBoundingBox)}
-				</span>
-				<span class="mt-1 block text-foreground">
-					HTML {evidence().htmlLength} · text {evidence().textLength} · images{" "}
-					{evidence().imageCount} · citations {evidence().inlineCitationCount} ·
-					markdown {evidence().hasMarkdown ? "yes" : "no"}
-				</span>
-				<span class="mt-1 block text-foreground">
-					Narration State: {narration().narration}
-				</span>
-				<span class="block text-foreground">Text: {narration().text}</span>
-				<span class="block text-foreground">Audio: {narration().audio}</span>
-				<span class="block text-foreground">
-					Alignment: {narration().alignment}
-				</span>
+			<span class="block font-semibold">
+				#{props.block.order + 1} {props.block.blockType}
+			</span>
+			<span class="mt-1 block text-foreground">
+				Block {props.block.blockId}
+			</span>
+			<span class="block text-foreground">raw {props.block.rawBlockType}</span>
+			<span class="block text-foreground">
+				page {props.block.pageNumber ?? "—"}
+			</span>
+			<span class="block text-foreground">
+				{bboxText(props.block.normalizedBoundingBox)}
+			</span>
+			<span class="mt-1 block text-foreground">
+				HTML {evidence().htmlLength} · text {evidence().textLength} · images{" "}
+				{evidence().imageCount} · citations {evidence().inlineCitationCount} ·
+				markdown {evidence().hasMarkdown ? "yes" : "no"}
+			</span>
+			<span class="mt-1 block text-foreground">
+				Narration State: {narration().narration}
+			</span>
+			<span class="block text-foreground">Text: {narration().text}</span>
+			<span class="block text-foreground">Audio: {narration().audio}</span>
+			<span class="block text-foreground">
+				Alignment: {narration().alignment}
 			</span>
 		</span>
 	);
@@ -363,9 +355,9 @@ export function DebugStatsPanel(props: { blocks: Doc<"blocks">[] }) {
 	const stats = createMemo(() => blockDebugStats(props.blocks));
 
 	return (
-		<aside class="fixed bottom-4 left-4 z-30 max-w-sm rounded-2xl border border-primary/30 bg-background/90 p-3 text-xs text-foreground shadow-xl backdrop-blur lg:left-[19rem]">
-			<div class="font-semibold text-primary">Debug Overlay</div>
-			<div class="mt-2 grid grid-cols-2 gap-2">
+		<aside class="fixed bottom-4 left-4 z-30 max-w-sm rounded-md border border-border bg-popover p-3 text-foreground text-xs shadow-overlay lg:left-[19rem]">
+			<div class="font-medium text-muted-foreground text-xs">Debug overlay</div>
+			<div class="mt-2 grid grid-cols-2 gap-2 tabular-nums">
 				<div>Blocks: {stats().total}</div>
 				<div>Geometry: {stats().withGeometry}</div>
 				<div>Missing geometry: {stats().withoutGeometry}</div>
@@ -706,11 +698,11 @@ function debugOverlayBoxClass(
 }
 
 function debugMetadataCardClass(forceVisible: boolean) {
-	return `${forceVisible ? "block" : "hidden group-focus:block group-focus-within:block group-hover:block"} absolute top-0 right-0 z-50 w-64 overflow-y-auto rounded-bl-md border border-current bg-background/95 p-2 text-left text-[10px] leading-tight shadow-lg backdrop-blur`;
+	return `${forceVisible ? "block" : "hidden group-focus:block group-focus-within:block group-hover:block"} absolute top-0 right-0 z-50 w-64 overflow-y-auto rounded-md border border-border bg-popover p-2 text-left text-[10px] leading-tight shadow-overlay`;
 }
 
 function debugStatsTypeClass(blockType: string) {
-	return `${debugToneClass(blockType)} rounded-full border px-2 py-0.5`;
+	return `${debugToneClass(blockType)} rounded-sm border px-2 py-0.5`;
 }
 
 function debugToneClass(blockType: string) {

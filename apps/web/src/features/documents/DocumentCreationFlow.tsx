@@ -1,10 +1,21 @@
 import { api } from "@academic-reader/convex/api";
 import { narrationVoices } from "@academic-reader/shared/processing";
 import { sourceDocumentAcceptAttribute } from "@academic-reader/shared/uploads";
-import { useQuery } from "convex-solidjs";
-import { createEffect, For, Show } from "solid-js";
+import { createEffect, Show } from "solid-js";
+import { buttonVariants } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Progress } from "~/components/ui/progress";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+} from "~/components/ui/select";
+import { cn } from "~/lib/utils";
 import { authClient } from "../../lib/auth-client";
+import { useQuery } from "../../lib/convex-query";
 import { fetchJson } from "../../lib/fetch-json";
 import { useConvexAuth } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
@@ -15,12 +26,14 @@ import {
 	uploadStatusLabel,
 } from "./document-creation";
 
+const conversionModels = [{ id: "marker", label: "Marker" }];
+
 export function UploadPrompt(props: { state: DocumentCreation }) {
 	const state = props.state;
 
 	return (
 		<div>
-			<label class="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-border p-6 text-center transition-colors hover:border-primary">
+			<label class="flex min-h-44 cursor-pointer flex-col items-center justify-center rounded-md border border-dashed border-border p-6 text-center transition-colors hover:border-primary hover:bg-primary/5">
 				<span class="font-medium text-foreground">Choose a PDF or image</span>
 				<span class="mt-2 text-muted-foreground text-sm">
 					PDF, PNG, JPEG, WebP, or TIFF up to 50MB
@@ -47,7 +60,7 @@ export function UploadPrompt(props: { state: DocumentCreation }) {
 
 export function AddDocumentButton(props: { state: DocumentCreation }) {
 	return (
-		<label class="inline-flex cursor-pointer items-center rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-opacity hover:opacity-90">
+		<label class={cn(buttonVariants(), "cursor-pointer")}>
 			Add document
 			<input
 				accept={sourceDocumentAcceptAttribute}
@@ -206,7 +219,7 @@ function ConfigureProcessingFlow(props: {
 			{(selectedFile) => (
 				<div class="flex flex-col gap-6">
 					<header>
-						<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+						<p class="font-medium text-muted-foreground text-xs">
 							Configure run
 						</p>
 						<h2 class="mt-2 truncate font-semibold text-xl tracking-tight">
@@ -217,31 +230,45 @@ function ConfigureProcessingFlow(props: {
 					<div class="grid gap-8 border-border border-t pt-6 md:grid-cols-[minmax(0,1fr)_240px]">
 						<div class="flex flex-col gap-6">
 							<section>
-								<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+								<p class="font-medium text-muted-foreground text-xs">
 									Conversion
 								</p>
 								<div class="mt-4 flex flex-col gap-4">
 									<div class="flex items-center justify-between gap-4">
 										<span class="text-foreground text-sm">Model</span>
-										<select
-											class="rounded-lg border border-border bg-background px-3 py-1.5 text-foreground text-sm outline-none focus:border-primary"
-											value={state.conversionModel()}
-											onChange={(event) =>
+										<Select
+											options={conversionModels}
+											optionValue="id"
+											optionTextValue="label"
+											value={conversionModels.find(
+												(model) => model.id === state.conversionModel(),
+											)}
+											onChange={(option) => {
+												if (!option) return;
 												updatePreference(() =>
-													state.setConversionModel(event.currentTarget.value),
-												)
-											}
+													state.setConversionModel(option.id),
+												);
+											}}
+											itemComponent={(itemProps) => (
+												<SelectItem item={itemProps.item}>
+													{itemProps.item.rawValue.label}
+												</SelectItem>
+											)}
 										>
-											<option value="marker">Marker</option>
-										</select>
+											<SelectTrigger
+												aria-label="Conversion Model"
+												class="w-48"
+											/>
+											<SelectContent />
+										</Select>
 									</div>
 
 									<div class="flex items-center justify-between gap-4">
 										<span class="text-foreground text-sm">
 											Page range <span class="text-dim">optional</span>
 										</span>
-										<input
-											class="w-48 rounded-lg border border-border bg-background px-3 py-1.5 text-foreground text-sm outline-none focus:border-primary"
+										<Input
+											class="w-48"
 											placeholder="e.g. 1-5, 10, 15-20"
 											value={state.pageRange()}
 											onInput={(event) =>
@@ -250,71 +277,39 @@ function ConfigureProcessingFlow(props: {
 										/>
 									</div>
 
-									<label class="flex cursor-pointer items-start justify-between gap-4">
-										<span class="text-sm">
-											<span class="text-foreground">Force OCR</span>
-											<span class="mt-0.5 block text-dim text-xs">
-												Re-OCR pages even when extractable text exists.
-											</span>
-										</span>
-										<input
-											checked={state.forceOcr()}
-											class="mt-0.5 size-4 accent-primary"
-											type="checkbox"
-											onChange={(event) =>
-												updatePreference(() =>
-													state.setForceOcr(event.currentTarget.checked),
-												)
-											}
-										/>
-									</label>
+									<Checkbox
+										checked={state.forceOcr()}
+										description="Re-OCR pages even when extractable text exists."
+										label="Force OCR"
+										onChange={(checked) =>
+											updatePreference(() => state.setForceOcr(checked))
+										}
+									/>
 
-									<label class="flex cursor-pointer items-start justify-between gap-4">
-										<span class="text-sm">
-											<span class="text-foreground">Enhanced detection</span>
-											<span class="mt-0.5 block text-dim text-xs">
-												Use Marker LLM-assisted detection when available.
-											</span>
-										</span>
-										<input
-											checked={state.useLlm()}
-											class="mt-0.5 size-4 accent-primary"
-											type="checkbox"
-											onChange={(event) =>
-												updatePreference(() =>
-													state.setUseLlm(event.currentTarget.checked),
-												)
-											}
-										/>
-									</label>
+									<Checkbox
+										checked={state.useLlm()}
+										description="Use Marker LLM-assisted detection when available."
+										label="Enhanced detection"
+										onChange={(checked) =>
+											updatePreference(() => state.setUseLlm(checked))
+										}
+									/>
 								</div>
 							</section>
 
 							<section class="border-border border-t pt-6">
-								<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
+								<p class="font-medium text-muted-foreground text-xs">
 									Narration
 								</p>
 								<div class="mt-4 flex flex-col gap-4">
-									<label class="flex cursor-pointer items-start justify-between gap-4">
-										<span class="text-sm">
-											<span class="text-foreground">Generate narration</span>
-											<span class="mt-0.5 block text-dim text-xs">
-												Create spoken audio once the Reader View is ready.
-											</span>
-										</span>
-										<input
-											checked={state.narrationEnabled()}
-											class="mt-0.5 size-4 accent-primary"
-											type="checkbox"
-											onChange={(event) =>
-												updatePreference(() =>
-													state.setNarrationEnabled(
-														event.currentTarget.checked,
-													),
-												)
-											}
-										/>
-									</label>
+									<Checkbox
+										checked={state.narrationEnabled()}
+										description="Create spoken audio once the Reader View is ready."
+										label="Generate narration"
+										onChange={(checked) =>
+											updatePreference(() => state.setNarrationEnabled(checked))
+										}
+									/>
 
 									<div class="flex items-center justify-between gap-4">
 										<span
@@ -326,49 +321,52 @@ function ConfigureProcessingFlow(props: {
 										>
 											Voice
 										</span>
-										<select
-											class="rounded-lg border border-border bg-background px-3 py-1.5 text-foreground text-sm outline-none focus:border-primary disabled:opacity-50"
+										<Select
 											disabled={!state.narrationEnabled()}
-											value={state.narrationVoice()}
-											onChange={(event) =>
+											options={[...narrationVoices]}
+											optionValue="id"
+											optionTextValue="label"
+											value={narrationVoices.find(
+												(voice) => voice.id === state.narrationVoice(),
+											)}
+											onChange={(option) => {
+												if (!option) return;
 												updatePreference(() =>
-													state.setNarrationVoice(event.currentTarget.value),
-												)
-											}
+													state.setNarrationVoice(option.id),
+												);
+											}}
+											itemComponent={(itemProps) => (
+												<SelectItem item={itemProps.item}>
+													{itemProps.item.rawValue.label}
+												</SelectItem>
+											)}
 										>
-											<For each={narrationVoices}>
-												{(voice) => (
-													<option value={voice.id}>{voice.label}</option>
-												)}
-											</For>
-										</select>
+											<SelectTrigger
+												aria-label="Narration Voice"
+												class="w-48"
+											/>
+											<SelectContent />
+										</Select>
 									</div>
 								</div>
 							</section>
 						</div>
 
 						<aside class="flex flex-col gap-4 border-border border-t pt-6 md:border-t-0 md:border-l md:pt-0 md:pl-8">
-							<p class="font-mono text-dim text-xs uppercase tracking-[0.25em]">
-								Create
-							</p>
+							<p class="font-medium text-muted-foreground text-xs">Create</p>
 
 							<Show
 								when={
 									state.status() !== "idle" && state.status() !== "complete"
 								}
 							>
-								<div>
-									<div class="flex justify-between font-mono text-dim text-xs">
-										<span>{uploadStatusLabel(state.status())}</span>
-										<span>{Math.round(state.progress())}%</span>
-									</div>
-									<div class="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-										<div
-											class="h-full rounded-full bg-primary transition-[width] duration-300"
-											style={{ width: `${state.progress()}%` }}
-										/>
-									</div>
-								</div>
+								<Progress
+									getValueLabel={({ value }) => `${Math.round(value)}%`}
+									label={uploadStatusLabel(state.status())}
+									maxValue={100}
+									showValue
+									value={state.progress()}
+								/>
 							</Show>
 
 							<Show when={state.error()}>
@@ -385,7 +383,7 @@ function ConfigureProcessingFlow(props: {
 											Sign in when you start — your settings are kept.
 										</p>
 										<button
-											class="w-full rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm disabled:opacity-50"
+											class={buttonVariants()}
 											disabled={state.status() !== "complete"}
 											type="button"
 											onClick={startProcessing}
@@ -395,7 +393,7 @@ function ConfigureProcessingFlow(props: {
 												: "Uploading…"}
 										</button>
 										<button
-											class="w-full rounded-lg border border-border px-4 py-2 text-foreground text-sm hover:bg-muted"
+											class={buttonVariants({ variant: "outline" })}
 											type="button"
 											onClick={props.onBack}
 										>
@@ -407,14 +405,14 @@ function ConfigureProcessingFlow(props: {
 								{(reader) => (
 									<div class="flex flex-col gap-4">
 										<div>
-											<p class="font-mono text-dim text-xs">Signed in as</p>
+											<p class="text-dim text-xs">Signed in as</p>
 											<p class="truncate text-foreground text-sm">
 												{reader().email}
 											</p>
 										</div>
 										<div class="flex flex-col gap-2">
 											<button
-												class="w-full rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm disabled:opacity-50"
+												class={buttonVariants()}
 												disabled={
 													state.status() !== "complete" ||
 													state.isStarting() ||
@@ -430,7 +428,7 @@ function ConfigureProcessingFlow(props: {
 														: "Finishing sign-in…"}
 											</button>
 											<button
-												class="w-full rounded-lg border border-border px-4 py-2 text-foreground text-sm hover:bg-muted"
+												class={buttonVariants({ variant: "outline" })}
 												type="button"
 												onClick={props.onBack}
 											>

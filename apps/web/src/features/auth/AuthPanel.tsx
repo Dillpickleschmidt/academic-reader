@@ -1,4 +1,12 @@
 import { createSignal, Show } from "solid-js";
+import { buttonVariants } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import {
+	segmentedGroupClass,
+	segmentedItemClass,
+} from "~/components/ui/segmented";
+import { cn } from "~/lib/utils";
 import { authClient } from "../../lib/auth-client";
 
 export function AuthPanel() {
@@ -47,12 +55,12 @@ export function AuthPanel() {
 	}
 
 	return (
-		<section class="w-full rounded-2xl border border-border bg-card/70 p-5 shadow-2xl md:w-96">
+		<section class="w-full rounded-md border border-border bg-card p-5 md:w-96">
 			<Show
 				when={session().data?.user}
 				fallback={
 					<form class="flex flex-col gap-3" onSubmit={submit}>
-						<div class="mb-1 flex rounded-full bg-background p-1 text-sm">
+						<div class={cn(segmentedGroupClass, "mb-1 grid-cols-2 text-sm")}>
 							<button
 								class={tabClass(mode() === "sign-in")}
 								type="button"
@@ -70,45 +78,45 @@ export function AuthPanel() {
 						</div>
 
 						<Show when={mode() === "sign-up"}>
-							<label class="flex flex-col gap-1 text-sm text-foreground">
-								Name
-								<input
-									class="rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary"
+							<div class="flex flex-col gap-1.5">
+								<Label for="auth-name">Name</Label>
+								<Input
+									id="auth-name"
 									value={name()}
 									onInput={(event) => setName(event.currentTarget.value)}
 								/>
-							</label>
+							</div>
 						</Show>
 
-						<label class="flex flex-col gap-1 text-sm text-foreground">
-							Email
-							<input
-								class="rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary"
+						<div class="flex flex-col gap-1.5">
+							<Label for="auth-email">Email</Label>
+							<Input
+								id="auth-email"
 								required
 								type="email"
 								value={email()}
 								onInput={(event) => setEmail(event.currentTarget.value)}
 							/>
-						</label>
+						</div>
 
-						<label class="flex flex-col gap-1 text-sm text-foreground">
-							Password
-							<input
-								class="rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus:border-primary"
+						<div class="flex flex-col gap-1.5">
+							<Label for="auth-password">Password</Label>
+							<Input
+								id="auth-password"
 								required
 								minLength={8}
 								type="password"
 								value={password()}
 								onInput={(event) => setPassword(event.currentTarget.value)}
 							/>
-						</label>
+						</div>
 
 						<Show when={error()}>
 							{(message) => <p class="text-destructive text-sm">{message()}</p>}
 						</Show>
 
 						<button
-							class="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-60"
+							class={buttonVariants()}
 							disabled={isSubmitting()}
 							type="submit"
 						>
@@ -128,7 +136,7 @@ export function AuthPanel() {
 							<p class="font-medium">{reader().email}</p>
 						</div>
 						<button
-							class="rounded-lg border border-border px-4 py-2 text-foreground hover:bg-muted"
+							class={buttonVariants({ variant: "outline" })}
 							type="button"
 							onClick={signOut}
 						>
@@ -142,7 +150,5 @@ export function AuthPanel() {
 }
 
 function tabClass(isActive: boolean) {
-	return `flex-1 rounded-full px-3 py-2 ${
-		isActive ? "bg-muted text-foreground" : "text-muted-foreground"
-	}`;
+	return cn(segmentedItemClass(isActive), "px-3 py-1.5");
 }

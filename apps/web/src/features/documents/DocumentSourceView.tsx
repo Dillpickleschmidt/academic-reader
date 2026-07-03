@@ -1,4 +1,6 @@
 import type { Doc } from "@academic-reader/convex/data-model";
+import ZoomIn from "lucide-solid/icons/zoom-in";
+import ZoomOut from "lucide-solid/icons/zoom-out";
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 import * as pdfjs from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -12,14 +14,12 @@ import {
 	Show,
 } from "solid-js";
 import * as UTIF from "utif";
+import { buttonVariants } from "~/components/ui/button";
+import { Skeleton } from "~/components/ui/skeleton";
+import { Slider } from "~/components/ui/slider";
 import { SourceDebugOverlayLayer } from "./DocumentDebug";
 import type { NarrationAudioMetadata } from "./document-narration-audio";
-import {
-	EmptyPane,
-	errorMessage,
-	PaneSkeleton,
-	RetryMessage,
-} from "./document-page-ui";
+import { EmptyPane, errorMessage, RetryMessage } from "./document-page-ui";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -50,64 +50,214 @@ export function SourceView(props: {
 		if (!props.document || props.pages === undefined) return undefined;
 		return { document: props.document, pages: props.pages };
 	});
+	const isPdf = () => props.document?.mimeType === "application/pdf";
+	const [zoom, setZoom] = createSignal(defaultPdfZoom);
+
+	function zoomTo(value: number) {
+		setZoom(Math.min(Math.max(value, minPdfZoom), maxPdfZoom));
+	}
+
+	function handleWheel(event: WheelEvent) {
+		if (!event.ctrlKey || !isPdf()) return;
+		event.preventDefault();
+		zoomTo(zoom() * (1 - event.deltaY * 0.002));
+	}
+
+	let pan:
+		| {
+				pointerId: number;
+				originX: number;
+				originY: number;
+				scrollLeft: number;
+				scrollTop: number;
+				moved: boolean;
+		  }
+		| undefined;
+
+	function handlePanPointerDown(
+		event: PointerEvent & { currentTarget: HTMLDivElement },
+	) {
+		if (event.pointerType !== "mouse" || event.button !== 0) return;
+		if (
+			event.target instanceof Element &&
+			event.target.closest("a, button, input, select, textarea")
+		) {
+			return;
+		}
+		pan = {
+			pointerId: event.pointerId,
+			originX: event.clientX,
+			originY: event.clientY,
+			scrollLeft: event.currentTarget.scrollLeft,
+			scrollTop: event.currentTarget.scrollTop,
+			moved: false,
+		};
+		document.documentElement.dataset.sourceViewPanning = "true";
+		event.currentTarget.setPointerCapture(event.pointerId);
+	}
+
+	function handlePanPointerMove(
+		event: PointerEvent & { currentTarget: HTMLDivElement },
+	) {
+		if (pan?.pointerId !== event.pointerId) return;
+		const deltaX = event.clientX - pan.originX;
+		const deltaY = event.clientY - pan.originY;
+		if (!pan.moved) {
+			if (Math.hypot(deltaX, deltaY) < 4) return;
+			pan.moved = true;
+			event.currentTarget.style.userSelect = "none";
+		}
+		event.currentTarget.scrollTo({
+			left: pan.scrollLeft - deltaX,
+			top: pan.scrollTop - deltaY,
+		});
+	}
+
+	function handlePanPointerEnd(
+		event: PointerEvent & { currentTarget: HTMLDivElement },
+	) {
+		if (pan?.pointerId !== event.pointerId) return;
+		if (pan.moved) {
+			suppressNextClick();
+			event.currentTarget.style.userSelect = "";
+		}
+		delete document.documentElement.dataset.sourceViewPanning;
+		pan = undefined;
+	}
+
+	onCleanup(() => {
+		delete document.documentElement.dataset.sourceViewPanning;
+	});
 
 	return (
-		<div class="h-full overflow-auto bg-card p-4 pt-14 lg:pt-4">
-			<Show when={loadedSource()} fallback={<PaneSkeleton />}>
-				{(source) => (
-					<Show
-						when={props.sourceAccess}
-						fallback={
-							<Show
-								when={!props.sourceAccessLoading}
-								fallback={<PaneSkeleton />}
-							>
-								<RetryMessage
-									body={errorMessage(props.sourceAccessError)}
-									onRetry={props.onRetrySourceAccess}
-									title="Could not create Source View URL"
-								/>
-							</Show>
-						}
-					>
-						{(sourceAccess) => (
-							<Show
-								when={source().document.mimeType === "application/pdf"}
-								fallback={
-									<ImageSourceView
+		<div class="flex h-full min-h-0 flex-col bg-background">
+			<div class="flex h-10 shrink-0 items-center justify-between border-border border-b px-3">
+				<span class="font-medium text-muted-foreground text-xs">Source</span>
+				<Show when={isPdf()}>
+					<div class="flex items-center gap-1">
+						<button
+							class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+							disabled={zoom() <= minPdfZoom}
+							type="button"
+							onClick={() => zoomTo(zoom() - pdfZoomStep)}
+						>
+							<ZoomOut />
+							<span class="sr-only">Zoom out</span>
+						</button>
+						<Slider
+							aria-label="Zoom"
+							class="w-24"
+							maxValue={maxPdfZoom}
+							minValue={minPdfZoom}
+							step={0.05}
+							value={[zoom()]}
+							onChange={(values) => setZoom(values[0] ?? defaultPdfZoom)}
+						/>
+						<button
+							class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+							disabled={zoom() >= maxPdfZoom}
+							type="button"
+							onClick={() => zoomTo(zoom() + pdfZoomStep)}
+						>
+							<ZoomIn />
+							<span class="sr-only">Zoom in</span>
+						</button>
+						<button
+							class="w-11 text-center text-muted-foreground text-xs tabular-nums transition-colors hover:text-foreground"
+							title="Reset to fit width"
+							type="button"
+							onClick={() => setZoom(defaultPdfZoom)}
+						>
+							{Math.round(zoom() * 100)}%
+						</button>
+					</div>
+				</Show>
+			</div>
+			<div
+				class="min-h-0 flex-1 cursor-grab overflow-auto pr-2.5 [scrollbar-gutter:stable]"
+				on:pointercancel={handlePanPointerEnd}
+				on:pointerdown={handlePanPointerDown}
+				on:pointermove={handlePanPointerMove}
+				on:pointerup={handlePanPointerEnd}
+				on:wheel={handleWheel}
+			>
+				<Show when={loadedSource()} fallback={<SourceSkeleton />}>
+					{(source) => (
+						<Show
+							when={props.sourceAccess}
+							fallback={
+								<Show
+									when={!props.sourceAccessLoading}
+									fallback={<SourceSkeleton />}
+								>
+									<RetryMessage
+										body={errorMessage(props.sourceAccessError)}
+										onRetry={props.onRetrySourceAccess}
+										title="Could not create Source View URL"
+									/>
+								</Show>
+							}
+						>
+							{(sourceAccess) => (
+								<Show
+									when={source().document.mimeType === "application/pdf"}
+									fallback={
+										<ImageSourceView
+											activeDebugBlockId={props.activeDebugBlockId}
+											blocks={props.blocks}
+											debugEnabled={props.debugEnabled}
+											debugEvents={props.debugEvents}
+											document={source().document}
+											narrationAudio={props.narrationAudio}
+											mimeType={source().document.mimeType}
+											pages={source().pages}
+											tableOfContentsEntries={props.tableOfContentsEntries}
+											url={sourceAccess().url}
+											onHoverDebugBlock={props.onHoverDebugBlock}
+											onShowReader={props.onShowReader}
+										/>
+									}
+								>
+									<PdfSourceView
 										activeDebugBlockId={props.activeDebugBlockId}
 										blocks={props.blocks}
 										debugEnabled={props.debugEnabled}
 										debugEvents={props.debugEvents}
 										document={source().document}
 										narrationAudio={props.narrationAudio}
-										mimeType={source().document.mimeType}
 										pages={source().pages}
 										tableOfContentsEntries={props.tableOfContentsEntries}
 										url={sourceAccess().url}
+										zoom={zoom()}
 										onHoverDebugBlock={props.onHoverDebugBlock}
 										onShowReader={props.onShowReader}
 									/>
-								}
-							>
-								<PdfSourceView
-									activeDebugBlockId={props.activeDebugBlockId}
-									blocks={props.blocks}
-									debugEnabled={props.debugEnabled}
-									debugEvents={props.debugEvents}
-									document={source().document}
-									narrationAudio={props.narrationAudio}
-									pages={source().pages}
-									tableOfContentsEntries={props.tableOfContentsEntries}
-									url={sourceAccess().url}
-									onHoverDebugBlock={props.onHoverDebugBlock}
-									onShowReader={props.onShowReader}
-								/>
-							</Show>
-						)}
-					</Show>
-				)}
-			</Show>
+								</Show>
+							)}
+						</Show>
+					)}
+				</Show>
+			</div>
+		</div>
+	);
+}
+
+function SourceSkeleton() {
+	return (
+		<div class="flex min-w-full flex-col items-center gap-1">
+			{[1, 2].map(() => (
+				<div class="w-full">
+					<div class="my-1 flex h-4 items-center justify-center">
+						<Skeleton class="h-2.5 w-14" />
+					</div>
+					<Skeleton
+						class="w-full rounded-none border border-border"
+						style={{
+							"aspect-ratio": `${defaultPdfPageWidth} / ${defaultPdfPageHeight}`,
+						}}
+					/>
+				</div>
+			))}
 		</div>
 	);
 }
@@ -129,13 +279,21 @@ function PdfSourceView(props: {
 	pages: Doc<"pages">[];
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
 	url: string;
+	zoom: number;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
 }) {
 	const [pdfDocument, setPdfDocument] = createSignal<PDFDocumentProxy>();
 	const [error, setError] = createSignal<string>();
 	const [loading, setLoading] = createSignal(true);
-	const [zoom, setZoom] = createSignal(defaultPdfZoom);
+	// Layout follows props.zoom immediately (the browser scales the existing
+	// bitmap); the crisp re-render at device resolution runs once zoom settles.
+	const [renderZoom, setRenderZoom] = createSignal(props.zoom);
+	createEffect(() => {
+		const target = props.zoom;
+		const handle = setTimeout(() => setRenderZoom(target), 150);
+		onCleanup(() => clearTimeout(handle));
+	});
 	const pageNumbers = createMemo(() => {
 		if (props.pages.length) {
 			return props.pages.map((page) => page.physicalPageNumber);
@@ -185,7 +343,7 @@ function PdfSourceView(props: {
 			when={!error()}
 			fallback={<EmptyPane title="PDF render failed" body={error()} />}
 		>
-			<Show when={!loading()} fallback={<PaneSkeleton />}>
+			<Show when={!loading()} fallback={<SourceSkeleton />}>
 				<Show
 					when={pdfDocument()}
 					fallback={
@@ -196,73 +354,33 @@ function PdfSourceView(props: {
 					}
 				>
 					{(pdf) => (
-						<div class="min-w-full">
-							<div class="sticky top-2 z-20 mb-3 flex justify-end">
-								<div class="inline-flex items-center overflow-hidden rounded-full border border-border bg-background/85 text-sm shadow-lg backdrop-blur">
-									<button
-										class="px-3 py-1.5 text-foreground hover:bg-muted disabled:text-dim"
-										disabled={zoom() <= minPdfZoom}
-										type="button"
-										onClick={() =>
-											setZoom((value) =>
-												Math.max(minPdfZoom, value - pdfZoomStep),
-											)
-										}
-									>
-										−
-									</button>
-									<button
-										class="border-border border-x px-3 py-1.5 text-foreground hover:bg-muted"
-										type="button"
-										onClick={() => setZoom(1)}
-									>
-										Fit
-									</button>
-									<span class="min-w-14 px-3 py-1.5 text-center text-muted-foreground">
-										{Math.round(zoom() * 100)}%
-									</span>
-									<button
-										class="border-border border-l px-3 py-1.5 text-foreground hover:bg-muted disabled:text-dim"
-										disabled={zoom() >= maxPdfZoom}
-										type="button"
-										onClick={() =>
-											setZoom((value) =>
-												Math.min(maxPdfZoom, value + pdfZoomStep),
-											)
-										}
-									>
-										+
-									</button>
-								</div>
-							</div>
-							<div class="flex min-w-full flex-col items-center gap-5">
-								<For each={pageNumbers()}>
-									{(pageNumber) => {
-										const page = () =>
-											pageByPhysicalPageNumber().get(pageNumber);
+						<div class="flex min-w-full flex-col items-center gap-1">
+							<For each={pageNumbers()}>
+								{(pageNumber) => {
+									const page = () => pageByPhysicalPageNumber().get(pageNumber);
 
-										return (
-											<PdfPageCanvas
-												activeDebugBlockId={props.activeDebugBlockId}
-												blocks={props.blocks}
-												debugEnabled={props.debugEnabled}
-												debugEvents={props.debugEvents}
-												document={props.document}
-												narrationAudio={props.narrationAudio}
-												pageHeight={page()?.height}
-												pageLabel={page()?.pageLabel}
-												pageNumber={pageNumber}
-												pageWidth={page()?.width}
-												tableOfContentsEntries={props.tableOfContentsEntries}
-												pdfDocument={pdf()}
-												zoom={zoom()}
-												onHoverDebugBlock={props.onHoverDebugBlock}
-												onShowReader={props.onShowReader}
-											/>
-										);
-									}}
-								</For>
-							</div>
+									return (
+										<PdfPageCanvas
+											activeDebugBlockId={props.activeDebugBlockId}
+											blocks={props.blocks}
+											debugEnabled={props.debugEnabled}
+											debugEvents={props.debugEvents}
+											document={props.document}
+											narrationAudio={props.narrationAudio}
+											pageHeight={page()?.height}
+											pageLabel={page()?.pageLabel}
+											pageNumber={pageNumber}
+											pageWidth={page()?.width}
+											tableOfContentsEntries={props.tableOfContentsEntries}
+											pdfDocument={pdf()}
+											renderZoom={renderZoom()}
+											zoom={props.zoom}
+											onHoverDebugBlock={props.onHoverDebugBlock}
+											onShowReader={props.onShowReader}
+										/>
+									);
+								}}
+							</For>
 						</div>
 					)}
 				</Show>
@@ -284,6 +402,7 @@ function PdfPageCanvas(props: {
 	pageNumber: number;
 	pageWidth: number | undefined;
 	tableOfContentsEntries: Doc<"tableOfContentsEntries">[] | undefined;
+	renderZoom: number;
 	zoom: number;
 	onHoverDebugBlock: (blockId: string | undefined) => void;
 	onShowReader: (block: Doc<"blocks">) => void;
@@ -361,13 +480,27 @@ function PdfPageCanvas(props: {
 		const fitWidth = width();
 		if (!loadedPage || !canvas || fitWidth <= 0) return;
 
+		const baseViewport = loadedPage.getViewport({ scale: 1 });
+		const targetWidth = fitWidth * props.zoom;
+		const cssHeight = (baseViewport.height / baseViewport.width) * targetWidth;
+		setDisplayWidth(targetWidth);
+		setHeight(cssHeight);
+		canvas.style.width = `${targetWidth}px`;
+		canvas.style.height = `${cssHeight}px`;
+	});
+
+	createEffect(() => {
+		const loadedPage = page();
+		const fitWidth = width();
+		if (!loadedPage || !canvas || fitWidth <= 0) return;
+
 		if (renderTask) {
 			renderTask.cancel();
 			renderTask = undefined;
 		}
 
 		const baseViewport = loadedPage.getViewport({ scale: 1 });
-		const targetWidth = fitWidth * props.zoom;
+		const targetWidth = fitWidth * props.renderZoom;
 		const cssScale = targetWidth / baseViewport.width;
 		const outputScale = cssScale * window.devicePixelRatio;
 		const viewport = loadedPage.getViewport({ scale: outputScale });
@@ -412,11 +545,11 @@ function PdfPageCanvas(props: {
 
 	return (
 		<div ref={container} class="w-full">
-			<div class="mb-2 text-center text-muted-foreground text-xs">
+			<div class="my-1 text-center text-muted-foreground text-xs">
 				{sourcePageTitle(props.pageNumber, props.pageLabel)}
 			</div>
 			<div
-				class="relative mx-auto bg-white shadow-xl shadow-black/30"
+				class="relative mx-auto border border-border bg-white"
 				style={{ width: `${displayWidth()}px` }}
 			>
 				<Show when={error()}>
@@ -450,6 +583,22 @@ function PdfPageCanvas(props: {
 	);
 }
 
+/* After a drag, the browser still dispatches a click at the pointer's final
+   position; swallow that one so debug-overlay clicks don't fire. */
+function suppressNextClick() {
+	const suppress = (event: MouseEvent) => {
+		event.preventDefault();
+		event.stopPropagation();
+		cleanup();
+	};
+	const cleanup = () => {
+		document.removeEventListener("click", suppress, true);
+		clearTimeout(handle);
+	};
+	document.addEventListener("click", suppress, { capture: true });
+	const handle = setTimeout(cleanup, 0);
+}
+
 function sourcePageTitle(
 	physicalPageNumber: number,
 	pageLabel: string | undefined,
@@ -479,7 +628,7 @@ function ImageSourceView(props: {
 	}
 
 	return (
-		<div class="relative mx-auto max-w-5xl overflow-hidden bg-white shadow-xl shadow-black/30">
+		<div class="relative mx-auto max-w-5xl overflow-hidden border border-border bg-white">
 			<Show
 				when={props.mimeType === "image/tiff"}
 				fallback={

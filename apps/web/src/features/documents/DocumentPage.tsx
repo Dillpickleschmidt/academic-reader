@@ -1,15 +1,17 @@
 import { api } from "@academic-reader/convex/api";
 import type { Doc, Id } from "@academic-reader/convex/data-model";
-import { useQuery } from "convex-solidjs";
+import Menu from "lucide-solid/icons/menu";
+import { createEffect, createMemo, createSignal, Show } from "solid-js";
+import { buttonVariants } from "~/components/ui/button";
 import {
-	createEffect,
-	createMemo,
-	createResource,
-	createSignal,
-	Show,
-} from "solid-js";
+	segmentedGroupClass,
+	segmentedItemClass,
+} from "~/components/ui/segmented";
+import { cn } from "~/lib/utils";
 import { authClient } from "../../lib/auth-client";
+import { useQuery } from "../../lib/convex-query";
 import { fetchJson } from "../../lib/fetch-json";
+import { createLatestFetch } from "../../lib/latest-fetch";
 import { useConvexAuth } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
 import {
@@ -103,7 +105,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 			keepPreviousData: true,
 		}),
 	);
-	const [sourceAccess, { refetch: refetchSourceAccess }] = createResource(
+	const sourceAccess = createLatestFetch(
 		() => (convexAuth.isAuthenticated() ? props.documentId : undefined),
 		fetchSourceAccess,
 	);
@@ -192,34 +194,39 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 								/>
 							}
 						>
-							<div class="relative h-screen overflow-hidden">
-								<button
-									class="fixed top-3 left-3 z-30 rounded-full border border-border bg-background/80 px-3 py-1.5 text-sm text-foreground shadow-lg backdrop-blur hover:bg-card lg:hidden"
-									type="button"
-									onClick={() => setSidebarOpen(true)}
-								>
-									Menu
-								</button>
-
-								<div class="fixed top-3 left-1/2 z-30 grid -translate-x-1/2 grid-cols-2 rounded-full border border-border bg-background/80 p-1 text-sm shadow-lg backdrop-blur lg:hidden">
+							<div class="flex h-screen flex-col overflow-hidden">
+								<div class="flex h-11 shrink-0 items-center border-border border-b bg-background px-2 lg:hidden">
 									<button
-										class={mobileViewButtonClass(
-											activeMobileView() === "source",
-										)}
+										class={buttonVariants({ variant: "ghost", size: "icon" })}
 										type="button"
-										onClick={() => setActiveMobileView("source")}
+										onClick={() => setSidebarOpen(true)}
 									>
-										Source
+										<Menu class="size-4" />
+										<span class="sr-only">Open Sidebar</span>
 									</button>
-									<button
-										class={mobileViewButtonClass(
-											activeMobileView() === "reader",
-										)}
-										type="button"
-										onClick={() => setActiveMobileView("reader")}
-									>
-										Reader
-									</button>
+									<div class="flex flex-1 justify-center">
+										<div class={cn(segmentedGroupClass, "grid-cols-2 text-sm")}>
+											<button
+												class={mobileViewButtonClass(
+													activeMobileView() === "source",
+												)}
+												type="button"
+												onClick={() => setActiveMobileView("source")}
+											>
+												Source
+											</button>
+											<button
+												class={mobileViewButtonClass(
+													activeMobileView() === "reader",
+												)}
+												type="button"
+												onClick={() => setActiveMobileView("reader")}
+											>
+												Reader
+											</button>
+										</div>
+									</div>
+									<div class="size-8" />
 								</div>
 
 								<Show when={sidebarOpen()}>
@@ -233,7 +240,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 										<DocumentSidebar
 											blocks={blocks.data()}
 											canDownload={canDownload()}
-											class="relative z-10 shadow-2xl shadow-black/50"
+											class="relative z-10"
 											debugEnabled={debugEnabled()}
 											document={document.data()}
 											downloadError={downloadError()}
@@ -258,7 +265,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 									</div>
 								</Show>
 
-								<div class="grid h-full lg:grid-cols-[18rem_minmax(0,1fr)_minmax(0,1fr)]">
+								<div class="grid min-h-0 flex-1 lg:grid-cols-[18rem_minmax(0,1fr)_minmax(0,1fr)]">
 									<DocumentSidebar
 										blocks={blocks.data()}
 										canDownload={canDownload()}
@@ -284,11 +291,11 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 											narrationAudio={narrationAudio.data()}
 											pages={pages.data()}
 											tableOfContentsEntries={tableOfContentsEntries.data()}
-											sourceAccess={sourceAccess()}
-											sourceAccessError={sourceAccess.error}
-											sourceAccessLoading={sourceAccess.loading}
+											sourceAccess={sourceAccess.data()}
+											sourceAccessError={sourceAccess.error()}
+											sourceAccessLoading={sourceAccess.loading()}
 											onHoverDebugBlock={setHoveredDebugBlockId}
-											onRetrySourceAccess={refetchSourceAccess}
+											onRetrySourceAccess={sourceAccess.refetch}
 											onShowReader={showBlockInReader}
 										/>
 									</section>
@@ -344,14 +351,14 @@ function EventsDrawer(props: {
 }) {
 	return (
 		<aside
-			class={`fixed inset-y-0 right-0 z-40 w-full max-w-md border-border border-l bg-background p-4 shadow-2xl shadow-black/50 transition-transform duration-200 ${
+			class={`fixed inset-y-0 right-0 z-40 w-full max-w-md border-border border-l bg-background p-4 shadow-overlay transition-transform duration-200 ${
 				props.open ? "translate-x-0" : "translate-x-full"
 			}`}
 		>
 			<div class="flex items-center justify-between gap-4">
 				<h2 class="font-semibold text-lg">Processing</h2>
 				<button
-					class="rounded-full border border-border px-3 py-1 text-foreground text-sm hover:bg-card"
+					class={buttonVariants({ variant: "outline", size: "sm" })}
 					type="button"
 					onClick={props.onClose}
 				>
@@ -361,6 +368,7 @@ function EventsDrawer(props: {
 			<div class="h-[calc(100%-3rem)] overflow-y-auto">
 				<Show when={props.open}>
 					<DocumentProcessing
+						bare
 						documentId={props.documentId}
 						processingStatus={props.processingStatus}
 						narrationEnabled={props.narrationEnabled}
@@ -390,7 +398,5 @@ function paneClass(isActiveMobileView: boolean) {
 }
 
 function mobileViewButtonClass(isActive: boolean) {
-	return isActive
-		? "rounded-full bg-primary px-3 py-1 font-medium text-primary-foreground"
-		: "rounded-full px-3 py-1 text-muted-foreground";
+	return cn(segmentedItemClass(isActive), "px-3 py-1");
 }

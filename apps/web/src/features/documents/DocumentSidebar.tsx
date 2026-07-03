@@ -8,6 +8,7 @@ import Download from "lucide-solid/icons/download";
 import FileText from "lucide-solid/icons/file-text";
 import X from "lucide-solid/icons/x";
 import { Show } from "solid-js";
+import { buttonVariants } from "~/components/ui/button";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -36,13 +37,16 @@ export function DocumentSidebar(props: {
 	return (
 		<aside
 			class={cn(
-				"flex h-full min-h-0 w-72 shrink-0 flex-col border-border border-r bg-background/95 text-foreground",
+				"flex h-full min-h-0 w-72 flex-col border-border border-r bg-background text-foreground",
 				props.class,
 			)}
 		>
 			<div class="flex items-start gap-2 border-border border-b p-4">
 				<Link
-					class="mt-0.5 rounded-full border border-border p-2 text-muted-foreground hover:bg-card hover:text-foreground"
+					class={cn(
+						buttonVariants({ variant: "ghost", size: "icon" }),
+						"mt-0.5",
+					)}
 					to="/"
 				>
 					<ArrowLeft class="size-4" />
@@ -57,7 +61,10 @@ export function DocumentSidebar(props: {
 				<Show when={props.onClose}>
 					{(onClose) => (
 						<button
-							class="rounded-full border border-border p-2 text-muted-foreground hover:bg-card hover:text-foreground lg:hidden"
+							class={cn(
+								buttonVariants({ variant: "ghost", size: "icon" }),
+								"lg:hidden",
+							)}
 							type="button"
 							onClick={onClose()}
 						>
@@ -70,7 +77,7 @@ export function DocumentSidebar(props: {
 
 			<div class="min-h-0 flex-1 overflow-y-auto p-3">
 				<section class="space-y-2">
-					<h2 class="px-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+					<h2 class="px-2 font-medium text-muted-foreground text-xs">
 						Downloads
 					</h2>
 					<button
@@ -82,11 +89,9 @@ export function DocumentSidebar(props: {
 						onClick={() => props.onDownload("markdown")}
 					>
 						<FileText class="size-4" />
-						<span>
-							{props.downloadingFormat === "markdown"
-								? "Downloading Markdown…"
-								: "Download Markdown"}
-						</span>
+						{props.downloadingFormat === "markdown"
+							? "Downloading Markdown…"
+							: "Download Markdown"}
 					</button>
 					<button
 						class={sidebarActionClass()}
@@ -97,15 +102,13 @@ export function DocumentSidebar(props: {
 						onClick={() => props.onDownload("html")}
 					>
 						<Download class="size-4" />
-						<span>
-							{props.downloadingFormat === "html"
-								? "Downloading HTML…"
-								: "Download HTML"}
-						</span>
+						{props.downloadingFormat === "html"
+							? "Downloading HTML…"
+							: "Download HTML"}
 					</button>
 					<Show when={props.downloadError}>
 						{(message) => (
-							<p class="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive text-xs">
+							<p class="rounded-sm bg-destructive/10 p-3 text-destructive text-xs">
 								{message()}
 							</p>
 						)}
@@ -113,7 +116,7 @@ export function DocumentSidebar(props: {
 				</section>
 
 				<Collapsible class="mt-6" defaultOpen>
-					<CollapsibleTrigger class="group flex w-full items-center justify-between rounded-xl px-2 py-2 font-medium text-sm hover:bg-card">
+					<CollapsibleTrigger class="group flex w-full items-center justify-between rounded-sm px-2 py-2 font-medium text-sm transition-colors hover:bg-muted">
 						<span>Table of Contents</span>
 						<ChevronDown class="size-4 text-muted-foreground transition-transform group-data-[expanded]:rotate-180" />
 					</CollapsibleTrigger>
@@ -130,7 +133,7 @@ export function DocumentSidebar(props: {
 			</div>
 
 			<div class="space-y-2 border-border border-t p-3">
-				<h2 class="px-2 font-medium text-muted-foreground text-xs uppercase tracking-wider">
+				<h2 class="px-2 font-medium text-muted-foreground text-xs">
 					Diagnostics
 				</h2>
 				<button
@@ -140,7 +143,7 @@ export function DocumentSidebar(props: {
 					onClick={props.onToggleDebug}
 				>
 					<Bug class="size-4" />
-					<span>{props.debugEnabled ? "Hide Debug" : "Show Debug"}</span>
+					{props.debugEnabled ? "Hide Debug" : "Show Debug"}
 				</button>
 				<button
 					class={sidebarActionClass()}
@@ -148,7 +151,7 @@ export function DocumentSidebar(props: {
 					onClick={props.onOpenEvents}
 				>
 					<Activity class="size-4" />
-					<span>Processing Events</span>
+					Processing Events
 				</button>
 			</div>
 		</aside>
@@ -157,9 +160,7 @@ export function DocumentSidebar(props: {
 
 function sidebarActionClass(active = false) {
 	return cn(
-		"flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-		active
-			? "border border-primary/40 bg-primary/10 text-primary"
-			: "text-foreground hover:bg-card",
+		"flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+		active ? "bg-primary/10 text-primary" : "text-foreground hover:bg-muted",
 	);
 }

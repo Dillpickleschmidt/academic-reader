@@ -1,23 +1,35 @@
+:root {
+	--background: oklch(0.985 0.002 106);
+	--foreground: oklch(0.235 0.008 106);
+	--muted-foreground: oklch(0.5 0.01 106);
+	--primary: oklch(0.5 0.08 135);
+	--border: oklch(0.905 0.004 106);
+	--surface: oklch(0.962 0.003 106);
+	--font-serif: "Literata", Charter, Georgia, "Times New Roman", serif;
+	--font-sans: ui-sans-serif, system-ui, Arial, sans-serif;
+	--font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
 body {
 	margin: 0;
-	background: #faf9f6;
-	color: #24211f;
+	background: var(--background);
+	color: var(--foreground);
 }
 
 .reader-output {
 	min-height: 100vh;
-	background: #faf9f6;
-	color: #24211f;
+	background: var(--background);
+	color: var(--foreground);
 }
 
 .reader-view {
 	box-sizing: border-box;
-	max-width: 850px;
+	max-width: 44rem;
 	margin: 0 auto;
 	padding: 3rem 1.5rem;
-	font-family: Georgia, "Times New Roman", serif;
-	font-size: 20px;
-	line-height: 1.65;
+	font-family: var(--font-serif);
+	font-size: 1.125rem;
+	line-height: 1.75;
 }
 
 .reader-view * {
@@ -29,24 +41,22 @@ body {
 }
 
 .reader-view :is(h1, h2, h3, h4, h5, h6) {
-	margin: 1.5rem 0 0.75rem;
-	font-family: "Source Sans 3", "Source Sans Pro", Arial, sans-serif;
-	font-weight: 650;
-	line-height: 1.2;
-	color: #1f1d1b;
+	margin: 1.75rem 0 0.75rem;
+	font-weight: 600;
+	line-height: 1.25;
+	color: var(--foreground);
 }
 
 .reader-view h1 {
-	font-size: 1.875rem;
+	font-size: 1.75rem;
 }
 
 .reader-view h2 {
-	font-size: 1.5rem;
-	color: #5b8a5a;
+	font-size: 1.375rem;
 }
 
 .reader-view h3 {
-	font-size: 1.25rem;
+	font-size: 1.125rem;
 }
 
 .reader-view :is(p, ul, ol, blockquote, figure, table, pre) {
@@ -66,7 +76,7 @@ body {
 	max-width: 100%;
 	height: auto;
 	margin: 1.5rem auto;
-	border-radius: 0.75rem;
+	border-radius: 0.625rem;
 }
 
 .reader-view table {
@@ -74,38 +84,40 @@ body {
 	max-width: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
-	color: #4f4a45;
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
+	color: var(--muted-foreground);
 }
 
 .reader-view :is(th, td) {
-	border: 1px solid #ddd7ce;
+	border: 1px solid var(--border);
 	padding: 0.5rem 0.75rem;
 }
 
 .reader-view blockquote {
-	border-left: 4px solid #d8d0c4;
+	border-left: 2px solid var(--border);
 	margin-left: 0;
 	padding-left: 1rem;
-	color: #5d5750;
+	color: var(--muted-foreground);
 }
 
 .reader-view code {
 	border-radius: 0.25rem;
-	background: #eee8dd;
+	background: var(--surface);
 	padding: 0.15rem 0.3rem;
-	font-family: "SF Mono", "Fira Code", Consolas, monospace;
+	font-family: var(--font-mono);
 	font-size: 0.9em;
 }
 
 .reader-view pre {
 	overflow-x: auto;
-	border-radius: 0.75rem;
-	background: #eee8dd;
+	border-radius: 0.625rem;
+	background: var(--surface);
 	padding: 1rem;
 }
 
 .reader-view a {
-	color: #4f7f52;
+	color: var(--primary);
 	text-decoration: none;
 }
 
@@ -115,9 +127,9 @@ body {
 
 .reader-view .inline-citation {
 	border-radius: 0.25rem;
-	background: #eee8dd;
+	background: var(--surface);
 	padding: 0.05rem 0.25rem;
-	color: #5d5750;
+	color: var(--muted-foreground);
 	font-size: 0.85em;
 }
 

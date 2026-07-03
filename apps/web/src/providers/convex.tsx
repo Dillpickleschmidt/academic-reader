@@ -1,9 +1,10 @@
-import { ConvexProvider, setupConvex } from "convex-solidjs";
+import { ConvexClient } from "convex/browser";
 import {
 	createContext,
 	createEffect,
 	createSignal,
 	type JSX,
+	onCleanup,
 	useContext,
 } from "solid-js";
 import { authClient } from "../lib/auth-client";
@@ -14,13 +15,16 @@ if (!convexUrl) {
 	throw new Error("VITE_CONVEX_URL is required");
 }
 
+const ConvexClientContext = createContext<ConvexClient>();
+
 const ConvexAuthContext = createContext<{
 	isAuthenticated: () => boolean;
 	isLoading: () => boolean;
 }>();
 
 export function AppConvexProvider(props: { children: JSX.Element }) {
-	const convexClient = setupConvex(convexUrl);
+	const convexClient = new ConvexClient(convexUrl);
+	onCleanup(() => convexClient.close());
 	const session = authClient.useSession();
 	const [convexAuthenticated, setConvexAuthenticated] = createSignal(false);
 
@@ -59,9 +63,21 @@ export function AppConvexProvider(props: { children: JSX.Element }) {
 
 	return (
 		<ConvexAuthContext.Provider value={authState}>
-			<ConvexProvider client={convexClient}>{props.children}</ConvexProvider>
+			<ConvexClientContext.Provider value={convexClient}>
+				{props.children}
+			</ConvexClientContext.Provider>
 		</ConvexAuthContext.Provider>
 	);
+}
+
+export function useConvexClient(): ConvexClient {
+	const client = useContext(ConvexClientContext);
+
+	if (!client) {
+		throw new Error("useConvexClient must be used inside AppConvexProvider");
+	}
+
+	return client;
 }
 
 export function useConvexAuth() {

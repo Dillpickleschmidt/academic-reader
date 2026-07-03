@@ -1,6 +1,5 @@
 import { api } from "@academic-reader/convex/api";
 import { createFileRoute } from "@tanstack/solid-router";
-import { useQuery } from "convex-solidjs";
 import { Show } from "solid-js";
 import { ConfigureProcessingModal } from "../features/documents/DocumentCreationFlow";
 import {
@@ -12,6 +11,7 @@ import {
 	createDocumentCreation,
 } from "../features/documents/document-creation";
 import { authClient } from "../lib/auth-client";
+import { useQuery } from "../lib/convex-query";
 import { useConvexAuth } from "../providers/convex";
 
 export const Route = createFileRoute("/")({ component: Home });
@@ -26,11 +26,11 @@ function Home() {
 
 	return (
 		<main class="min-h-screen bg-background text-foreground">
-			<div class="mx-auto w-full max-w-4xl px-6 pt-14 pb-28 sm:pt-20">
+			<div class="mx-auto w-full max-w-2xl px-6 pt-14 pb-28 sm:pt-20">
 				<Show
 					when={!session().isPending}
 					fallback={
-						<p class="font-mono text-dim text-sm">
+						<p class="text-muted-foreground text-sm">
 							Preparing your reading room…
 						</p>
 					}

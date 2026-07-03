@@ -1,23 +1,30 @@
 import type { Doc, Id } from "@academic-reader/convex/data-model";
 import type { NarrationWordTimestamp } from "@academic-reader/shared/narration";
+import Pause from "lucide-solid/icons/pause";
+import Play from "lucide-solid/icons/play";
+import RotateCcw from "lucide-solid/icons/rotate-ccw";
+import X from "lucide-solid/icons/x";
 import {
 	createEffect,
 	createMemo,
-	createResource,
 	createSignal,
 	Index,
 	onCleanup,
 	Show,
 } from "solid-js";
+import { buttonVariants } from "~/components/ui/button";
+import { Skeleton } from "~/components/ui/skeleton";
+import { cn } from "~/lib/utils";
 import { authClient } from "../../lib/auth-client";
 import { fetchJson } from "../../lib/fetch-json";
+import { createLatestFetch } from "../../lib/latest-fetch";
 import { ReaderDebugOverlayLayer, readerBlockElementId } from "./DocumentDebug";
 import {
 	extractBlockImageFilenames,
 	rewriteBlockImageUrls,
 } from "./document-html";
 import type { NarrationAudioMetadata } from "./document-narration-audio";
-import { EmptyPane, errorMessage, PaneSkeleton } from "./document-page-ui";
+import { EmptyPane, errorMessage } from "./document-page-ui";
 import { createStableItems } from "./document-stable-list";
 import {
 	createNarrationWordHighlighter,
@@ -57,6 +64,9 @@ export function ReaderView(props: {
 		createSignal<HTMLDivElement>();
 	const [audioElement, setAudioElement] = createSignal<HTMLAudioElement>();
 	const [playback, setPlayback] = createSignal<NarrationPlaybackState>();
+	const [playedMs, setPlayedMs] = createSignal(0);
+	const [loadedDurationMs, setLoadedDurationMs] = createSignal<number>();
+	const totalMs = () => loadedDurationMs() ?? playback()?.audio.durationMs ?? 0;
 	let playbackRequestId = 0;
 	let activeHighlighter: NarrationWordHighlighter | undefined;
 	let highlightFrame: number | undefined;
@@ -71,7 +81,7 @@ export function ReaderView(props: {
 		undefined,
 		{ equals: sameStringArray },
 	);
-	const [imageAccess] = createResource(() => {
+	const imageAccess = createLatestFetch(() => {
 		const filenames = imageFilenames();
 		if (filenames === undefined || filenames.length === 0) return undefined;
 		return { documentId: props.documentId, filenames };
@@ -79,8 +89,8 @@ export function ReaderView(props: {
 	const imageUrls = createMemo(() => {
 		const filenames = imageFilenames();
 		if (filenames === undefined) return undefined;
-		if (filenames.length === 0 || imageAccess.error) return {};
-		return imageAccess()?.urls;
+		if (filenames.length === 0 || imageAccess.error()) return {};
+		return imageAccess.data()?.urls;
 	});
 	const readyBlocks = createStableItems(
 		() => {
@@ -268,6 +278,44 @@ export function ReaderView(props: {
 			element.load();
 		}
 		setPlayback(undefined);
+		setPlayedMs(0);
+		setLoadedDurationMs(undefined);
+	}
+
+	function togglePlayback() {
+		const element = audioElement();
+		const state = playback();
+		if (!element || !state) return;
+		if (state.status === "playing") {
+			element.pause();
+			return;
+		}
+		if (state.status === "ended") element.currentTime = 0;
+		void element.play();
+	}
+
+	function seekToFraction(fraction: number) {
+		const element = audioElement();
+		const total = totalMs();
+		if (!element || !total) return;
+		const clamped = Math.min(Math.max(fraction, 0), 1);
+		element.currentTime = (clamped * total) / 1000;
+		setPlayedMs(clamped * total);
+	}
+
+	function handleSeekPointer(event: PointerEvent & { currentTarget: Element }) {
+		const rect = event.currentTarget.getBoundingClientRect();
+		if (rect.width === 0) return;
+		seekToFraction((event.clientX - rect.left) / rect.width);
+	}
+
+	function handleSeekKeyDown(event: KeyboardEvent) {
+		if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+		event.preventDefault();
+		const total = totalMs();
+		if (!total) return;
+		const step = event.key === "ArrowLeft" ? -5000 : 5000;
+		seekToFraction((playedMs() + step) / total);
 	}
 
 	async function loadAndPlayNarration(
@@ -340,13 +388,13 @@ export function ReaderView(props: {
 	}
 
 	return (
-		<div class="reader-view h-full overflow-y-auto bg-background p-6 pt-16 lg:p-10">
-			<Show when={imageAccess.error}>
-				<p class="mb-4 rounded-xl border border-primary/30 bg-primary/10 p-3 text-primary text-sm">
+		<div class="reader-view h-full overflow-y-auto bg-background p-6 pb-28 lg:p-10 lg:pb-28">
+			<Show when={imageAccess.error()}>
+				<p class="mb-4 rounded-sm bg-primary/10 p-3 font-sans text-primary text-sm">
 					Some Block images could not be signed for direct storage access.
 				</p>
 			</Show>
-			<Show when={readyBlocks()} fallback={<PaneSkeleton />}>
+			<Show when={readyBlocks()} fallback={<ReaderSkeleton />}>
 				{(loadedBlocks) => (
 					<Show
 						when={loadedBlocks().length > 0}
@@ -413,40 +461,78 @@ export function ReaderView(props: {
 					</Show>
 				)}
 			</Show>
-			<div
-				class={
-					playback()
-						? "fixed inset-x-4 bottom-20 z-40 mx-auto max-w-3xl rounded-2xl border border-border bg-background/95 p-3 shadow-2xl shadow-black/60 backdrop-blur"
-						: "hidden"
-				}
-			>
+			<div class={playback() ? "fixed inset-x-4 bottom-4 z-40" : "hidden"}>
 				<Show when={playback()}>
 					{(state) => (
-						<div class="mb-2 flex items-start justify-between gap-3">
-							<div>
-								<div class="font-medium text-sm text-foreground">
-									Narration · {state().blockLabel}
-								</div>
-								<div class="text-muted-foreground text-xs">
-									{playbackStatusText(state())}
+						<div class="relative mx-auto max-w-3xl rounded-sm border border-border bg-popover font-sans text-popover-foreground shadow-overlay">
+							<div
+								aria-label="Seek Narration"
+								aria-valuemax={Math.round(totalMs())}
+								aria-valuemin={0}
+								aria-valuenow={Math.round(playedMs())}
+								class="group absolute inset-x-0 top-0 h-2 cursor-pointer"
+								role="slider"
+								tabIndex={0}
+								onKeyDown={handleSeekKeyDown}
+								onPointerDown={handleSeekPointer}
+							>
+								<div class="h-0.5 w-full overflow-hidden rounded-t-sm bg-border">
+									<div
+										class="h-full bg-primary"
+										style={{
+											width: `${totalMs() ? (playedMs() / totalMs()) * 100 : 0}%`,
+										}}
+									/>
 								</div>
 							</div>
-							<div class="flex gap-2">
+							<div class="flex items-center gap-3 px-3 py-2.5 pt-3">
+								<button
+									aria-label={
+										state().status === "playing"
+											? "Pause Narration"
+											: "Play Narration"
+									}
+									class={cn(buttonVariants({ size: "icon" }), "rounded-full")}
+									disabled={state().status === "loading"}
+									type="button"
+									onClick={togglePlayback}
+								>
+									<Show
+										when={state().status === "playing"}
+										fallback={<Play class="ml-0.5" />}
+									>
+										<Pause />
+									</Show>
+								</button>
+								<div class="min-w-0 flex-1">
+									<div class="truncate font-medium text-sm">
+										{state().blockLabel}
+									</div>
+									<div class="truncate text-muted-foreground text-xs">
+										{playbackStatusText(state())}
+									</div>
+								</div>
+								<div class="shrink-0 text-muted-foreground text-xs tabular-nums">
+									{formatPlaybackTime(playedMs())} /{" "}
+									{formatPlaybackTime(totalMs())}
+								</div>
 								<Show when={state().status === "error"}>
 									<button
-										class="rounded-full border border-primary/50 px-3 py-1 text-primary text-xs hover:bg-primary/10"
+										aria-label="Retry Narration"
+										class="flex size-7 shrink-0 items-center justify-center rounded-sm text-primary transition-colors hover:bg-primary/10"
 										type="button"
 										onClick={() => void retryPlayback()}
 									>
-										Retry
+										<RotateCcw class="size-4" />
 									</button>
 								</Show>
 								<button
-									class="rounded-full border border-border px-3 py-1 text-foreground text-xs hover:bg-card"
+									aria-label="Close Narration"
+									class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
 									type="button"
 									onClick={stopPlayback}
 								>
-									Close
+									<X />
 								</button>
 							</div>
 						</div>
@@ -454,12 +540,18 @@ export function ReaderView(props: {
 				</Show>
 				<audio
 					ref={(element) => setAudioElement(element)}
-					class="w-full"
-					controls
+					class="hidden"
+					onDurationChange={(event) => {
+						const duration = event.currentTarget.duration;
+						if (Number.isFinite(duration)) setLoadedDurationMs(duration * 1000);
+					}}
 					onEnded={() => updateCurrentPlaybackStatus("ended")}
 					onError={() => updateCurrentPlaybackStatus("error")}
 					onPause={() => updateCurrentPlaybackStatus("paused")}
 					onPlay={() => updateCurrentPlaybackStatus("playing")}
+					onTimeUpdate={(event) =>
+						setPlayedMs(event.currentTarget.currentTime * 1000)
+					}
 				>
 					<track
 						default
@@ -468,6 +560,32 @@ export function ReaderView(props: {
 						src={captionTrackUrl(playback())}
 					/>
 				</audio>
+			</div>
+		</div>
+	);
+}
+
+function ReaderSkeleton() {
+	return (
+		<div class="mx-auto max-w-3xl">
+			<Skeleton class="h-7 w-2/3" />
+			<div class="mt-8 space-y-3.5">
+				<Skeleton class="h-3.5" />
+				<Skeleton class="h-3.5" />
+				<Skeleton class="h-3.5 w-11/12" />
+				<Skeleton class="h-3.5 w-4/5" />
+			</div>
+			<div class="mt-7 space-y-3.5">
+				<Skeleton class="h-3.5" />
+				<Skeleton class="h-3.5 w-11/12" />
+				<Skeleton class="h-3.5" />
+				<Skeleton class="h-3.5 w-3/5" />
+			</div>
+			<Skeleton class="mt-8 h-56" />
+			<div class="mt-8 space-y-3.5">
+				<Skeleton class="h-3.5" />
+				<Skeleton class="h-3.5 w-5/6" />
+				<Skeleton class="h-3.5 w-2/3" />
 			</div>
 		</div>
 	);
@@ -671,15 +789,25 @@ function vttTimestamp(durationMs: number) {
 }
 
 function readerArticleClass(playable: boolean, active: boolean) {
-	const base = "-mx-3 rounded-xl px-3 py-1 transition-colors";
+	const base = "-mx-3 rounded-sm px-3 py-1 transition-colors";
 	if (active) {
-		return `${base} bg-primary/10 ring-1 ring-primary/40`;
+		return `${base} bg-primary/10`;
 	}
-	if (playable) return `${base} cursor-pointer hover:bg-card/70`;
+	if (playable) return `${base} cursor-pointer hover:bg-muted/50`;
 	return base;
 }
 
 function playbackStatusText(state: NarrationPlaybackState) {
 	if (state.status === "error") return state.error ?? "Playback failed";
-	return `${state.status} · ${Math.round(state.audio.durationMs / 100) / 10}s`;
+	if (state.status === "loading") return "Loading…";
+	if (state.status === "playing") return "Reading";
+	if (state.status === "paused") return "Paused";
+	return "Finished";
+}
+
+function formatPlaybackTime(ms: number) {
+	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds % 60;
+	return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }

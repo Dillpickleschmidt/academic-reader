@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "@fontsource-variable/hanken-grotesk/index.css";
+@import "@fontsource-variable/literata/wght.css";
+@import "@fontsource-variable/literata/wght-italic.css";
 @import "katex/dist/katex.min.css";
 
 :root,
@@ -16,6 +19,7 @@
 	--muted-foreground: oklch(0.708 0 0);
 	--destructive: oklch(0.704 0.191 22.216);
 	--destructive-foreground: oklch(0.145 0 0);
+	--warning: oklch(0.78 0.12 85);
 	--border: oklch(0.275 0 0);
 	--tertiary: #5b8a5a;
 }
@@ -34,6 +38,7 @@
 	--muted-foreground: #9aa5ce;
 	--destructive: #f7768e;
 	--destructive-foreground: #16161e;
+	--warning: #e0af68;
 	--border: #353d57;
 	--tertiary: #9ece6a;
 }
@@ -52,6 +57,7 @@
 	--muted-foreground: #a3b4eb;
 	--destructive: #f38ba8;
 	--destructive-foreground: #11111b;
+	--warning: #f9e2af;
 	--border: #4c4f69;
 	--tertiary: #94e2d5;
 }
@@ -70,6 +76,7 @@
 	--muted-foreground: #d8dee9;
 	--destructive: #bf616a;
 	--destructive-foreground: #2e3440;
+	--warning: #ebcb8b;
 	--border: #505a70;
 	--tertiary: #5e81ac;
 }
@@ -88,17 +95,71 @@
 	--muted-foreground: #908caa;
 	--destructive: #eb6f92;
 	--destructive-foreground: #191724;
+	--warning: #f6c177;
 	--border: #403d52;
 	--tertiary: #31748f;
 }
 
+/* Light mode always renders the default palette's light variant. This block
+   sits after every [data-color-theme] block so it wins regardless of which
+   palette is selected; the other themes are dark-only by design. */
+:root[data-mode="light"] {
+	color-scheme: light;
+	--overlay-shadow: 0 4px 16px oklch(0 0 0 / 0.08);
+	--background: oklch(0.985 0.002 106);
+	--foreground: oklch(0.235 0.008 106);
+	--card: oklch(0.962 0.003 106);
+	--card-foreground: oklch(0.235 0.008 106);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.235 0.008 106);
+	--primary: oklch(0.5 0.08 135);
+	--primary-foreground: oklch(0.985 0.01 135);
+	--secondary: oklch(0.945 0.004 106);
+	--secondary-foreground: oklch(0.235 0.008 106);
+	--muted-foreground: oklch(0.5 0.01 106);
+	--destructive: oklch(0.545 0.19 25);
+	--destructive-foreground: oklch(0.985 0 0);
+	--warning: oklch(0.58 0.12 80);
+	--border: oklch(0.905 0.004 106);
+	--tertiary: oklch(0.46 0.07 145);
+}
+
 :root {
+	color-scheme: dark;
 	--muted: color-mix(in oklab, var(--card) 84%, var(--foreground) 10%);
 	--accent: color-mix(in oklab, var(--card) 84%, var(--foreground) 10%);
 	--accent-foreground: var(--foreground);
 	--input: var(--border);
 	--ring: var(--primary);
 	--dim: color-mix(in oklab, var(--muted-foreground) 55%, var(--background));
+	--overlay-shadow: 0 0 #0000;
+}
+
+@theme {
+	--font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-serif: "Literata Variable", Charter, Georgia, serif;
+	--radius-sm: 0.375rem;
+	--radius-md: 0.625rem;
+	--animate-collapsible-down: collapsible-down 0.2s ease-out;
+	--animate-collapsible-up: collapsible-up 0.2s ease-out;
+
+	@keyframes collapsible-down {
+		from {
+			height: 0;
+		}
+		to {
+			height: var(--kb-collapsible-content-height);
+		}
+	}
+
+	@keyframes collapsible-up {
+		from {
+			height: var(--kb-collapsible-content-height);
+		}
+		to {
+			height: 0;
+		}
+	}
 }
 
 @theme inline {
@@ -116,6 +177,7 @@
 	--color-muted-foreground: var(--muted-foreground);
 	--color-accent: var(--accent);
 	--color-accent-foreground: var(--accent-foreground);
+	--color-warning: var(--warning);
 	--color-destructive: var(--destructive);
 	--color-destructive-foreground: var(--destructive-foreground);
 	--color-border: var(--border);
@@ -123,6 +185,7 @@
 	--color-ring: var(--ring);
 	--color-dim: var(--dim);
 	--color-tertiary: var(--tertiary);
+	--shadow-overlay: var(--overlay-shadow);
 }
 
 * {
@@ -141,27 +204,61 @@ body {
 	color: var(--foreground);
 }
 
+:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
+/* In base so cursor-* utilities on a specific button can still override. */
+@layer base {
+	button:not(:disabled) {
+		cursor: pointer;
+	}
+}
+
+html[data-source-view-panning="true"],
+html[data-source-view-panning="true"] * {
+	cursor: grabbing;
+}
+
+/* Unlayered, so it overrides Tailwind's layered animation/transition utilities. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms;
+		animation-iteration-count: 1;
+		transition-duration: 0.01ms;
+	}
+}
+
+.reader-view {
+	font-family: var(--font-serif);
+	font-size: 1.0625rem;
+	line-height: 1.75;
+}
+
 .reader-view article + article {
 	margin-top: 1.25rem;
 }
 
 .reader-view :is(h1, h2, h3, h4, h5, h6) {
-	margin: 1.5rem 0 0.75rem;
-	font-weight: 650;
-	line-height: 1.2;
+	margin: 1.75rem 0 0.75rem;
+	font-weight: 600;
+	line-height: 1.25;
 	color: var(--foreground);
 }
 
 .reader-view h1 {
-	font-size: 1.875rem;
+	font-size: 1.75rem;
 }
 
 .reader-view h2 {
-	font-size: 1.5rem;
+	font-size: 1.375rem;
 }
 
 .reader-view h3 {
-	font-size: 1.25rem;
+	font-size: 1.125rem;
 }
 
 .reader-view :is(p, ul, ol, blockquote, figure, table, pre) {
@@ -186,10 +283,17 @@ body {
 	list-style: decimal;
 }
 
+.reader-view blockquote {
+	border-left: 2px solid var(--border);
+	margin-left: 0;
+	padding-left: 1rem;
+	color: var(--muted-foreground);
+}
+
 .reader-view img {
 	max-width: 100%;
 	height: auto;
-	border-radius: 0.75rem;
+	border-radius: var(--radius-md);
 }
 
 .reader-view table {
@@ -197,6 +301,8 @@ body {
 	max-width: 100%;
 	overflow-x: auto;
 	border-collapse: collapse;
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
 	color: var(--muted-foreground);
 }
 
