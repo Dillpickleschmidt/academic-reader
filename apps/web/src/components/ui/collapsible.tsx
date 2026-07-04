@@ -13,8 +13,7 @@ const CollapsibleContent: Component<
 	return (
 		<KobalteCollapsible.Content
 			class={cn(
-				"overflow-hidden transition-all",
-				"data-[expanded]:animate-collapsible-down data-[closed]:animate-collapsible-up",
+				"overflow-hidden data-[closed]:animate-collapsible-up data-[expanded]:animate-collapsible-down",
 				local.class,
 			)}
 			{...rest}

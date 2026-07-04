@@ -7,7 +7,6 @@ import { cn } from "~/lib/utils";
 
 const Popover = KobaltePopover;
 const PopoverTrigger = KobaltePopover.Trigger;
-const PopoverAnchor = KobaltePopover.Anchor;
 
 const PopoverContent: Component<
 	ComponentProps<typeof KobaltePopover.Content> & { showClose?: boolean }
@@ -39,35 +38,4 @@ const PopoverContent: Component<
 	);
 };
 
-const PopoverTitle: Component<ComponentProps<typeof KobaltePopover.Title>> = (
-	props,
-) => {
-	const [local, rest] = splitProps(props, ["class"]);
-	return (
-		<KobaltePopover.Title
-			class={cn("font-semibold text-sm", local.class)}
-			{...rest}
-		/>
-	);
-};
-
-const PopoverDescription: Component<
-	ComponentProps<typeof KobaltePopover.Description>
-> = (props) => {
-	const [local, rest] = splitProps(props, ["class"]);
-	return (
-		<KobaltePopover.Description
-			class={cn("text-muted-foreground text-sm", local.class)}
-			{...rest}
-		/>
-	);
-};
-
-export {
-	Popover,
-	PopoverTrigger,
-	PopoverAnchor,
-	PopoverContent,
-	PopoverTitle,
-	PopoverDescription,
-};
+export { Popover, PopoverTrigger, PopoverContent };

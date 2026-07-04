@@ -1,14 +1,11 @@
 import { Dialog as KobalteDialog } from "@kobalte/core/dialog";
 import X from "lucide-solid/icons/x";
-import type { Component, ComponentProps, JSX } from "solid-js";
+import type { Component, ComponentProps } from "solid-js";
 import { splitProps } from "solid-js";
 import { buttonVariants } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 
 const Dialog = KobalteDialog;
-const DialogTrigger = KobalteDialog.Trigger;
-const DialogPortal = KobalteDialog.Portal;
-const DialogClose = KobalteDialog.CloseButton;
 
 const DialogOverlay: Component<ComponentProps<typeof KobalteDialog.Overlay>> = (
 	props,
@@ -52,32 +49,6 @@ const DialogContent: Component<ComponentProps<typeof KobalteDialog.Content>> = (
 	);
 };
 
-const DialogHeader: Component<JSX.HTMLAttributes<HTMLDivElement>> = (props) => {
-	const [local, rest] = splitProps(props, ["class"]);
-	return (
-		<div
-			class={cn(
-				"flex flex-col space-y-1.5 text-center sm:text-left",
-				local.class,
-			)}
-			{...rest}
-		/>
-	);
-};
-
-const DialogFooter: Component<JSX.HTMLAttributes<HTMLDivElement>> = (props) => {
-	const [local, rest] = splitProps(props, ["class"]);
-	return (
-		<div
-			class={cn(
-				"flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2",
-				local.class,
-			)}
-			{...rest}
-		/>
-	);
-};
-
 const DialogTitle: Component<ComponentProps<typeof KobalteDialog.Title>> = (
 	props,
 ) => {
@@ -93,27 +64,4 @@ const DialogTitle: Component<ComponentProps<typeof KobalteDialog.Title>> = (
 	);
 };
 
-const DialogDescription: Component<
-	ComponentProps<typeof KobalteDialog.Description>
-> = (props) => {
-	const [local, rest] = splitProps(props, ["class"]);
-	return (
-		<KobalteDialog.Description
-			class={cn("text-sm text-muted-foreground", local.class)}
-			{...rest}
-		/>
-	);
-};
-
-export {
-	Dialog,
-	DialogTrigger,
-	DialogPortal,
-	DialogClose,
-	DialogOverlay,
-	DialogContent,
-	DialogHeader,
-	DialogFooter,
-	DialogTitle,
-	DialogDescription,
-};
+export { Dialog, DialogContent, DialogTitle };

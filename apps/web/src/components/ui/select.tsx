@@ -79,25 +79,4 @@ const SelectItem: Component<ComponentProps<typeof KobalteSelect.Item>> = (
 	);
 };
 
-const SelectLabel: Component<ComponentProps<typeof KobalteSelect.Label>> = (
-	props,
-) => {
-	const [local, rest] = splitProps(props, ["class"]);
-	return (
-		<KobalteSelect.Label
-			class={cn("py-1.5 pr-2 pl-8 font-semibold text-sm", local.class)}
-			{...rest}
-		/>
-	);
-};
-
-const SelectGroup = KobalteSelect.Section;
-
-export {
-	Select,
-	SelectTrigger,
-	SelectContent,
-	SelectItem,
-	SelectLabel,
-	SelectGroup,
-};
+export { Select, SelectTrigger, SelectContent, SelectItem };

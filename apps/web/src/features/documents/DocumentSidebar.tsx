@@ -11,6 +11,11 @@ import X from "lucide-solid/icons/x";
 import { createSignal, type JSX, Show } from "solid-js";
 import { buttonVariants } from "~/components/ui/button";
 import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "~/components/ui/collapsible";
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
@@ -159,42 +164,37 @@ function SidebarPanel(props: DocumentSidebarProps) {
 			</div>
 
 			<div class="min-h-0 flex-1 overflow-y-auto p-2">
-				<button
-					aria-expanded={tableOfContentsExpanded()}
-					class={cn(sidebarActionClass(), props.expanded ? "mt-1" : "mt-5")}
-					type="button"
-					onClick={() => setTableOfContentsOpen(!tableOfContentsOpen())}
+				<Collapsible
+					open={tableOfContentsExpanded()}
+					onOpenChange={setTableOfContentsOpen}
 				>
-					<ListTree class="size-4" />
-					<span class={sidebarActionLabelClass(props.expanded)}>
-						Table of Contents
-					</span>
-					<ChevronDown
-						class={cn(
-							"ml-auto size-4 text-muted-foreground transition-[opacity,transform]",
-							props.expanded ? "opacity-100" : "opacity-0",
-							tableOfContentsExpanded() && "rotate-180",
-						)}
-					/>
-				</button>
-				<div
-					aria-hidden={!tableOfContentsExpanded()}
-					inert={!tableOfContentsExpanded()}
-					class={cn(
-						"pr-1 transition-[max-height,opacity,margin] duration-200 ease-out",
-						tableOfContentsExpanded()
-							? "mt-2 max-h-[min(50vh,32rem)] overflow-y-auto opacity-100"
-							: "mt-0 max-h-0 overflow-hidden opacity-0",
-					)}
-				>
-					<TableOfContentsList
-						blocks={props.blocks}
-						entries={props.entries}
-						pages={props.pages}
-						onNavigate={props.onClose}
-						onShowReaderBlock={props.onShowReaderBlock}
-					/>
-				</div>
+					<CollapsibleTrigger
+						class={cn(sidebarActionClass(), props.expanded ? "mt-1" : "mt-5")}
+					>
+						<ListTree class="size-4" />
+						<span class={sidebarActionLabelClass(props.expanded)}>
+							Table of Contents
+						</span>
+						<ChevronDown
+							class={cn(
+								"ml-auto size-4 text-muted-foreground transition-[opacity,transform]",
+								props.expanded ? "opacity-100" : "opacity-0",
+								tableOfContentsExpanded() && "rotate-180",
+							)}
+						/>
+					</CollapsibleTrigger>
+					<CollapsibleContent class="mt-2 pr-1">
+						<div class="max-h-[min(50vh,32rem)] overflow-y-auto">
+							<TableOfContentsList
+								blocks={props.blocks}
+								entries={props.entries}
+								pages={props.pages}
+								onNavigate={props.onClose}
+								onShowReaderBlock={props.onShowReaderBlock}
+							/>
+						</div>
+					</CollapsibleContent>
+				</Collapsible>
 
 				<section class="mt-4 grid gap-2">
 					<h2 class={sectionLabelClass(props.expanded, true)}>Downloads</h2>

@@ -31,8 +31,8 @@ export const COLOR_MODES = [
 ] as const;
 
 type ColorTheme = (typeof COLOR_THEMES)[number]["id"];
-export type ColorMode = (typeof COLOR_MODES)[number]["id"];
-export type ResolvedColorMode = "light" | "dark";
+type ColorMode = (typeof COLOR_MODES)[number]["id"];
+type ResolvedColorMode = "light" | "dark";
 
 const THEME_STORAGE_KEY = "color-theme";
 const MODE_STORAGE_KEY = "color-mode";
