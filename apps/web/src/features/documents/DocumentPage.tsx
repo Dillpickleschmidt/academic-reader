@@ -37,6 +37,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 		"source" | "reader"
 	>("source");
 	const [sidebarOpen, setSidebarOpen] = createSignal(false);
+	const [sidebarExpanded, setSidebarExpanded] = createSignal(false);
 	const [eventsOpen, setEventsOpen] = createSignal(false);
 	const [debugEnabled, setDebugEnabled] = createSignal(false);
 	const [downloadingFormat, setDownloadingFormat] =
@@ -246,6 +247,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 											downloadError={downloadError()}
 											downloadingFormat={downloadingFormat()}
 											entries={tableOfContentsEntries.data()}
+											expanded
 											pages={pages.data()}
 											onClose={() => setSidebarOpen(false)}
 											onDownload={(format) => {
@@ -265,7 +267,7 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 									</div>
 								</Show>
 
-								<div class="grid min-h-0 flex-1 lg:grid-cols-[18rem_minmax(0,1fr)_minmax(0,1fr)]">
+								<div class="grid min-h-0 flex-1 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]">
 									<DocumentSidebar
 										blocks={blocks.data()}
 										canDownload={canDownload()}
@@ -275,10 +277,12 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 										downloadError={downloadError()}
 										downloadingFormat={downloadingFormat()}
 										entries={tableOfContentsEntries.data()}
+										expanded={sidebarExpanded()}
 										pages={pages.data()}
 										onDownload={(format) => void handleDownload(format)}
 										onOpenEvents={() => setEventsOpen(true)}
 										onShowReaderBlock={showBlockInReader}
+										onExpandedChange={setSidebarExpanded}
 										onToggleDebug={() => setDebugEnabled((enabled) => !enabled)}
 									/>
 									<section class={paneClass(activeMobileView() === "source")}>
