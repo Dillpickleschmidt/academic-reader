@@ -17,6 +17,15 @@ services:
       timeout: 2s
       retries: 30
 
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    network_mode: host
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${CONVEX_URL}
+    depends_on:
+      convex:
+        condition: service_healthy
+
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"

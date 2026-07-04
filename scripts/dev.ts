@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 const rootEnvPath = resolve(root, ".env.local");
 const children: Bun.Subprocess[] = [];
+const includeDashboard = process.argv.includes("--dashboard");
 
 // A CONVEX_DEPLOYMENT inherited from the shell (or a pre-self-hosted
 // .env.local auto-loaded by bun) makes the Convex CLI refuse to start.
@@ -23,6 +24,7 @@ async function main() {
 	await run("setup", "bun", ["scripts/setup-dev.ts", "--no-sync"], root);
 	const rootEnv = parseEnvFile(rootEnvPath);
 	const services = ["minio", "convex"];
+	if (includeDashboard) services.push("convex-dashboard");
 	if (rootEnv.CONVERSION_BACKEND === "local") services.push("marker");
 	if (rootEnv.TTS_BACKEND === "local") {
 		services.push("kokoro-tts", "qwen3-tts");
