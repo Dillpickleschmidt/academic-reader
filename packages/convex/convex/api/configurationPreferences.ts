@@ -13,6 +13,7 @@ export const save = mutation({
 		markerForceOcr: v.boolean(),
 		markerUseLlm: v.boolean(),
 		narrationEnabled: v.boolean(),
+		equationExplanationsEnabled: v.boolean(),
 		narrationVoice: v.string(),
 	},
 	handler: (ctx, args) =>

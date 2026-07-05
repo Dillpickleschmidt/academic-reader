@@ -1,7 +1,7 @@
 import { api } from "@academic-reader/convex/api";
 import { narrationVoices } from "@academic-reader/shared/processing";
 import { sourceDocumentAcceptAttribute } from "@academic-reader/shared/uploads";
-import { createEffect, Show } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import { buttonVariants } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "~/components/ui/dialog";
@@ -17,7 +17,7 @@ import { cn } from "~/lib/utils";
 import { authClient } from "../../lib/auth-client";
 import { useQuery } from "../../lib/convex-query";
 import { fetchJson } from "../../lib/fetch-json";
-import { useConvexAuth } from "../../providers/convex";
+import { useConvexAuth, useConvexClient } from "../../providers/convex";
 import { AuthPanel } from "../auth/AuthPanel";
 import {
 	clearDocumentDraft,
@@ -99,6 +99,7 @@ function ConfigureProcessingFlow(props: {
 }) {
 	const session = authClient.useSession();
 	const convexAuth = useConvexAuth();
+	const convexClient = useConvexClient();
 	const preferences = useQuery(
 		api.api.configurationPreferences.get,
 		{},
@@ -106,6 +107,17 @@ function ConfigureProcessingFlow(props: {
 			enabled: convexAuth.isAuthenticated(),
 		}),
 	);
+	const codexConnection = useQuery(
+		api.api.codexConnections.getStatus,
+		{},
+		() => ({
+			enabled: convexAuth.isAuthenticated(),
+		}),
+	);
+	const [codexConnecting, setCodexConnecting] = createSignal(false);
+	const [codexDisconnecting, setCodexDisconnecting] = createSignal(false);
+	const [codexDeviceCode, setCodexDeviceCode] = createSignal<CodexDeviceCode>();
+	const [codexError, setCodexError] = createSignal<string>();
 	const state = props.state;
 
 	createEffect(() => {
@@ -116,7 +128,16 @@ function ConfigureProcessingFlow(props: {
 		state.setForceOcr(savedPreferences.markerForceOcr);
 		state.setUseLlm(savedPreferences.markerUseLlm);
 		state.setNarrationEnabled(savedPreferences.narrationEnabled);
+		state.setEquationExplanationsEnabled(
+			savedPreferences.equationExplanationsEnabled,
+		);
 		state.setNarrationVoice(savedPreferences.narrationVoice);
+	});
+
+	createEffect(() => {
+		const status = codexConnection.data();
+		if (!status || status.connected) return;
+		state.setEquationExplanationsEnabled(false);
 	});
 
 	createEffect(() => {
@@ -126,6 +147,14 @@ function ConfigureProcessingFlow(props: {
 
 		void startProcessing();
 	});
+
+	function codexConnected() {
+		return codexConnection.data()?.connected === true;
+	}
+
+	function missingRequiredCodexConnection() {
+		return state.equationExplanationsEnabled() && !codexConnected();
+	}
 
 	async function startProcessing() {
 		const selectedFile = state.file();
@@ -147,6 +176,10 @@ function ConfigureProcessingFlow(props: {
 		}
 		if (!convexAuth.isAuthenticated()) {
 			state.setError("Finishing sign-in; try again in a moment.");
+			return;
+		}
+		if (missingRequiredCodexConnection()) {
+			state.setError("Connect Codex before generating Equation Explanations.");
 			return;
 		}
 
@@ -186,6 +219,9 @@ function ConfigureProcessingFlow(props: {
 								enabled: state.narrationEnabled(),
 								voice: state.narrationVoice(),
 							},
+							equationExplanations: {
+								enabled: state.equationExplanationsEnabled(),
+							},
 						},
 					}),
 				},
@@ -206,6 +242,40 @@ function ConfigureProcessingFlow(props: {
 			);
 		} finally {
 			state.setIsStarting(false);
+		}
+	}
+
+	async function disconnectCodexConnection() {
+		setCodexDisconnecting(true);
+		setCodexError(undefined);
+
+		try {
+			await convexClient.mutation(api.api.codexConnections.disconnect, {});
+			state.setEquationExplanationsEnabled(false);
+		} catch (error) {
+			setCodexError(
+				error instanceof Error ? error.message : "Could not disconnect Codex",
+			);
+		} finally {
+			setCodexDisconnecting(false);
+		}
+	}
+
+	async function connectCodexConnection() {
+		setCodexConnecting(true);
+		setCodexDeviceCode(undefined);
+		setCodexError(undefined);
+
+		try {
+			await connectCodex((event) => {
+				if (event.type === "device_code") setCodexDeviceCode(event.info);
+			});
+		} catch (error) {
+			setCodexError(
+				error instanceof Error ? error.message : "Could not connect Codex",
+			);
+		} finally {
+			setCodexConnecting(false);
 		}
 	}
 
@@ -294,6 +364,103 @@ function ConfigureProcessingFlow(props: {
 											updatePreference(() => state.setUseLlm(checked))
 										}
 									/>
+								</div>
+							</section>
+
+							<section class="border-border border-t pt-6">
+								<p class="font-medium text-muted-foreground text-xs">
+									Equation Explanations
+								</p>
+								<div class="mt-4 flex flex-col gap-4">
+									<Checkbox
+										checked={state.equationExplanationsEnabled()}
+										description={
+											codexConnected()
+												? "Generate collapsible explanations for standalone equations using your Codex subscription."
+												: "Connect Codex before enabling Equation Explanations."
+										}
+										disabled={!codexConnected()}
+										label="Generate Equation Explanations"
+										onChange={(checked) =>
+											updatePreference(() =>
+												state.setEquationExplanationsEnabled(checked),
+											)
+										}
+									/>
+
+									<Show
+										when={codexConnected()}
+										fallback={
+											<div class="rounded-sm border border-border p-3 text-sm">
+												<p class="text-muted-foreground">
+													Equation Explanations use a Codex Connection tied to
+													your Codex subscription.
+												</p>
+												<button
+													class={cn(
+														buttonVariants({ variant: "outline", size: "sm" }),
+														"mt-3",
+													)}
+													disabled={
+														codexConnecting() || !convexAuth.isAuthenticated()
+													}
+													type="button"
+													onClick={() => void connectCodexConnection()}
+												>
+													{codexConnecting()
+														? "Waiting for Codex…"
+														: "Connect Codex"}
+												</button>
+												<Show when={codexDeviceCode()}>
+													{(device) => (
+														<div class="mt-3 text-xs">
+															<p class="text-muted-foreground">
+																Open this page and enter the code:
+															</p>
+															<a
+																class="break-all text-primary hover:underline"
+																href={device().verificationUri}
+																target="_blank"
+																rel="noreferrer"
+															>
+																{device().verificationUri}
+															</a>
+															<p class="mt-2 font-mono text-foreground text-lg tracking-widest">
+																{device().userCode}
+															</p>
+														</div>
+													)}
+												</Show>
+												<Show when={codexError()}>
+													{(message) => (
+														<p class="mt-3 text-destructive text-xs">
+															{message()}
+														</p>
+													)}
+												</Show>
+											</div>
+										}
+									>
+										<div class="flex items-center justify-between gap-3 text-sm">
+											<p class="text-muted-foreground">Codex connected.</p>
+											<button
+												class={buttonVariants({
+													variant: "outline",
+													size: "sm",
+												})}
+												disabled={codexDisconnecting()}
+												type="button"
+												onClick={() => void disconnectCodexConnection()}
+											>
+												{codexDisconnecting() ? "Disconnecting…" : "Disconnect"}
+											</button>
+										</div>
+										<Show when={codexError()}>
+											{(message) => (
+												<p class="mt-3 text-destructive text-xs">{message()}</p>
+											)}
+										</Show>
+									</Show>
 								</div>
 							</section>
 
@@ -416,7 +583,8 @@ function ConfigureProcessingFlow(props: {
 												disabled={
 													state.status() !== "complete" ||
 													state.isStarting() ||
-													!convexAuth.isAuthenticated()
+													!convexAuth.isAuthenticated() ||
+													missingRequiredCodexConnection()
 												}
 												type="button"
 												onClick={startProcessing}
@@ -454,4 +622,81 @@ function ConfigureProcessingFlow(props: {
 			)}
 		</Show>
 	);
+}
+
+interface CodexDeviceCode {
+	userCode: string;
+	verificationUri: string;
+	intervalSeconds?: number;
+	expiresInSeconds?: number;
+}
+
+type CodexConnectionEvent = { type: "device_code"; info: CodexDeviceCode };
+
+async function connectCodex(onEvent: (event: CodexConnectionEvent) => void) {
+	const { data } = await authClient.convex.token({
+		fetchOptions: { throw: false },
+	});
+	const token = data?.token;
+	if (!token) throw new Error("Could not authenticate Codex Connection");
+
+	const response = await fetch("/api/codex-connections/connect", {
+		method: "POST",
+		headers: { Authorization: `Bearer ${token}` },
+	});
+	if (!response.ok || !response.body) {
+		throw new Error("Could not start Codex Connection");
+	}
+
+	await readSseEvents(response, (event) => {
+		if (event.event === "device_code") {
+			onEvent({
+				type: "device_code",
+				info: JSON.parse(event.data) as CodexDeviceCode,
+			});
+		}
+		if (event.event === "connection_error") {
+			const parsed = JSON.parse(event.data) as { error?: string };
+			throw new Error(parsed.error ?? "Could not connect Codex");
+		}
+	});
+}
+
+async function readSseEvents(
+	response: Response,
+	onEvent: (event: { event: string; data: string }) => void,
+) {
+	const reader = response.body?.getReader();
+	if (!reader) throw new Error("Codex Connection response was empty");
+
+	const decoder = new TextDecoder();
+	let buffer = "";
+
+	while (true) {
+		const { value, done } = await reader.read();
+		if (done) break;
+		buffer += decoder.decode(value, { stream: true });
+
+		let boundary = buffer.indexOf("\n\n");
+		while (boundary >= 0) {
+			const chunk = buffer.slice(0, boundary);
+			buffer = buffer.slice(boundary + 2);
+			const event = parseSseEvent(chunk);
+			if (event) onEvent(event);
+			boundary = buffer.indexOf("\n\n");
+		}
+	}
+}
+
+function parseSseEvent(chunk: string) {
+	let event = "message";
+	const data: string[] = [];
+
+	for (const line of chunk.split("\n")) {
+		if (line.startsWith("event:")) event = line.slice(6).trim();
+		if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+	}
+
+	if (!data.length) return undefined;
+	return { event, data: data.join("\n") };
 }

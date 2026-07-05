@@ -11,6 +11,7 @@ import {
 	narrationRewriteModel,
 } from "./ai";
 import { parseJsonObject } from "./ai-output";
+import type { PersistedEquationExplanation } from "./equation-explanations";
 import type { HtmlNode } from "./html-fragment";
 import { decodeHtmlEntities, parseHtmlFragment } from "./html-fragment";
 import { deriveNarrationCandidate } from "./narration-candidates";
@@ -18,6 +19,7 @@ import {
 	appendNarrationEvent,
 	getNarrationProcessingInput,
 	listNarrationBlocks,
+	patchNarrationDecisions,
 	patchNarrationTexts,
 	setNarrationGuide,
 } from "./narration-persistence";
@@ -26,6 +28,7 @@ export interface NarrationRewriteBlock {
 	blockId: string;
 	contentHtml: string;
 	preparation: NarrationPreparation[];
+	order?: number;
 }
 
 export interface NarrationRewriteOutput {
@@ -38,6 +41,7 @@ export interface NarrationRewriteOutput {
 export interface NarrationTextPatch {
 	blockId: string;
 	text: string;
+	order?: number;
 }
 
 export type NarrationGuideGenerator = (inputText: string) => Promise<string>;
@@ -59,12 +63,23 @@ export type NarrationPreparationRunResult =
 interface NarrationPreparationSourceBlock {
 	blockId: string;
 	blockType: BlockType;
+	order: number;
 	contentHtml: string;
+	equationExplanation?: {
+		contentHtml: string;
+		model: string;
+		generatedAt: number;
+	};
 	narration?: BlockNarration;
 }
 
 interface PreparedNarrationBlock extends NarrationRewriteBlock {
 	plainText: string;
+}
+
+interface PreparedNarrationBlocksResult {
+	blocks: PreparedNarrationBlock[];
+	pendingEquationBlockIds: string[];
 }
 
 export const narrationGuideInputCharCap = 350_000;
@@ -93,8 +108,7 @@ Return exactly one plain-text output for every input blockId. Never skip, merge,
 
 Preparation directives:
 - inline-citation-cleanup: use the persisted <span class="inline-citation"> markup to smooth or omit inline citations naturally for speech.
-- inline-math: render inline mathematical notation as natural spoken prose without changing meaning.
-- equation-explanation: explain standalone/display equations with their components and relationship, not merely symbol-by-symbol.
+- inline-math: render mathematical notation as natural spoken prose without changing meaning.
 
 Output plain text only. Do not return HTML, Markdown, SSML, XML, or code fences.
 
@@ -109,6 +123,7 @@ export async function runNarrationPreparationForDocument(input: {
 	documentId: Id<"documents">;
 	generateGuide?: NarrationGuideGenerator;
 	rewriteBatch?: NarrationRewriteBatch;
+	equationExplanations?: AsyncIterable<PersistedEquationExplanation>;
 	onNarrationTextsPersisted?: (
 		texts: NarrationTextPatch[],
 	) => Promise<void> | void;
@@ -150,11 +165,46 @@ export async function runNarrationPreparationForDocument(input: {
 		return { status: "skipped", reason: "no-eligible-blocks" };
 	}
 
-	const preparedBlocks = await prepareEligibleBlocks({
+	const pendingBlocks = eligibleBlocks.filter(
+		(block) =>
+			block.narration?.decision === "eligible" && !block.narration.text,
+	);
+	if (!pendingBlocks.length) {
+		return { status: "completed", textCount: 0, failedRewriteCount: 0 };
+	}
+
+	const blockById = new Map(
+		pendingBlocks.map((block) => [block.blockId, block]),
+	);
+	const equationIterator = input.equationExplanations?.[Symbol.asyncIterator]();
+	const prepared = await prepareEligibleBlocks({
 		documentId: input.documentId,
-		blocks: eligibleBlocks,
+		blocks: pendingBlocks,
+		keepMissingEquationExplanationsPending: equationIterator !== undefined,
 	});
+	const pendingEquationBlockIds = new Set(prepared.pendingEquationBlockIds);
+	const preparedBlocks = [...prepared.blocks];
+
+	if (
+		!preparedBlocks.length &&
+		pendingEquationBlockIds.size &&
+		equationIterator
+	) {
+		const firstPendingBlock = await nextPendingEquationBlock({
+			documentId: input.documentId,
+			iterator: equationIterator,
+			blockById,
+			pendingEquationBlockIds,
+		});
+		if (firstPendingBlock) preparedBlocks.push(firstPendingBlock);
+	}
+
 	if (!preparedBlocks.length) {
+		if (pendingEquationBlockIds.size) {
+			await markMissingEquationExplanationsUnavailable(input.documentId, [
+				...pendingEquationBlockIds,
+			]);
+		}
 		await appendNoEligibleBlocksEvents(input.documentId);
 		return { status: "skipped", reason: "no-eligible-blocks" };
 	}
@@ -181,6 +231,17 @@ export async function runNarrationPreparationForDocument(input: {
 			blocks: preparedBlocks,
 			rewriteBatch: input.rewriteBatch,
 			onNarrationTextsPersisted: input.onNarrationTextsPersisted,
+			totalBlockCount: preparedBlocks.length + pendingEquationBlockIds.size,
+			pendingEquationBlockIds,
+			nextPendingEquationBlock: equationIterator
+				? () =>
+						nextPendingEquationBlock({
+							documentId: input.documentId,
+							iterator: equationIterator,
+							blockById,
+							pendingEquationBlockIds,
+						})
+				: undefined,
 		});
 	} catch (error) {
 		await appendNarrationEvent(input.documentId, {
@@ -337,7 +398,12 @@ export function validateNarrationRewriteOutput(
 			);
 		}
 
-		texts.push({ blockId: rawBlock.blockId, text });
+		const order = blockById.get(rawBlock.blockId)?.order;
+		texts.push(
+			order === undefined
+				? { blockId: rawBlock.blockId, text }
+				: { blockId: rawBlock.blockId, text, order },
+		);
 	}
 
 	const missingIds = blocks
@@ -362,13 +428,23 @@ export class NarrationRewriteOutputError extends Error {
 async function prepareEligibleBlocks(input: {
 	documentId: Id<"documents">;
 	blocks: NarrationPreparationSourceBlock[];
-}): Promise<PreparedNarrationBlock[]> {
+	keepMissingEquationExplanationsPending?: boolean;
+}): Promise<PreparedNarrationBlocksResult> {
 	const preparedBlocks: PreparedNarrationBlock[] = [];
 	const skippedBlockIds: string[] = [];
+	const missingEquationExplanationBlockIds: string[] = [];
 
 	for (const block of input.blocks) {
 		if (block.narration?.decision !== "eligible") continue;
-		const result = deriveNarrationCandidate(block);
+		if (block.blockType === "equation" && !block.equationExplanation) {
+			missingEquationExplanationBlockIds.push(block.blockId);
+			continue;
+		}
+		const result = deriveNarrationCandidate({
+			blockId: block.blockId,
+			blockType: block.blockType,
+			contentHtml: block.equationExplanation?.contentHtml ?? block.contentHtml,
+		});
 		if (result.kind !== "candidate") {
 			skippedBlockIds.push(block.blockId);
 			continue;
@@ -382,8 +458,19 @@ async function prepareEligibleBlocks(input: {
 			blockId: block.blockId,
 			contentHtml: result.candidateText,
 			preparation: block.narration.preparation,
+			order: block.order,
 			plainText,
 		});
+	}
+
+	if (
+		missingEquationExplanationBlockIds.length &&
+		!input.keepMissingEquationExplanationsPending
+	) {
+		await markMissingEquationExplanationsUnavailable(
+			input.documentId,
+			missingEquationExplanationBlockIds,
+		);
 	}
 
 	if (skippedBlockIds.length) {
@@ -398,7 +485,73 @@ async function prepareEligibleBlocks(input: {
 		});
 	}
 
-	return preparedBlocks;
+	return {
+		blocks: preparedBlocks,
+		pendingEquationBlockIds: input.keepMissingEquationExplanationsPending
+			? missingEquationExplanationBlockIds
+			: [],
+	};
+}
+
+async function nextPendingEquationBlock(input: {
+	documentId: Id<"documents">;
+	iterator: AsyncIterator<PersistedEquationExplanation>;
+	blockById: Map<string, NarrationPreparationSourceBlock>;
+	pendingEquationBlockIds: Set<string>;
+}): Promise<PreparedNarrationBlock | undefined> {
+	while (input.pendingEquationBlockIds.size) {
+		const next = await input.iterator.next();
+		if (next.done) return undefined;
+
+		const block = input.blockById.get(next.value.blockId);
+		if (!block || !input.pendingEquationBlockIds.has(block.blockId)) {
+			continue;
+		}
+
+		input.pendingEquationBlockIds.delete(block.blockId);
+		block.equationExplanation = {
+			contentHtml: next.value.contentHtml,
+			model: next.value.model,
+			generatedAt: next.value.generatedAt,
+		};
+		const prepared = await prepareEligibleBlocks({
+			documentId: input.documentId,
+			blocks: [block],
+			keepMissingEquationExplanationsPending: true,
+		});
+		const [preparedBlock] = prepared.blocks;
+		if (preparedBlock) return preparedBlock;
+	}
+
+	return undefined;
+}
+
+async function markMissingEquationExplanationsUnavailable(
+	documentId: Id<"documents">,
+	blockIds: string[],
+) {
+	if (!blockIds.length) return;
+
+	await patchNarrationDecisions(
+		documentId,
+		blockIds.map((blockId) => ({
+			blockId,
+			narration: {
+				decision: "ineligible",
+				reason: "equation-explanation-unavailable",
+			},
+		})),
+		"guide",
+	);
+	await appendNarrationEvent(documentId, {
+		type: "narration.guide.warning",
+		emitter: "app",
+		severity: "warning",
+		message:
+			"Some standalone equation Blocks were skipped because Equation Explanations were unavailable.",
+		emittedAt: Date.now(),
+		data: { blockIds: blockIds.slice(0, 20) },
+	});
 }
 
 async function generateNarrationGuide(input: {
@@ -499,6 +652,9 @@ async function generateNarrationTexts(input: {
 	onNarrationTextsPersisted?: (
 		texts: NarrationTextPatch[],
 	) => Promise<void> | void;
+	totalBlockCount?: number;
+	pendingEquationBlockIds?: Set<string>;
+	nextPendingEquationBlock?: () => Promise<PreparedNarrationBlock | undefined>;
 }): Promise<NarrationPreparationRunResult> {
 	const plainBlocks = input.blocks.filter((block) =>
 		block.preparation.includes("plain"),
@@ -506,8 +662,12 @@ async function generateNarrationTexts(input: {
 	const rewriteBlocks = input.blocks.filter(
 		(block) => !block.preparation.includes("plain"),
 	);
+	const totalBlockCount = input.totalBlockCount ?? input.blocks.length;
 	let textCount = 0;
 	let failedRewriteCount = 0;
+	let processedCount = 0;
+	let rewriteBatch = input.rewriteBatch;
+	let rewriteConfigurationError: string | undefined;
 
 	await appendNarrationEvent(input.documentId, {
 		type: "narration.rewrite.started",
@@ -515,61 +675,23 @@ async function generateNarrationTexts(input: {
 		severity: "info",
 		message: "Narration Text generation started.",
 		emittedAt: Date.now(),
-		progress: { current: 0, total: input.blocks.length, percent: 0 },
+		progress: { current: 0, total: totalBlockCount, percent: 0 },
 		data: {
 			plainCount: plainBlocks.length,
 			rewriteCount: rewriteBlocks.length,
+			pendingEquationCount: input.pendingEquationBlockIds?.size ?? 0,
 			batchSize: rewriteBatchSize,
 		},
 	});
 
-	if (plainBlocks.length) {
-		const plainTexts = plainBlocks.map((block) => ({
-			blockId: block.blockId,
-			text: block.plainText,
-		}));
-		const result = await patchNarrationTexts(input.documentId, plainTexts);
-		const persistedPlainTexts = persistedTexts(
-			plainTexts,
-			result.patchedBlockIds,
-		);
-		textCount += result.patchedCount;
-		await appendNarrationEvent(input.documentId, {
-			type: "narration.rewrite.progress",
-			emitter: "app",
-			severity: "info",
-			message: "Plain Narration Text cleanup completed.",
-			emittedAt: Date.now(),
-			progress: {
-				current: plainBlocks.length,
-				total: input.blocks.length,
-				percent: Math.round((plainBlocks.length / input.blocks.length) * 100),
-				label: "Plain cleanup",
-			},
-			data: { patchedCount: result.patchedCount },
-		});
-		await input.onNarrationTextsPersisted?.(persistedPlainTexts);
-	}
-
-	if (!rewriteBlocks.length) {
-		await appendRewriteCompletedEvent(input.documentId, {
-			textCount,
-			failedRewriteCount,
-			total: input.blocks.length,
-		});
-		return {
-			status: "completed",
-			textCount,
-			failedRewriteCount,
-		};
-	}
-
-	let rewriteBatch = input.rewriteBatch;
-	if (!rewriteBatch) {
+	async function getRewriteBatch() {
+		if (rewriteBatch) return rewriteBatch;
 		try {
 			rewriteBatch = createGroqNarrationRewrite();
+			return rewriteBatch;
 		} catch (error) {
 			if (error instanceof AiConfigurationError) {
+				rewriteConfigurationError = error.message;
 				await appendNarrationEvent(input.documentId, {
 					type: "narration.rewrite.failed",
 					emitter: "app",
@@ -578,71 +700,165 @@ async function generateNarrationTexts(input: {
 					emittedAt: Date.now(),
 					data: { phase: "configuration" },
 				});
-				return {
-					status: "failed",
-					phase: "rewrite",
-					error: error.message,
-				};
+				return undefined;
 			}
 			throw error;
 		}
 	}
 
-	await rewriteNarrationBlocks({
-		blocks: rewriteBlocks,
-		narrationGuide: input.narrationGuide,
-		rewriteBatch,
-		onBatch: async (result, progress) => {
-			const patchResult = await patchNarrationTexts(
-				input.documentId,
-				result.texts,
-			);
-			const persistedRewriteTexts = persistedTexts(
-				result.texts,
-				patchResult.patchedBlockIds,
-			);
-			textCount += patchResult.patchedCount;
-			failedRewriteCount += result.failedBlockIds.length;
+	async function persistPlainBlocks(
+		blocks: PreparedNarrationBlock[],
+		label: string,
+	) {
+		if (!blocks.length) return;
+		const plainTexts = blocks.map((block) => ({
+			blockId: block.blockId,
+			text: block.plainText,
+			order: block.order,
+		}));
+		const result = await patchNarrationTexts(input.documentId, plainTexts);
+		const persistedPlainTexts = persistedTexts(
+			plainTexts,
+			result.patchedBlockIds,
+		);
+		textCount += result.patchedCount;
+		processedCount += blocks.length;
+		await appendNarrationEvent(input.documentId, {
+			type: "narration.rewrite.progress",
+			emitter: "app",
+			severity: "info",
+			message: "Plain Narration Text cleanup completed.",
+			emittedAt: Date.now(),
+			progress: {
+				current: processedCount,
+				total: totalBlockCount,
+				percent: Math.round((processedCount / totalBlockCount) * 100),
+				label,
+			},
+			data: { patchedCount: result.patchedCount },
+		});
+		await input.onNarrationTextsPersisted?.(persistedPlainTexts);
+	}
 
-			if (result.failedBlockIds.length) {
+	async function rewritePreparedBlocks(
+		blocks: PreparedNarrationBlock[],
+		label: (progress: { batchIndex: number; batchCount: number }) => string,
+	): Promise<NarrationPreparationRunResult | undefined> {
+		if (!blocks.length) return undefined;
+		const batch = await getRewriteBatch();
+		if (!batch) {
+			return {
+				status: "failed",
+				phase: "rewrite",
+				error:
+					rewriteConfigurationError ??
+					"Narration Text rewrite model is not configured.",
+			};
+		}
+
+		let previouslyProcessedInCall = 0;
+		await rewriteNarrationBlocks({
+			blocks,
+			narrationGuide: input.narrationGuide,
+			rewriteBatch: batch,
+			onBatch: async (result, progress) => {
+				const patchResult = await patchNarrationTexts(
+					input.documentId,
+					result.texts,
+				);
+				const persistedRewriteTexts = persistedTexts(
+					result.texts,
+					patchResult.patchedBlockIds,
+				);
+				textCount += patchResult.patchedCount;
+				failedRewriteCount += result.failedBlockIds.length;
+				processedCount += progress.processedCount - previouslyProcessedInCall;
+				previouslyProcessedInCall = progress.processedCount;
+
+				if (result.failedBlockIds.length) {
+					await appendNarrationEvent(input.documentId, {
+						type: "narration.rewrite.warning",
+						emitter: "app",
+						severity: "warning",
+						message: "Some Blocks failed Narration Text rewrite.",
+						emittedAt: Date.now(),
+						data: { blockIds: result.failedBlockIds.slice(0, 20) },
+					});
+				}
+
 				await appendNarrationEvent(input.documentId, {
-					type: "narration.rewrite.warning",
+					type: "narration.rewrite.progress",
 					emitter: "app",
-					severity: "warning",
-					message: "Some Blocks failed Narration Text rewrite.",
+					severity: "info",
+					message: "Narration Text rewrite batch completed.",
 					emittedAt: Date.now(),
-					data: { blockIds: result.failedBlockIds.slice(0, 20) },
+					progress: {
+						current: processedCount,
+						total: totalBlockCount,
+						percent: Math.round((processedCount / totalBlockCount) * 100),
+						label: label(progress),
+					},
+					data: {
+						batchIndex: progress.batchIndex,
+						batchCount: progress.batchCount,
+						patchedCount: patchResult.patchedCount,
+						failedRewriteCount: result.failedBlockIds.length,
+					},
 				});
-			}
+				await input.onNarrationTextsPersisted?.(persistedRewriteTexts);
+			},
+		});
+		return undefined;
+	}
 
-			const current = plainBlocks.length + progress.processedCount;
-			await appendNarrationEvent(input.documentId, {
-				type: "narration.rewrite.progress",
-				emitter: "app",
-				severity: "info",
-				message: "Narration Text rewrite batch completed.",
-				emittedAt: Date.now(),
-				progress: {
-					current,
-					total: input.blocks.length,
-					percent: Math.round((current / input.blocks.length) * 100),
-					label: `Batch ${progress.batchIndex + 1}/${progress.batchCount}`,
-				},
-				data: {
-					batchIndex: progress.batchIndex,
-					batchCount: progress.batchCount,
-					patchedCount: patchResult.patchedCount,
-					failedRewriteCount: result.failedBlockIds.length,
-				},
-			});
-			await input.onNarrationTextsPersisted?.(persistedRewriteTexts);
-		},
-	});
+	await persistPlainBlocks(plainBlocks, "Plain cleanup");
+	const initialRewriteResult = await rewritePreparedBlocks(
+		rewriteBlocks,
+		(progress) => `Batch ${progress.batchIndex + 1}/${progress.batchCount}`,
+	);
+	if (initialRewriteResult) return initialRewriteResult;
+
+	while (input.nextPendingEquationBlock) {
+		const block = await input.nextPendingEquationBlock();
+		if (!block) break;
+		if (block.preparation.includes("plain")) {
+			await persistPlainBlocks([block], "Pending equation cleanup");
+			continue;
+		}
+		const pendingRewriteResult = await rewritePreparedBlocks(
+			[block],
+			() => "Pending equation",
+		);
+		if (pendingRewriteResult) return pendingRewriteResult;
+	}
+
+	if (input.pendingEquationBlockIds?.size) {
+		const unavailableBlockIds = [...input.pendingEquationBlockIds];
+		await markMissingEquationExplanationsUnavailable(
+			input.documentId,
+			unavailableBlockIds,
+		);
+		processedCount += unavailableBlockIds.length;
+		await appendNarrationEvent(input.documentId, {
+			type: "narration.rewrite.progress",
+			emitter: "app",
+			severity: "info",
+			message: "Unavailable equation Blocks skipped for Narration Text.",
+			emittedAt: Date.now(),
+			progress: {
+				current: processedCount,
+				total: totalBlockCount,
+				percent: Math.round((processedCount / totalBlockCount) * 100),
+				label: "Unavailable equations",
+			},
+			data: { blockIds: unavailableBlockIds.slice(0, 20) },
+		});
+	}
 
 	await appendRewriteCompletedEvent(input.documentId, {
 		textCount,
 		failedRewriteCount,
-		total: input.blocks.length,
+		total: totalBlockCount,
 	});
 
 	return {

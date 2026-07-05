@@ -54,6 +54,49 @@ describe("createNarrationAudioQueue", () => {
 		]);
 	});
 
+	test("prefers earlier Block order among available items", async () => {
+		const calls: string[] = [];
+		let releaseFirst: (() => void) | undefined;
+		let markFirstStarted: (() => void) | undefined;
+		const firstStarted = new Promise<void>((resolve) => {
+			markFirstStarted = resolve;
+		});
+		const queue = createNarrationAudioQueue({
+			documentId,
+			voice: "af_heart",
+			generateAudio: async (item) => {
+				calls.push(item.blockId);
+				if (item.blockId === "five") {
+					markFirstStarted?.();
+					await new Promise<void>((release) => {
+						releaseFirst = release;
+					});
+				}
+				return {
+					durationMs: 100,
+					wordTimestampCount: 1,
+					alignment: { status: "ok", source: "native" },
+				};
+			},
+			appendEvent: () => undefined,
+		});
+
+		queue.enqueue([
+			{ blockId: "five", text: "5", order: 5 },
+			{ blockId: "six", text: "6", order: 6 },
+		]);
+		await firstStarted;
+		queue.enqueue([{ blockId: "three", text: "3", order: 3 }]);
+		releaseFirst?.();
+
+		expect(await queue.closeAndDrain()).toEqual({
+			status: "completed",
+			generatedCount: 3,
+			failedBlockCount: 0,
+		});
+		expect(calls).toEqual(["five", "three", "six"]);
+	});
+
 	test("continues after Block failures and stops after fatal failures", async () => {
 		const blockEvents: ProcessingEventInput[] = [];
 		const blockQueue = createNarrationAudioQueue({

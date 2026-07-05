@@ -48,7 +48,7 @@ export async function patchNarrationDecisions(
 		blockId: string;
 		narration: BlockNarration;
 	}>,
-	phase: "candidates" | "eligibility",
+	phase: "candidates" | "eligibility" | "guide",
 ) {
 	if (!narrations.length) return { patchedCount: 0, missingBlockIds: [] };
 
@@ -96,7 +96,10 @@ export async function patchNarrationTexts(
 		{
 			serviceSecret: readApiToConvexServiceSecret(),
 			documentId,
-			texts,
+			texts: texts.map((item) => ({
+				blockId: item.blockId,
+				text: item.text,
+			})),
 		},
 	);
 

@@ -39,4 +39,7 @@ export const defaultProcessingConfiguration = {
 		enabled: true,
 		voice: "af_heart" satisfies NarrationVoice,
 	},
+	equationExplanations: {
+		enabled: false,
+	},
 };

@@ -334,6 +334,10 @@ export function DocumentPage(props: { documentId: Id<"documents"> }) {
 										document.data()?.processingConfiguration.narration
 											.enabled ?? false
 									}
+									equationExplanationsEnabled={
+										document.data()?.processingConfiguration
+											.equationExplanations.enabled ?? false
+									}
 									open={eventsOpen()}
 									onClose={() => setEventsOpen(false)}
 								/>
@@ -351,6 +355,7 @@ function EventsDrawer(props: {
 	documentId: Id<"documents">;
 	processingStatus: string;
 	narrationEnabled: boolean;
+	equationExplanationsEnabled: boolean;
 	onClose: () => void;
 }) {
 	return (
@@ -376,6 +381,7 @@ function EventsDrawer(props: {
 						documentId={props.documentId}
 						processingStatus={props.processingStatus}
 						narrationEnabled={props.narrationEnabled}
+						equationExplanationsEnabled={props.equationExplanationsEnabled}
 					/>
 				</Show>
 			</div>

@@ -1,6 +1,6 @@
 import type { NarrationWordTimestamp } from "@academic-reader/shared/narration";
 
-interface NarrationHighlightRange {
+export interface NarrationHighlightRange {
 	start: number;
 	end: number;
 }
@@ -22,7 +22,7 @@ const activeNarrationWordClass = "narration-word-active";
 const nearbyThreshold = 3;
 const sequenceLength = 3;
 
-export function createNarrationWordHighlighter(input: {
+export function createDomNarrationWordHighlighter(input: {
 	blockElement: HTMLElement;
 }): NarrationWordHighlighter {
 	const originalHtml = input.blockElement.innerHTML;
@@ -96,6 +96,54 @@ export function createNarrationWordHighlighter(input: {
 		setWordTimestamps,
 		highlightAtMs,
 		restore,
+	};
+}
+
+export function createRemoteNarrationWordHighlighter(input: {
+	visibleWords: string[];
+	postHighlightRange: (range: NarrationHighlightRange | null) => void;
+}): NarrationWordHighlighter {
+	let currentRange: NarrationHighlightRange | null = null;
+	let wordTimestamps: NarrationWordTimestamp[] = [];
+	let ranges: Array<NarrationHighlightRange | null> = [];
+
+	function setWordTimestamps(nextWordTimestamps: NarrationWordTimestamp[]) {
+		wordTimestamps = nextWordTimestamps;
+		ranges = buildNarrationHighlightRanges(
+			input.visibleWords,
+			wordTimestamps.map((timestamp) => timestamp.word),
+		);
+		clearHighlight();
+	}
+
+	function highlightAtMs(currentMs: number) {
+		const spokenIndex = activeSpokenWordIndex(wordTimestamps, currentMs);
+		if (spokenIndex === undefined) return;
+
+		const range = ranges[spokenIndex] ?? null;
+		if (rangesEqual(range, currentRange)) return;
+
+		currentRange = range;
+		input.postHighlightRange(range);
+	}
+
+	function clearHighlight() {
+		if (currentRange === null) return;
+		currentRange = null;
+		input.postHighlightRange(null);
+	}
+
+	return {
+		visibleWordIndexFromPoint: () => undefined,
+		seekMsForVisibleWord: (visibleWordIndex) =>
+			seekMsForVisibleWord({
+				visibleWordIndex,
+				ranges,
+				wordTimestamps,
+			}),
+		setWordTimestamps,
+		highlightAtMs,
+		restore: clearHighlight,
 	};
 }
 

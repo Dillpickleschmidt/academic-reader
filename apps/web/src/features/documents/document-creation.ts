@@ -39,6 +39,8 @@ export function createDocumentCreation() {
 	const [narrationVoice, setNarrationVoice] = createSignal<string>(
 		defaultProcessingConfiguration.narration.voice,
 	);
+	const [equationExplanationsEnabled, setEquationExplanationsEnabled] =
+		createSignal(defaultProcessingConfiguration.equationExplanations.enabled);
 
 	return {
 		file,
@@ -73,6 +75,8 @@ export function createDocumentCreation() {
 		setNarrationEnabled,
 		narrationVoice,
 		setNarrationVoice,
+		equationExplanationsEnabled,
+		setEquationExplanationsEnabled,
 	};
 }
 

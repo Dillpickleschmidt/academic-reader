@@ -1,12 +1,11 @@
 import type { Id } from "@academic-reader/convex/data-model";
 import type { NarrationAudioAlignment } from "@academic-reader/shared/narration";
 import type { ProcessingEventInput } from "@academic-reader/shared/processing-events";
-import type { NarrationTextPatch } from "./narration-preparation";
 import {
 	appendNarrationEvent,
 	upsertNarrationAudio,
 } from "./narration-persistence";
-import { pcmToWav } from "./pcm-wav";
+import type { NarrationTextPatch } from "./narration-preparation";
 import {
 	NarrationTtsBlockError,
 	NarrationTtsConfigurationError,
@@ -14,11 +13,13 @@ import {
 	narrationTtsEventData,
 	synthesizeNarrationSpeech,
 } from "./narration-tts";
+import { pcmToWav } from "./pcm-wav";
 import { documentNarrationAudioObjectKey, saveObject } from "./storage";
 
 export interface NarrationAudioQueueItem {
 	blockId: string;
 	text: string;
+	order?: number;
 }
 
 export interface NarrationAudioGenerationResult {
@@ -78,7 +79,11 @@ export function createNarrationAudioQueue(input: {
 		if (closed || fatalError) return;
 
 		const items = texts
-			.map((text) => ({ blockId: text.blockId, text: text.text.trim() }))
+			.map((text) => ({
+				blockId: text.blockId,
+				text: text.text.trim(),
+				order: text.order,
+			}))
 			.filter((item) => item.text.length > 0);
 		if (!items.length) return;
 
@@ -115,7 +120,7 @@ export function createNarrationAudioQueue(input: {
 				continue;
 			}
 
-			const item = queue.shift();
+			const item = takeNextQueueItem();
 			if (!item) continue;
 
 			try {
@@ -232,6 +237,23 @@ export function createNarrationAudioQueue(input: {
 				failedBlockCount,
 			},
 		});
+	}
+
+	function takeNextQueueItem() {
+		if (!queue.length) return undefined;
+		let nextIndex = 0;
+		for (let index = 1; index < queue.length; index += 1) {
+			const current = queue[index];
+			const next = queue[nextIndex];
+			if (
+				current.order !== undefined &&
+				(next.order === undefined || current.order < next.order)
+			) {
+				nextIndex = index;
+			}
+		}
+		const [item] = queue.splice(nextIndex, 1);
+		return item;
 	}
 
 	function waitForWork() {

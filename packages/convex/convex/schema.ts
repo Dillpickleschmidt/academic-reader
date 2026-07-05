@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	blockEquationExplanationValidator,
 	blockNarrationValidator,
 	blockTypeValidator,
 	normalizedBoundingBoxValidator,
@@ -36,6 +37,9 @@ export default defineSchema({
 			narration: v.object({
 				enabled: v.boolean(),
 				voice: v.string(),
+			}),
+			equationExplanations: v.object({
+				enabled: v.boolean(),
 			}),
 		}),
 		processingRun: v.object({
@@ -90,12 +94,26 @@ export default defineSchema({
 		order: v.number(),
 		contentHtml: v.string(),
 		contentMarkdown: v.optional(v.string()),
+		equationExplanation: v.optional(blockEquationExplanationValidator),
 		narration: v.optional(blockNarrationValidator),
 		pageNumber: v.optional(v.number()),
 		normalizedBoundingBox: v.optional(normalizedBoundingBoxValidator),
 	})
 		.index("by_document_order", ["documentId", "order"])
 		.index("by_document_block", ["documentId", "blockId"]),
+
+	codexConnections: defineTable({
+		readerId: v.string(),
+		providerId: v.literal("openai-codex"),
+		accountId: v.optional(v.string()),
+		encryptedCredential: v.object({
+			ciphertext: v.string(),
+			iv: v.string(),
+			tag: v.string(),
+		}),
+		connectedAt: v.number(),
+		updatedAt: v.number(),
+	}).index("by_reader", ["readerId"]),
 
 	narrationAudio: defineTable({
 		documentId: v.id("documents"),
@@ -139,6 +157,7 @@ export default defineSchema({
 		markerForceOcr: v.boolean(),
 		markerUseLlm: v.boolean(),
 		narrationEnabled: v.boolean(),
+		equationExplanationsEnabled: v.boolean(),
 		narrationVoice: v.string(),
 		updatedAt: v.number(),
 	}).index("by_reader", ["readerId"]),

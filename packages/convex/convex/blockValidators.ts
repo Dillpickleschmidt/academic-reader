@@ -35,6 +35,12 @@ export const ineligibleNarrationReasonValidator = v.union(
 	...ineligibleNarrationReasons.map((reason) => v.literal(reason)),
 );
 
+export const blockEquationExplanationValidator = v.object({
+	contentHtml: v.string(),
+	model: v.string(),
+	generatedAt: v.number(),
+});
+
 export const blockNarrationValidator = v.union(
 	v.object({
 		decision: v.literal("eligible"),

@@ -30,6 +30,9 @@ const processingConfigurationSchema = v.object({
 		enabled: v.boolean(),
 		voice: v.picklist(narrationVoiceIds),
 	}),
+	equationExplanations: v.object({
+		enabled: v.boolean(),
+	}),
 });
 
 const createDocumentSchema = v.object({

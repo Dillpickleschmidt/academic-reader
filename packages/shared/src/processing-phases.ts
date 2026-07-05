@@ -5,12 +5,17 @@ import type {
 } from "./processing-events";
 
 export const PROCESSING_PHASES = [
-	{ id: "conversion", name: "Conversion", narration: false },
-	{ id: "candidates", name: "Narration Candidates", narration: true },
-	{ id: "eligibility", name: "Narration Eligibility", narration: true },
-	{ id: "guide", name: "Narration Guide", narration: true },
-	{ id: "rewrite", name: "Narration Text", narration: true },
-	{ id: "audio", name: "Narration Audio", narration: true },
+	{ id: "conversion", name: "Conversion", feature: "reading" },
+	{
+		id: "equationExplanations",
+		name: "Equation Explanations",
+		feature: "equationExplanations",
+	},
+	{ id: "candidates", name: "Narration Candidates", feature: "narration" },
+	{ id: "eligibility", name: "Narration Eligibility", feature: "narration" },
+	{ id: "guide", name: "Narration Guide", feature: "narration" },
+	{ id: "rewrite", name: "Narration Text", feature: "narration" },
+	{ id: "audio", name: "Narration Audio", feature: "narration" },
 ] as const;
 
 export const processingPhaseIds = PROCESSING_PHASES.map((phase) => phase.id);
@@ -22,7 +27,14 @@ export const processingPhaseStatuses = [
 	"failed",
 ] as const;
 
+export const processingPhaseFeatures = [
+	"reading",
+	"equationExplanations",
+	"narration",
+] as const;
+
 export type ProcessingPhaseId = (typeof PROCESSING_PHASES)[number]["id"];
+export type ProcessingPhaseFeature = (typeof processingPhaseFeatures)[number];
 export type PhaseStatus = (typeof processingPhaseStatuses)[number];
 
 export interface ProcessingEventRecord extends ProcessingEventInput {
@@ -43,7 +55,7 @@ export interface ProcessingEventSnapshot {
 export interface ProcessingPhaseSummary {
 	id: ProcessingPhaseId;
 	name: string;
-	narration: boolean;
+	feature: ProcessingPhaseFeature;
 	status: PhaseStatus;
 	progress?: ProcessingEventProgress;
 	indeterminate: boolean;
@@ -66,6 +78,11 @@ export const eventTypePhase: Record<ProcessingEventType, ProcessingPhaseId> = {
 	"conversion.completed": "conversion",
 	"conversion.warning": "conversion",
 	"conversion.failed": "conversion",
+	"equation.explanation.started": "equationExplanations",
+	"equation.explanation.progress": "equationExplanations",
+	"equation.explanation.completed": "equationExplanations",
+	"equation.explanation.warning": "equationExplanations",
+	"equation.explanation.failed": "equationExplanations",
 	"narration.candidates.started": "candidates",
 	"narration.candidates.completed": "candidates",
 	"narration.candidates.warning": "candidates",
@@ -108,7 +125,7 @@ export function emptyProcessingProgressSummary(
 			phases: PROCESSING_PHASES.map((phase) => ({
 				id: phase.id,
 				name: phase.name,
-				narration: phase.narration,
+				feature: phase.feature,
 				status: "pending",
 				indeterminate: false,
 				warningCount: 0,
@@ -188,7 +205,7 @@ function ensureProcessingPhases(phases: ProcessingPhaseSummary[]) {
 			phases.find((phase) => phase.id === definition.id) ?? {
 				id: definition.id,
 				name: definition.name,
-				narration: definition.narration,
+				feature: definition.feature,
 				status: "pending" as const,
 				indeterminate: false,
 				warningCount: 0,

@@ -129,33 +129,6 @@ describe("validateEligibilityReviewOutput", () => {
 			),
 		).toThrow(/inline-math/);
 	});
-
-	test("requires standalone equation candidates to be eligible with equation explanation", () => {
-		expect(() =>
-			validateEligibilityReviewOutput(
-				[candidate("a", { isStandaloneEquation: true })],
-				{
-					blocks: [
-						{
-							blockId: "a",
-							decision: "ineligible",
-							reason: "unknown-noise",
-						},
-					],
-				},
-			),
-		).toThrow(/must be eligible/);
-		expect(() =>
-			validateEligibilityReviewOutput(
-				[candidate("a", { isStandaloneEquation: true })],
-				{
-					blocks: [
-						{ blockId: "a", decision: "eligible", preparation: ["plain"] },
-					],
-				},
-			),
-		).toThrow(/equation-explanation/);
-	});
 });
 
 describe("reviewEligibilityCandidates", () => {

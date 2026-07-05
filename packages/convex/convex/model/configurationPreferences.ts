@@ -17,6 +17,8 @@ export async function getConfigurationPreferences(ctx: QueryCtx) {
 		markerForceOcr: defaultProcessingConfiguration.markerOptions.forceOcr,
 		markerUseLlm: defaultProcessingConfiguration.markerOptions.useLlm,
 		narrationEnabled: defaultProcessingConfiguration.narration.enabled,
+		equationExplanationsEnabled:
+			defaultProcessingConfiguration.equationExplanations.enabled,
 		narrationVoice: defaultProcessingConfiguration.narration.voice,
 	};
 	if (!preferences) return defaults;
@@ -33,6 +35,7 @@ export async function saveConfigurationPreferences(
 		markerForceOcr: boolean;
 		markerUseLlm: boolean;
 		narrationEnabled: boolean;
+		equationExplanationsEnabled: boolean;
 		narrationVoice: string;
 	},
 ) {

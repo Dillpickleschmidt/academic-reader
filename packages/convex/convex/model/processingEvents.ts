@@ -202,7 +202,10 @@ function processingRunActive(
 	if (status === "created" || status === "processing" || status === "failed") {
 		return true;
 	}
-	if (!document.processingConfiguration.narration.enabled) {
+	if (
+		!document.processingConfiguration.narration.enabled &&
+		!document.processingConfiguration.equationExplanations.enabled
+	) {
 		return false;
 	}
 	return !isTerminalEventType(latestEvent.type);

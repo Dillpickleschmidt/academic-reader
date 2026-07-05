@@ -116,6 +116,9 @@ export async function createDocumentFromPromotedSourceDocument(
 				enabled: boolean;
 				voice: string;
 			};
+			equationExplanations: {
+				enabled: boolean;
+			};
 		};
 	},
 ) {
@@ -132,6 +135,8 @@ export async function createDocumentFromPromotedSourceDocument(
 		markerForceOcr: processingConfiguration.markerOptions.forceOcr,
 		markerUseLlm: processingConfiguration.markerOptions.useLlm,
 		narrationEnabled: processingConfiguration.narration.enabled,
+		equationExplanationsEnabled:
+			processingConfiguration.equationExplanations.enabled,
 		narrationVoice: processingConfiguration.narration.voice,
 	});
 
@@ -173,6 +178,7 @@ export async function getProcessingInputForApi(
 
 	return {
 		documentId: document._id,
+		readerId: document.readerId,
 		mimeType: document.mimeType,
 		storageObjectKey: document.storageObjectKey,
 		processingConfiguration: document.processingConfiguration,
@@ -266,7 +272,12 @@ async function processingRunActiveWithoutView(
 	if (status === "created" || status === "processing" || status === "failed") {
 		return true;
 	}
-	if (!document.processingConfiguration.narration.enabled) return false;
+	if (
+		!document.processingConfiguration.narration.enabled &&
+		!document.processingConfiguration.equationExplanations.enabled
+	) {
+		return false;
+	}
 
 	const latestEvent = await ctx.db
 		.query("processingEvents")

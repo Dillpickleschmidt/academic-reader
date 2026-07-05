@@ -2,7 +2,6 @@ export const narrationPreparations = [
 	"plain",
 	"inline-citation-cleanup",
 	"inline-math",
-	"equation-explanation",
 ] as const;
 
 export type NarrationPreparation = (typeof narrationPreparations)[number];
@@ -33,7 +32,10 @@ export const softIneligibleNarrationReasons = [
 export type SoftIneligibleNarrationReason =
 	(typeof softIneligibleNarrationReasons)[number];
 
-export const apiIneligibleNarrationReasons = ["review-failed"] as const;
+export const apiIneligibleNarrationReasons = [
+	"review-failed",
+	"equation-explanation-unavailable",
+] as const;
 
 export type ApiIneligibleNarrationReason =
 	(typeof apiIneligibleNarrationReasons)[number];

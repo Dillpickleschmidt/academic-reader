@@ -9,6 +9,7 @@
  */
 
 import type * as api_blocks from "../api/blocks.js";
+import type * as api_codexConnections from "../api/codexConnections.js";
 import type * as api_configurationPreferences from "../api/configurationPreferences.js";
 import type * as api_documentProjections from "../api/documentProjections.js";
 import type * as api_documents from "../api/documents.js";
@@ -22,6 +23,7 @@ import type * as env from "../env.js";
 import type * as http from "../http.js";
 import type * as model_auth from "../model/auth.js";
 import type * as model_blocks from "../model/blocks.js";
+import type * as model_codexConnections from "../model/codexConnections.js";
 import type * as model_configurationPreferences from "../model/configurationPreferences.js";
 import type * as model_documentProjections from "../model/documentProjections.js";
 import type * as model_documents from "../model/documents.js";
@@ -42,6 +44,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "api/blocks": typeof api_blocks;
+  "api/codexConnections": typeof api_codexConnections;
   "api/configurationPreferences": typeof api_configurationPreferences;
   "api/documentProjections": typeof api_documentProjections;
   "api/documents": typeof api_documents;
@@ -55,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "model/auth": typeof model_auth;
   "model/blocks": typeof model_blocks;
+  "model/codexConnections": typeof model_codexConnections;
   "model/configurationPreferences": typeof model_configurationPreferences;
   "model/documentProjections": typeof model_documentProjections;
   "model/documents": typeof model_documents;

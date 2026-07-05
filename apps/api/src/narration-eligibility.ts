@@ -75,13 +75,12 @@ You receive Blocks as small HTML fragments. Each input item has only:
 
 You do not receive Block Type, raw Block Type, page context, nearby headings, or a document-specific Narration Guide. Decide from candidateText alone.
 
-Return whether each Block should contribute to spoken Narration for a reader. Include substantive document content: body prose, headings that help orientation, abstracts, explanations, methodology, results, discussion, conclusions, meaningful captions, list items, and standalone equations. Exclude noise: document metadata, reference entries, bibliography headings, table-of-contents entries, and unknown extraction noise.
+Return whether each Block should contribute to spoken Narration for a reader. Include substantive document content: body prose, headings that help orientation, abstracts, explanations, methodology, results, discussion, conclusions, meaningful captions, and list items. Exclude noise: document metadata, reference entries, bibliography headings, table-of-contents entries, and unknown extraction noise.
 
 Eligible Blocks must include Narration Preparation tags:
 - plain: text can be converted to speech by basic cleanup only.
 - inline-citation-cleanup: citations should be smoothed or omitted later. Required when candidateText contains <span class="inline-citation">.
-- inline-math: inline mathematical notation needs spoken-form rewriting.
-- equation-explanation: a standalone or display equation should be naturally explained.
+- inline-math: mathematical notation needs spoken-form rewriting.
 
 Rules:
 - Use exactly one output object for every input blockId.
@@ -90,8 +89,7 @@ Rules:
 - plain is mutually exclusive with every other preparation tag.
 - If candidateText contains inline-citation spans, do not use plain; include inline-citation-cleanup.
 - The LLM may assign inline-citation-cleanup for unmarked citation-like text.
-- Inline math should use inline-math.
-- Standalone/display equations should be eligible with equation-explanation.
+- Mathematical notation should use inline-math.
 - For ineligible Blocks, use one reason: document-metadata, reference-entry, bibliography-heading, table-of-contents, or unknown-noise.
 
 Return JSON only in this exact shape:
@@ -121,6 +119,8 @@ export async function runNarrationEligibilityForDocument(input: {
 	}
 
 	const candidates: NarrationEligibilityCandidate[] = [];
+	let appEligibleCount = 0;
+	let appIneligibleCount = 0;
 	let hardExcludedCount = 0;
 
 	try {
@@ -138,27 +138,40 @@ export async function runNarrationEligibilityForDocument(input: {
 			progress: { current: 0, total: unreviewedBlocks.length, percent: 0 },
 		});
 
-		const hardExclusions: NarrationDecisionPatch[] = [];
+		const appDecisions: NarrationDecisionPatch[] = [];
 		for (const block of unreviewedBlocks) {
 			const result = deriveNarrationCandidate(block);
 			if (result.kind === "hard-excluded") {
-				hardExclusions.push({
+				appDecisions.push({
 					blockId: result.blockId,
 					narration: result.narration,
 				});
-			} else {
-				candidates.push(result);
+				hardExcludedCount += 1;
+				continue;
 			}
+			if (result.features.isStandaloneEquation) {
+				const narration: BlockNarration = metadata.processingConfiguration
+					.equationExplanations.enabled
+					? { decision: "eligible", preparation: ["inline-math"] }
+					: {
+							decision: "ineligible",
+							reason: "equation-explanation-unavailable",
+						};
+				appDecisions.push({ blockId: result.blockId, narration });
+				if (narration.decision === "eligible") appEligibleCount += 1;
+				else appIneligibleCount += 1;
+				continue;
+			}
+			candidates.push(result);
 		}
 
-		if (hardExclusions.length) {
+		if (appDecisions.length) {
 			await patchNarrationDecisions(
 				input.documentId,
-				hardExclusions,
+				appDecisions,
 				"candidates",
 			);
 		}
-		hardExcludedCount = hardExclusions.length;
 
 		await appendNarrationEvent(input.documentId, {
 			type: "narration.candidates.completed",
@@ -173,6 +186,8 @@ export async function runNarrationEligibilityForDocument(input: {
 			},
 			data: {
 				candidateCount: candidates.length,
+				automaticEligibleCount: appEligibleCount,
+				automaticIneligibleCount: appIneligibleCount,
 				hardExcludedCount,
 			},
 		});
@@ -190,27 +205,32 @@ export async function runNarrationEligibilityForDocument(input: {
 
 	try {
 		if (!candidates.length) {
-			await appendNarrationEvent(input.documentId, {
-				type: "narration.eligibility.warning",
-				emitter: "app",
-				severity: "warning",
-				message: "No eligible Narration Blocks were found.",
-				emittedAt: Date.now(),
-				data: { candidateCount: 0, hardExcludedCount },
-			});
+			if (appEligibleCount === 0) {
+				await appendNarrationEvent(input.documentId, {
+					type: "narration.eligibility.warning",
+					emitter: "app",
+					severity: "warning",
+					message: "No eligible Narration Blocks were found.",
+					emittedAt: Date.now(),
+					data: { candidateCount: 0, hardExcludedCount },
+				});
+			}
 			await appendNarrationEvent(input.documentId, {
 				type: "narration.eligibility.completed",
 				emitter: "app",
 				severity: "info",
-				message: "Narration Eligibility Review completed with no candidates.",
+				message: "Narration Eligibility Review completed with no model candidates.",
 				emittedAt: Date.now(),
 				progress: { current: 0, total: 0, percent: 100 },
-				data: { eligibleCount: 0, ineligibleCount: hardExcludedCount },
+				data: {
+					eligibleCount: appEligibleCount,
+					ineligibleCount: hardExcludedCount + appIneligibleCount,
+				},
 			});
 			return {
 				status: "completed",
-				eligibleCount: 0,
-				ineligibleCount: hardExcludedCount,
+				eligibleCount: appEligibleCount,
+				ineligibleCount: hardExcludedCount + appIneligibleCount,
 			};
 		}
 
@@ -248,8 +268,8 @@ export async function runNarrationEligibilityForDocument(input: {
 			data: { batchSize: eligibilityBatchSize },
 		});
 
-		let eligibleCount = 0;
-		let ineligibleCount = hardExcludedCount;
+		let eligibleCount = appEligibleCount;
+		let ineligibleCount = hardExcludedCount + appIneligibleCount;
 		await reviewEligibilityCandidates({
 			candidates,
 			reviewBatch,
@@ -473,15 +493,6 @@ function blockNarrationFromReviewBlock(
 	candidate: NarrationEligibilityCandidate,
 	block: Record<string, unknown>,
 ): BlockNarration {
-	if (
-		candidate.features.isStandaloneEquation &&
-		block.decision === "ineligible"
-	) {
-		throw new EligibilityReviewOutputError(
-			`Standalone equation block ${candidate.blockId} must be eligible`,
-		);
-	}
-
 	if (block.decision === "eligible") {
 		const preparation = validPreparation(block.preparation);
 		if (!preparation.length) {
@@ -508,14 +519,6 @@ function blockNarrationFromReviewBlock(
 		) {
 			throw new EligibilityReviewOutputError(
 				`Eligible block ${candidate.blockId} with inline math needs inline-math`,
-			);
-		}
-		if (
-			candidate.features.isStandaloneEquation &&
-			!preparation.includes("equation-explanation")
-		) {
-			throw new EligibilityReviewOutputError(
-				`Eligible standalone equation block ${candidate.blockId} needs equation-explanation`,
 			);
 		}
 		return { decision: "eligible", preparation };

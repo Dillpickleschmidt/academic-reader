@@ -40,6 +40,9 @@ export const createFromPromotedSourceDocument = mutation({
 				enabled: v.boolean(),
 				voice: v.string(),
 			}),
+			equationExplanations: v.object({
+				enabled: v.boolean(),
+			}),
 		}),
 	},
 	handler: (ctx, args) =>

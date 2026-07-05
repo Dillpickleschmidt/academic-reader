@@ -3,7 +3,6 @@ import type {
 	BlockNarration,
 	HardIneligibleNarrationReason,
 } from "@academic-reader/shared/narration";
-import { compactRenderedMathForNarrationHtml } from "./block-content";
 import {
 	elementHasClass,
 	hasElement,
@@ -13,6 +12,7 @@ import {
 	removeElements,
 	serializeNode,
 } from "./html-fragment";
+import { buildModelReadableBlockContext } from "./model-readable-block-context";
 
 export interface NarrationCandidateBlock {
 	blockId: string;
@@ -45,37 +45,27 @@ export function deriveNarrationCandidate(
 	const hardReason = hardReasonFromBlockType(block.blockType);
 	if (hardReason) return hardExcluded(block.blockId, hardReason);
 
-	const root = parseHtmlFragment(
-		compactRenderedMathForNarrationHtml(block.contentHtml),
-	);
-	removeElements(
-		root.children,
-		(node) => node.name === "script" || node.name === "style",
-	);
+	const context = buildModelReadableBlockContext(block);
 
-	const originalText = normalizedNodeText(root);
-	const hadImage = hasElement(root, (node) => node.name === "img");
-
-	if (!originalText) {
-		return hardExcluded(block.blockId, hadImage ? "image-only" : "empty");
+	if (!context.plainText) {
+		return hardExcluded(
+			block.blockId,
+			context.features.hasImage ? "image-only" : "empty",
+		);
 	}
 
-	if (isDoiOnlyText(originalText)) return hardExcluded(block.blockId, "doi");
-	if (isCopyrightBoilerplate(originalText)) {
+	if (isDoiOnlyText(context.plainText)) return hardExcluded(block.blockId, "doi");
+	if (isCopyrightBoilerplate(context.plainText)) {
 		return hardExcluded(block.blockId, "copyright");
 	}
+
+	const root = parseHtmlFragment(context.contentHtml);
 
 	if (block.blockType === "table") {
 		removeElements(root.children, (node) => node.name === "table");
 		const tableOutsideText = normalizedNodeText(root);
 		if (!tableOutsideText) return hardExcluded(block.blockId, "table-only");
 		return candidate(block, root);
-	}
-
-	removeElements(root.children, (node) => node.name === "img");
-	const textAfterImageRemoval = normalizedNodeText(root);
-	if (!textAfterImageRemoval) {
-		return hardExcluded(block.blockId, hadImage ? "image-only" : "empty");
 	}
 
 	return candidate(block, root);

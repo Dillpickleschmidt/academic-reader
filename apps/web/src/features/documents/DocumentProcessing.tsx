@@ -23,6 +23,7 @@ export function DocumentProcessing(props: {
 	documentId: Id<"documents">;
 	processingStatus: string;
 	narrationEnabled: boolean;
+	equationExplanationsEnabled: boolean;
 	bare?: boolean;
 }) {
 	const convexAuth = useConvexAuth();
@@ -39,7 +40,11 @@ export function DocumentProcessing(props: {
 	);
 	const visiblePhaseDefinitions = createMemo(() =>
 		PROCESSING_PHASES.filter(
-			(phase) => !phase.narration || props.narrationEnabled,
+			(phase) =>
+				phase.feature === "reading" ||
+				(phase.feature === "narration" && props.narrationEnabled) ||
+				(phase.feature === "equationExplanations" &&
+					props.equationExplanationsEnabled),
 		),
 	);
 	const visiblePhases = createMemo(() => {
@@ -53,10 +58,19 @@ export function DocumentProcessing(props: {
 	});
 
 	const readingDefinitions = createMemo(() =>
-		visiblePhaseDefinitions().filter((definition) => !definition.narration),
+		visiblePhaseDefinitions().filter(
+			(definition) => definition.feature === "reading",
+		),
+	);
+	const equationExplanationDefinitions = createMemo(() =>
+		visiblePhaseDefinitions().filter(
+			(definition) => definition.feature === "equationExplanations",
+		),
 	);
 	const narrationDefinitions = createMemo(() =>
-		visiblePhaseDefinitions().filter((definition) => definition.narration),
+		visiblePhaseDefinitions().filter(
+			(definition) => definition.feature === "narration",
+		),
 	);
 	const narrationReady = createMemo(() => {
 		const last = narrationDefinitions().at(-1);
@@ -94,7 +108,10 @@ export function DocumentProcessing(props: {
 			<Show
 				when={summary.data()}
 				fallback={
-					<ProcessingSkeleton narrationEnabled={props.narrationEnabled} />
+					<ProcessingSkeleton
+						equationExplanationsEnabled={props.equationExplanationsEnabled}
+						narrationEnabled={props.narrationEnabled}
+					/>
 				}
 			>
 				{(progressSummary) => (
@@ -102,7 +119,11 @@ export function DocumentProcessing(props: {
 						<div class="flex flex-col gap-y-2">
 							<PhaseTrack
 								definitions={readingDefinitions()}
-								label={props.narrationEnabled ? "Reading" : undefined}
+								label={
+									props.narrationEnabled || props.equationExplanationsEnabled
+										? "Reading"
+										: undefined
+								}
 								milestoneLabel="Reader View ready"
 								milestoneReady={readerViewReady(props.processingStatus)}
 								milestoneTitle="The Reader View opens as soon as conversion finishes."
@@ -110,6 +131,21 @@ export function DocumentProcessing(props: {
 								selectedId={selected()?.id}
 								onSelect={setPicked}
 							/>
+							<Show when={props.equationExplanationsEnabled}>
+								<PhaseTrack
+									definitions={equationExplanationDefinitions()}
+									label="Equations"
+									milestoneLabel="Explanations ready"
+									milestoneReady={phaseReady(
+										equationExplanationDefinitions(),
+										phaseMap(),
+									)}
+									milestoneTitle="Equation Explanations appear in the Reader View once generated."
+									phaseMap={phaseMap()}
+									selectedId={selected()?.id}
+									onSelect={setPicked}
+								/>
+							</Show>
 							<Show when={props.narrationEnabled}>
 								<PhaseTrack
 									definitions={narrationDefinitions()}
@@ -139,11 +175,19 @@ export function DocumentProcessing(props: {
 	);
 }
 
-function ProcessingSkeleton(props: { narrationEnabled: boolean }) {
+function ProcessingSkeleton(props: {
+	narrationEnabled: boolean;
+	equationExplanationsEnabled: boolean;
+}) {
 	return (
 		<>
 			<div class="flex flex-col gap-y-2">
-				<ProcessingTrackSkeleton labeled={props.narrationEnabled} />
+				<ProcessingTrackSkeleton
+					labeled={props.narrationEnabled || props.equationExplanationsEnabled}
+				/>
+				<Show when={props.equationExplanationsEnabled}>
+					<ProcessingTrackSkeleton labeled />
+				</Show>
 				<Show when={props.narrationEnabled}>
 					<ProcessingTrackSkeleton labeled />
 				</Show>
@@ -392,6 +436,15 @@ function statusIcon(status: PhaseStatus) {
 	if (status === "failed") return X;
 	if (status === "warning") return CircleAlert;
 	return Dot;
+}
+
+function phaseReady(
+	definitions: readonly (typeof PROCESSING_PHASES)[number][],
+	phaseMap: Map<ProcessingPhaseId, ProcessingPhaseSummary>,
+) {
+	const last = definitions.at(-1);
+	const status = last ? phaseMap.get(last.id)?.status : undefined;
+	return status === "done" || status === "warning";
 }
 
 function statusLabel(status: PhaseStatus): string {

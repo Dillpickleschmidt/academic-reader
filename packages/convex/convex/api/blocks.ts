@@ -1,6 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "../_generated/server";
-import { blockNarrationValidator } from "../blockValidators";
+import {
+	blockEquationExplanationValidator,
+	blockNarrationValidator,
+} from "../blockValidators";
 import * as Blocks from "../model/blocks";
 
 export const listForDocument = query({
@@ -16,6 +19,18 @@ export const listForDocumentFromApi = query({
 		documentId: v.id("documents"),
 	},
 	handler: (ctx, args) => Blocks.listBlocksForDocumentFromApi(ctx, args),
+});
+
+export const patchEquationExplanationFromApi = mutation({
+	args: {
+		serviceSecret: v.string(),
+		documentId: v.id("documents"),
+		blockId: v.string(),
+		equationExplanation: blockEquationExplanationValidator,
+	},
+	returns: v.object({ ok: v.literal(true) }),
+	handler: (ctx, args) =>
+		Blocks.patchBlockEquationExplanationFromApi(ctx, args),
 });
 
 export const patchNarrationsFromApi = mutation({

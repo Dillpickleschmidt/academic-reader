@@ -14,7 +14,7 @@ import {
 	decodeBase64Image,
 	normalizeMarkerConversionResult,
 } from "./marker-result";
-import { startNarrationInBackground } from "./narration";
+import { startPostConversionProcessingInBackground } from "./post-conversion-processing";
 import {
 	extractPdfPageLabelsAndOutline,
 	type PdfMetadataBlockCandidate,
@@ -46,6 +46,9 @@ export interface DocumentProcessingConfiguration {
 		enabled: boolean;
 		voice: string;
 	};
+	equationExplanations: {
+		enabled: boolean;
+	};
 }
 
 export interface CreateDocumentAndStartProcessingInput {
@@ -76,6 +79,16 @@ export type AcceptMarkerResultResult =
 export async function createDocumentAndStartProcessing(
 	input: CreateDocumentAndStartProcessingInput,
 ): Promise<CreateDocumentAndStartProcessingResult> {
+	if (input.processingConfiguration.equationExplanations.enabled) {
+		const connection = await createConvexHttpClient(input.authToken).query(
+			api.api.codexConnections.getStatus,
+			{},
+		);
+		if (!connection.connected) {
+			throw new Error("Equation Explanations require a Codex Connection");
+		}
+	}
+
 	const promotedUpload = await promoteTemporaryUpload({
 		temporaryUploadId: input.temporaryUploadId,
 		filename: input.filename,
@@ -168,8 +181,11 @@ export async function acceptMarkerResult(input: {
 		);
 
 		if (projection.ignored) return { ignored: true };
-		if (metadata.processingConfiguration.narration.enabled) {
-			startNarrationInBackground(input.documentId);
+		if (
+			metadata.processingConfiguration.narration.enabled ||
+			metadata.processingConfiguration.equationExplanations.enabled
+		) {
+			startPostConversionProcessingInBackground(input.documentId);
 		}
 
 		return { status: projection.status };

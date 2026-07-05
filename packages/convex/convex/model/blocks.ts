@@ -37,6 +37,52 @@ export async function listBlocksForDocumentFromApi(
 		.collect();
 }
 
+export async function patchBlockEquationExplanationFromApi(
+	ctx: MutationCtx,
+	input: {
+		serviceSecret: string;
+		documentId: Id<"documents">;
+		blockId: string;
+		equationExplanation: {
+			contentHtml: string;
+			model: string;
+			generatedAt: number;
+		};
+	},
+) {
+	requireServiceSecret(input.serviceSecret);
+	await requireExistingDocument(ctx, input.documentId);
+
+	const block = await ctx.db
+		.query("blocks")
+		.withIndex("by_document_block", (q) =>
+			q.eq("documentId", input.documentId).eq("blockId", input.blockId),
+		)
+		.first();
+
+	if (!block) {
+		throw new Error(`Block not found: ${input.blockId}`);
+	}
+	if (block.blockType !== "equation") {
+		throw new Error(`Block is not an equation: ${input.blockId}`);
+	}
+
+	const contentHtml = input.equationExplanation.contentHtml.trim();
+	const model = input.equationExplanation.model.trim();
+	if (!contentHtml) throw new Error("Equation Explanation cannot be empty");
+	if (!model) throw new Error("Equation Explanation model cannot be empty");
+
+	await ctx.db.patch(block._id, {
+		equationExplanation: {
+			contentHtml,
+			model,
+			generatedAt: input.equationExplanation.generatedAt,
+		},
+	});
+
+	return { ok: true as const };
+}
+
 export async function patchBlockNarrationsFromApi(
 	ctx: MutationCtx,
 	input: {

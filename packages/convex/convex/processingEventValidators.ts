@@ -4,6 +4,7 @@ import {
 	processingEventTypes,
 } from "@academic-reader/shared/processing-events";
 import {
+	processingPhaseFeatures,
 	processingPhaseIds,
 	processingPhaseStatuses,
 } from "@academic-reader/shared/processing-phases";
@@ -48,6 +49,10 @@ export const processingPhaseStatusValidator = v.union(
 	...processingPhaseStatuses.map((status) => v.literal(status)),
 );
 
+export const processingPhaseFeatureValidator = v.union(
+	...processingPhaseFeatures.map((feature) => v.literal(feature)),
+);
+
 export const processingEventSnapshotValidator = v.object({
 	type: processingEventTypeValidator,
 	emitter: processingEventEmitterValidator,
@@ -60,7 +65,7 @@ export const processingEventSnapshotValidator = v.object({
 export const processingPhaseSummaryValidator = v.object({
 	id: processingPhaseIdValidator,
 	name: v.string(),
-	narration: v.boolean(),
+	feature: processingPhaseFeatureValidator,
 	status: processingPhaseStatusValidator,
 	progress: v.optional(processingEventProgressValidator),
 	indeterminate: v.boolean(),

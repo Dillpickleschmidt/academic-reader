@@ -27,7 +27,11 @@ import type { NarrationAudioMetadata } from "./document-narration-audio";
 import { EmptyPane, errorMessage } from "./document-page-ui";
 import { createStableItems } from "./document-stable-list";
 import {
-	createNarrationWordHighlighter,
+	type EquationExplanationNarrationHighlighterFactory,
+	EquationExplanationPanel,
+} from "./EquationExplanationPanel";
+import {
+	createDomNarrationWordHighlighter,
 	type NarrationWordHighlighter,
 } from "./narration-word-highlighting";
 
@@ -70,6 +74,10 @@ export function ReaderView(props: {
 	let playbackRequestId = 0;
 	let activeHighlighter: NarrationWordHighlighter | undefined;
 	let highlightFrame: number | undefined;
+	const equationExplanationHighlighters = new Map<
+		string,
+		EquationExplanationNarrationHighlighterFactory
+	>();
 	let pointerDown:
 		| { blockId: string; clientX: number; clientY: number }
 		| undefined;
@@ -117,6 +125,7 @@ export function ReaderView(props: {
 	onCleanup(() => {
 		playbackRequestId += 1;
 		restoreActiveHighlighter();
+		equationExplanationHighlighters.clear();
 		const element = audioElement();
 		if (!element) return;
 		element.pause();
@@ -180,10 +189,25 @@ export function ReaderView(props: {
 		await playNarrationBlock(block, audio);
 	}
 
+	function createNarrationWordHighlighterForBlock(
+		block: Doc<"blocks">,
+		blockElement: HTMLElement,
+	) {
+		if (blockHasIframeNarration(block)) {
+			return equationExplanationHighlighters.get(block.blockId)?.();
+		}
+
+		return createDomNarrationWordHighlighter({ blockElement });
+	}
+
 	async function playNarrationBlock(
 		block: Doc<"blocks">,
 		audio: NarrationAudioMetadata,
-		clickPoint?: { clientX: number; clientY: number },
+		playbackTarget?: {
+			clientX?: number;
+			clientY?: number;
+			visibleWordIndex?: number;
+		},
 	) {
 		const voice = props.document?.processingConfiguration.narration.voice;
 		if (!voice) return;
@@ -197,14 +221,17 @@ export function ReaderView(props: {
 			readerBlockElementId(block._id),
 		);
 		const highlighter = blockElement
-			? createNarrationWordHighlighter({ blockElement })
+			? createNarrationWordHighlighterForBlock(block, blockElement)
 			: undefined;
-		const visibleWordIndex = clickPoint
-			? highlighter?.visibleWordIndexFromPoint(
-					clickPoint.clientX,
-					clickPoint.clientY,
-				)
-			: undefined;
+		const visibleWordIndex =
+			playbackTarget?.visibleWordIndex ??
+			(playbackTarget?.clientX !== undefined &&
+			playbackTarget.clientY !== undefined
+				? highlighter?.visibleWordIndexFromPoint(
+						playbackTarget.clientX,
+						playbackTarget.clientY,
+					)
+				: undefined);
 		activeHighlighter = highlighter;
 
 		setPlayback({
@@ -431,7 +458,6 @@ export function ReaderView(props: {
 											data-block-id={block().blockId}
 											data-block-type={block().blockType}
 											data-page-number={block().pageNumber}
-											innerHTML={blockContentHtml(block())}
 											role={hasPlayback() ? "button" : undefined}
 											tabIndex={hasPlayback() ? 0 : undefined}
 											onClick={(event) => void handleBlockClick(event, block())}
@@ -441,7 +467,50 @@ export function ReaderView(props: {
 											onPointerDown={(event) =>
 												handlePointerDown(event, block())
 											}
-										/>
+										>
+											<div innerHTML={blockContentHtml(block())} />
+											<Show
+												when={
+													block().blockType === "equation"
+														? block().equationExplanation
+														: undefined
+												}
+											>
+												{(explanation) => (
+													<EquationExplanationPanel
+														contentHtml={explanation().contentHtml}
+														onNarrationHighlighterReady={(
+															createHighlighter,
+														) => {
+															if (createHighlighter) {
+																equationExplanationHighlighters.set(
+																	block().blockId,
+																	createHighlighter,
+																);
+															} else {
+																equationExplanationHighlighters.delete(
+																	block().blockId,
+																);
+															}
+														}}
+														onNarrationRequest={
+															hasPlayback()
+																? (visibleWordIndex) => {
+																		const currentAudio = audio();
+																		if (currentAudio) {
+																			void playNarrationBlock(
+																				block(),
+																				currentAudio,
+																				{ visibleWordIndex },
+																			);
+																		}
+																	}
+																: undefined
+														}
+													/>
+												)}
+											</Show>
+										</article>
 									);
 								}}
 							</Index>
@@ -640,6 +709,12 @@ async function fetchNarrationAudioAccess(input: {
 	);
 }
 
+function blockHasIframeNarration(block: Doc<"blocks">) {
+	return (
+		block.blockType === "equation" && block.equationExplanation !== undefined
+	);
+}
+
 function sameBlockDocument(previous: Doc<"blocks">, next: Doc<"blocks">) {
 	return (
 		previous._id === next._id &&
@@ -651,6 +726,10 @@ function sameBlockDocument(previous: Doc<"blocks">, next: Doc<"blocks">) {
 		previous.order === next.order &&
 		previous.contentHtml === next.contentHtml &&
 		previous.contentMarkdown === next.contentMarkdown &&
+		sameEquationExplanation(
+			previous.equationExplanation,
+			next.equationExplanation,
+		) &&
 		previous.pageNumber === next.pageNumber &&
 		sameSourceGeometry(
 			previous.normalizedBoundingBox,
@@ -671,6 +750,19 @@ function sameSourceGeometry(
 		previous.top === next.top &&
 		previous.width === next.width &&
 		previous.height === next.height
+	);
+}
+
+function sameEquationExplanation(
+	previous: Doc<"blocks">["equationExplanation"],
+	next: Doc<"blocks">["equationExplanation"],
+) {
+	if (previous === next) return true;
+	if (!previous || !next) return false;
+	return (
+		previous.contentHtml === next.contentHtml &&
+		previous.model === next.model &&
+		previous.generatedAt === next.generatedAt
 	);
 }
 
@@ -769,7 +861,7 @@ function shouldIgnoreBlockClick(
 
 function isInteractiveElement(element: Element) {
 	return !!element.closest(
-		"a, button, input, textarea, select, summary, label, [contenteditable]",
+		"a, button, iframe, input, textarea, select, summary, label, [contenteditable]",
 	);
 }
 

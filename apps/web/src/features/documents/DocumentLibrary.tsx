@@ -19,7 +19,10 @@ type DocumentListItem = {
 	updatedAt: number;
 	active: boolean;
 	pageCount: number | null;
-	processingConfiguration: { narration: { enabled: boolean } };
+	processingConfiguration: {
+		narration: { enabled: boolean };
+		equationExplanations: { enabled: boolean };
+	};
 };
 
 export function SignedOutDocuments(props: { creation: DocumentCreation }) {
@@ -253,6 +256,9 @@ function ActiveEntry(props: {
 				narrationEnabled={
 					props.document.processingConfiguration.narration.enabled
 				}
+				equationExplanationsEnabled={
+					props.document.processingConfiguration.equationExplanations.enabled
+				}
 			/>
 		</article>
 	);
@@ -306,6 +312,10 @@ function ShelfEntry(props: {
 						processingStatus={props.document.processingStatus}
 						narrationEnabled={
 							props.document.processingConfiguration.narration.enabled
+						}
+						equationExplanationsEnabled={
+							props.document.processingConfiguration.equationExplanations
+								.enabled
 						}
 					/>
 				</div>
@@ -369,6 +379,9 @@ function shelfMeta(document: DocumentListItem): string {
 	const parts: string[] = [];
 	if (document.processingStatus === "readyWithWarnings") parts.push("warnings");
 	if (document.pageCount) parts.push(`${document.pageCount} pp`);
+	if (document.processingConfiguration.equationExplanations.enabled) {
+		parts.push("equations explained");
+	}
 	if (document.processingConfiguration.narration.enabled)
 		parts.push("narrated");
 	return parts.join(" · ");
@@ -386,6 +399,8 @@ function sameDocumentListItem(
 		previous.pageCount === next.pageCount &&
 		previous.updatedAt === next.updatedAt &&
 		previous.processingConfiguration.narration.enabled ===
-			next.processingConfiguration.narration.enabled
+			next.processingConfiguration.narration.enabled &&
+		previous.processingConfiguration.equationExplanations.enabled ===
+			next.processingConfiguration.equationExplanations.enabled
 	);
 }
